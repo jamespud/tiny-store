@@ -1,0 +1,11 @@
+server:
+  servlet:
+    context-path: /order/v1
+
+order:
+  digest:
+    secret: ${ORDER_DIGEST_SECRET:default-digest-secret-key-change-in-production}
+  preorder:
+    ttl-seconds: 900  # 15 minutes
+  idempotency:
+    ttl-seconds: 600  # 10 minutes

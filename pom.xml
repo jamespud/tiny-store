@@ -9,8 +9,12 @@
 	<version>1.0-SNAPSHOT</version>
 	<packaging>pom</packaging>
 	<modules>
-		<module>tinystore-domain-warehouse</module>
+		<module>tinystore-domain-inventory</module>
 		<module>tinystore-library-infrastructure</module>
+		<module>tinystore-domain-order</module>
+		<module>tinystore-domain-product</module>
+		<module>tinystore-domain-cart</module>
+		<module>tinystore-domain-payment</module>
 	</modules>
 
 	<properties>
