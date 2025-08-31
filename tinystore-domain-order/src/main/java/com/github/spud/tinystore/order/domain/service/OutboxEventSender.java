@@ -1,6 +1,5 @@
 package com.github.spud.tinystore.order.domain.service;
 
-import com.github.spud.tinystore.infrastrucutre.common.constant.MessageTopicConfig;
 import com.github.spud.tinystore.infrastrucutre.domain.order.OrderOutbox;
 import com.github.spud.tinystore.infrastrucutre.domain.order.OrderOutbox.Status;
 import com.github.spud.tinystore.order.domain.repository.OrderOutBoxRepository;
@@ -8,11 +7,9 @@ import jakarta.transaction.Transactional;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.SendResult;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -76,7 +73,8 @@ public class OutboxEventSender {
 			String topic = "order-events-" + event.getType().name().toLowerCase();
 			// TODO: 根据实际情况调整消息发送逻辑
 			log.info("Sending event {} (type: {}) to topic {}", event.getId(), event.getType(), topic);
-			kafkaTemplate.send(topic, event.getAggregateId().toString(), event.getPayloadJson().toString()).get(); // 同步等待结果
+			kafkaTemplate.send(topic, event.getAggregateId().toString(),
+				event.getPayloadJson().toString()).get(); // 同步等待结果
 
 			// 发送成功：标记为已发送
 			event.setStatus(OrderOutbox.Status.SENT);

@@ -50,6 +50,10 @@ public class OrderExceptionHandler {
 				HttpStatus.BAD_REQUEST;
 			case COUPON_INVALID -> HttpStatus.BAD_REQUEST;
 			case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
+			case ORDER_NOT_FOUND -> HttpStatus.NOT_FOUND;
+			case ORDER_STATE_NOT_CANCELABLE -> null;
+			case ORDER_ALREADY_CANCELED -> null;
+			case ORDER_IDEMPOTENCY_REPLAY -> null;
 		};
 	}
 }

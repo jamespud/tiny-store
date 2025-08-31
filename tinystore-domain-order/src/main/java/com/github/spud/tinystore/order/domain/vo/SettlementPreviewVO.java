@@ -33,8 +33,13 @@ public class SettlementPreviewVO {
 	                       int quantity, long lineTotal) {
 
 		public Order toOrderLine(String useId) {
-			// TODO: 这里需要补充订单行的其他信息
-			return new Order();
+			Order o = new Order();
+			// TODO: 填充金额/币种/地址/快照等字段
+			// 初始化主状态
+			o.setOrderStatus(com.github.spud.tinystore.order.constant.OrderStatus.CREATED.getCode());
+			// 初始化版本
+			o.setVersion(1);
+			return o;
 		}
 
 	}
