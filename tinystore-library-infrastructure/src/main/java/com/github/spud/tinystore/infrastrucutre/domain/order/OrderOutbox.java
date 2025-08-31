@@ -31,11 +31,11 @@ public class OrderOutbox {
 	@Id
 	@GeneratedValue(strategy = GenerationType.AUTO)
 	@Column(name = "id", nullable = false)
-	private UUID id;
+	private String id;
 
 	@NotNull
 	@Column(name = "aggregate_id", nullable = false)
-	private UUID aggregateId;
+	private String aggregateId;
 
 	@Size(max = 50)
 	@NotNull

@@ -28,7 +28,7 @@ public class Order {
 	@Id
 	@GeneratedValue(strategy = GenerationType.AUTO)
 	@Column(name = "id", nullable = false)
-	private UUID id;
+	private String id;
 
 	@NotNull
 	@Column(name = "user_id", nullable = false)
@@ -66,7 +66,21 @@ public class Order {
 	@ColumnDefault("'NONE'")
 	@Lob
 	@Column(name = "payment_status", nullable = false)
-	private String paymentStatus;
+	private String paymentStatus; // 支付内部状态（非主状态机）
+
+	/**
+	 * 订单主状态（参见 domain OrderStatus 枚举 code）
+	 */
+	@Column(name = "status", length = 40)
+	private String orderStatus;
+
+	/** 取消原因代码 */
+	@Column(name = "cancel_reason", length = 64)
+	private String cancelReason;
+
+	/** 取消时间 */
+	@Column(name = "cancel_time")
+	private OffsetDateTime cancelTime;
 
 	@NotNull
 	@Column(name = "shipping_address_json", nullable = false)

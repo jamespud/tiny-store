@@ -3,8 +3,6 @@ package com.github.spud.tinystore.order.domain.service;
 import com.github.spud.tinystore.infrastrucutre.common.constant.MessageTopicConfig;
 import com.github.spud.tinystore.order.api.dto.Item;
 import com.github.spud.tinystore.order.api.dto.Settlement;
-import com.github.spud.tinystore.order.constant.OrderStatus;
-import com.github.spud.tinystore.order.constant.RedisConstants;
 import jakarta.annotation.PostConstruct;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
