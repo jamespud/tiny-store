@@ -15,10 +15,14 @@ public enum CancelDecisionType {
 	/**
 	 * 允许取消但需要商家同意
 	 */
-	ALLOW_WITH_MERCHANT_APPROVAL,
+	NEED_APPROVAL,
+	/**
+	 * 已支付未发货
+	 */
+	REFUND_THEN_CANCEL,
 
 	/**
 	 * 不允许取消
 	 */
-	NOT_ALLOW;
+	NOT_ALLOWED;
 }

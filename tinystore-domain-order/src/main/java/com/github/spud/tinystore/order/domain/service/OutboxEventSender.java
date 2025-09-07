@@ -1,8 +1,8 @@
 package com.github.spud.tinystore.order.domain.service;
 
-import com.github.spud.tinystore.infrastrucutre.domain.order.OrderOutbox;
-import com.github.spud.tinystore.infrastrucutre.domain.order.OrderOutbox.Status;
-import com.github.spud.tinystore.order.domain.repository.OrderOutBoxRepository;
+import com.github.spud.tinystore.infrastructure.domain.order.OrderOutbox;
+import com.github.spud.tinystore.infrastructure.domain.order.OrderOutbox.Status;
+import com.github.spud.tinystore.order.infrastructure.persistence.repository.OrderOutBoxRepository;
 import jakarta.transaction.Transactional;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
