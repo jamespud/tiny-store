@@ -1,6 +1,6 @@
 package com.github.spud.tinystore.product.domain;
 
-import com.github.spud.tinystore.infrastrucutre.domain.inventory.Stock;
+import com.github.spud.tinystore.infrastructure.domain.inventory.Stock;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;

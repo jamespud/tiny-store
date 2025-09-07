@@ -1,6 +1,6 @@
 package com.github.spud.tinystore.product.domain;
 
-import com.github.spud.tinystore.infrastrucutre.domain.inventory.Stock;
+import com.github.spud.tinystore.infrastructure.domain.inventory.Stock;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;

@@ -1,8 +1,8 @@
 package com.github.spud.tinystore.order.domain.service;
 
-import com.github.spud.tinystore.infrastrucutre.domain.order.Order;
-import com.github.spud.tinystore.order.constant.OrderStatus;
 import com.github.spud.tinystore.order.domain.enums.CancelDecisionType;
+import com.github.spud.tinystore.order.domain.event.OrderStatus;
+import com.github.spud.tinystore.order.domain.model.Order;
 import java.time.Instant;
 import org.springframework.stereotype.Service;
 
@@ -25,13 +25,13 @@ public class OrderCancelDomainService {
 	public CancelDecisionType decide(Order order, Instant now) {
 		// 订单不存在的情况
 		if (order == null) {
-			return CancelDecisionType.NOT_ALLOW;
+			return CancelDecisionType.NOT_ALLOWED;
 		}
 
 		// 获取订单状态
 		String status = getOrderStatus(order);
 		if (status == null) {
-			return CancelDecisionType.NOT_ALLOW;
+			return CancelDecisionType.NOT_ALLOWED;
 		}
 		// 简单取消集合
 		if (statusEquals(status, OrderStatus.CREATED, OrderStatus.PAYMENT_PROCESSING, OrderStatus.PAID,
@@ -40,10 +40,10 @@ public class OrderCancelDomainService {
 		}
 		// 需商家审批集合
 		if (statusEquals(status, OrderStatus.ACCEPTED, OrderStatus.PACKING, OrderStatus.SHIP_PENDING)) {
-			return CancelDecisionType.ALLOW_WITH_MERCHANT_APPROVAL;
+			return CancelDecisionType.NEED_APPROVAL;
 		}
 		// 发货及终态集合 → 不允许
-		return CancelDecisionType.NOT_ALLOW;
+		return CancelDecisionType.NOT_ALLOWED;
 	}
 
 	/**
@@ -54,7 +54,7 @@ public class OrderCancelDomainService {
 	 */
 	private String getOrderStatus(Order order) {
 		// TODO: 实际项目中需要从order对象中获取状态
-		return order.getOrderStatus();
+		return "";
 	}
 
 	private boolean statusEquals(String code, OrderStatus... statuses) {

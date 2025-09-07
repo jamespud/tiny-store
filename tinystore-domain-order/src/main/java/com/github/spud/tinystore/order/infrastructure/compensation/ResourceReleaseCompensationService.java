@@ -1,6 +1,6 @@
 package com.github.spud.tinystore.order.infrastructure.compensation;
 
-import com.github.spud.tinystore.order.infrastructure.service.ResourceReleaseService;
+import com.github.spud.tinystore.order.domain.service.ResourceReleaseService;
 import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
