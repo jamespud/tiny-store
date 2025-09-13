@@ -1,15 +1,16 @@
 package com.github.spud.tinystore.order.application.command;
 
-import com.github.spud.tinystore.order.interfaces.dto.ProductItem;
 import java.util.List;
 import java.util.Set;
-import lombok.Data;
+import lombok.Builder;
+import lombok.Getter;
 
 /**
  * @author Spud
  * @date 2025/9/3
  */
-@Data
+@Builder
+@Getter
 public class PreviewOrderCommand {
 
 	String userId;
@@ -23,7 +24,17 @@ public class PreviewOrderCommand {
 	private String deviceId;
 
 	public List<String> getProductIds() {
-		return products.stream().map(ProductItem::skuId).toList();
+		return products.stream()
+			.flatMap(p -> p.products.stream().map(ProductDto::skuId))
+			.toList();
+	}
+
+	public record ProductItem(String shopId, List<ProductDto> products) {
+
+	}
+
+	public record ProductDto(String spuId, String skuId, Integer quantity) {
+		
 	}
 
 }

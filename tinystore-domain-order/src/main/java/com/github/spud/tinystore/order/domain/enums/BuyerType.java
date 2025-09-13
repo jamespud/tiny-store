@@ -6,6 +6,5 @@ package com.github.spud.tinystore.order.domain.enums;
  */
 public enum BuyerType {
 	NORMAL,
-	VIP,
-	WHOLESALE
+	VIP
 }

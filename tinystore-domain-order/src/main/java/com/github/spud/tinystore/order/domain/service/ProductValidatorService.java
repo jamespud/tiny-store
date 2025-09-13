@@ -1,12 +1,14 @@
 package com.github.spud.tinystore.order.domain.service;
 
-import com.github.spud.tinystore.order.interfaces.dto.ProductItem;
+import com.github.spud.tinystore.order.application.command.PreviewOrderCommand.ProductItem;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 
 /**
+ * TODO: 远程调用商品服务和优惠券服务
+ *
  * @author Spud
  * @date 2025/8/13
  */

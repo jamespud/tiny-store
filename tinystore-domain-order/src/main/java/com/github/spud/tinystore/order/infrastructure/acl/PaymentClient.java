@@ -1,6 +1,5 @@
-package com.github.spud.tinystore.order.infrastructure.acl.client;
+package com.github.spud.tinystore.order.infrastructure.acl;
 
-import com.github.spud.tinystore.infrastructure.domain.payment.PaymentIntent;
 import jakarta.ws.rs.Consumes;
 import java.time.Instant;
 import org.springframework.cloud.openfeign.FeignClient;

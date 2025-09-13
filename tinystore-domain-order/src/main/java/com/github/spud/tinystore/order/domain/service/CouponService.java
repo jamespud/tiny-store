@@ -1,5 +1,7 @@
 package com.github.spud.tinystore.order.domain.service;
 
+import com.github.spud.tinystore.order.domain.model.Coupon;
+import com.github.spud.tinystore.order.domain.model.Product;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
@@ -10,15 +12,15 @@ import org.springframework.stereotype.Service;
 @Service
 public class CouponService {
 
-	public List<Object> getAvailableCoupons(String userId) {
+	public List<Coupon> getAvailableCoupons(String userId) {
 		return List.of();
 	}
 
-	public List<Object> getBestCoupons(String userId, Object order) {
+	public List<Coupon> getBestCoupons(String userId, Object order) {
 		return getBestCoupons(getAvailableCoupons(userId), order);
 	}
 
-	public List<Object> getBestCoupons(List<Object> coupons, Object order) {
+	public List<Coupon> getBestCoupons(List<Coupon> coupons, Object order) {
 		return List.of();
 	}
 

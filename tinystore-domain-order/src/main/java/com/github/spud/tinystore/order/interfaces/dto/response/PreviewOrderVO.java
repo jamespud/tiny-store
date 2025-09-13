@@ -1,7 +1,8 @@
 package com.github.spud.tinystore.order.interfaces.dto.response;
 
+import com.github.spud.tinystore.order.application.result.PreviewOrderResult.ShopProductSnapshot;
 import com.github.spud.tinystore.order.interfaces.dto.OrderSummary;
-import com.github.spud.tinystore.order.interfaces.dto.ProductSnapshot;
+
 import java.util.List;
 import lombok.Data;
 
@@ -12,7 +13,7 @@ import lombok.Data;
 @Data
 public class PreviewOrderVO {
 
-	private List<ProductSnapshot> lines;
+	private List<ShopProductSnapshot> lines;
 	private OrderSummary summary;
 	private final String idempotencyKey;
 	private long expireAt; // 快照过期时间，单位秒

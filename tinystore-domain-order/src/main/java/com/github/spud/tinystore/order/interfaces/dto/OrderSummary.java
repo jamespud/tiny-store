@@ -1,5 +1,7 @@
 package com.github.spud.tinystore.order.interfaces.dto;
 
+import com.github.spud.tinystore.order.application.result.PreviewOrderResult.CouponSnapshot;
+import com.github.spud.tinystore.order.domain.model.Money;
 import java.util.List;
 
 /**
@@ -10,8 +12,8 @@ import java.util.List;
  * @author Spud
  * @date 2025/9/4
  */
-public record OrderSummary(long total, long shipping, List<DiscountSnapshot> discounts,
+public record OrderSummary(Money total, Money shipping, List<DiscountSnapshot> discounts,
                            List<CouponSnapshot> coupons,
-                           long payable) {
+                           Money payable) {
 
 }

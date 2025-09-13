@@ -1,9 +1,8 @@
 package com.github.spud.tinystore.order.domain.service;
 
-import com.github.spud.tinystore.order.infrastructure.acl.client.ProductClient;
+import com.github.spud.tinystore.order.domain.model.Product;
+import com.github.spud.tinystore.order.infrastructure.acl.ProductClient;
 import java.util.List;
-import java.util.Map;
-import javax.crypto.Mac;
 import org.springframework.stereotype.Service;
 
 /**
@@ -15,12 +14,12 @@ public class ProductService {
 	
 	private ProductClient productClient;
 
-	public List<Object> getProductsByIds(List<String> productIds) {
+	public List<Product> getProductsByIds(List<String> productIds) {
 		productClient.getProductsByIds(productIds);
 		return List.of();
 	}
 
-	public List<Object> getCouponsByIds(String userId, List<String> couponIds) {
+	public List<Product> getCouponsByIds(String userId, List<String> couponIds) {
 		return List.of();
 	}
 

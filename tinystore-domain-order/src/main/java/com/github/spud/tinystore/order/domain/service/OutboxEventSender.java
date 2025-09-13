@@ -1,8 +1,6 @@
 package com.github.spud.tinystore.order.domain.service;
 
-import com.github.spud.tinystore.infrastructure.domain.order.OrderOutbox;
-import com.github.spud.tinystore.infrastructure.domain.order.OrderOutbox.Status;
-import com.github.spud.tinystore.order.infrastructure.persistence.repository.OrderOutBoxRepository;
+import com.github.spud.tinystore.order.infrastructure.persistence.repository.OutboxRepository;
 import jakarta.transaction.Transactional;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -22,7 +20,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class OutboxEventSender {
 
-	private final OrderOutBoxRepository repository;
+	private final OutboxRepository repository;
 	private final KafkaTemplate<String, String> kafkaTemplate;
 
 	// 最大重试次数

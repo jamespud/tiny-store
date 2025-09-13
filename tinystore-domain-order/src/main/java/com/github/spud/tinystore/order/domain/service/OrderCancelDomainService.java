@@ -3,6 +3,7 @@ package com.github.spud.tinystore.order.domain.service;
 import com.github.spud.tinystore.order.domain.enums.CancelDecisionType;
 import com.github.spud.tinystore.order.domain.event.OrderStatus;
 import com.github.spud.tinystore.order.domain.model.Order;
+import com.github.spud.tinystore.order.domain.model.OrderLine;
 import java.time.Instant;
 import org.springframework.stereotype.Service;
 
@@ -22,7 +23,7 @@ public class OrderCancelDomainService {
 	 * @param now   当前时间
 	 * @return 取消决策类型
 	 */
-	public CancelDecisionType decide(Order order, Instant now) {
+	public CancelDecisionType decide(OrderLine order, Instant now) {
 		// 订单不存在的情况
 		if (order == null) {
 			return CancelDecisionType.NOT_ALLOWED;
@@ -33,16 +34,21 @@ public class OrderCancelDomainService {
 		if (status == null) {
 			return CancelDecisionType.NOT_ALLOWED;
 		}
-		// 简单取消集合
-		if (statusEquals(status, OrderStatus.CREATED, OrderStatus.PAYMENT_PROCESSING, OrderStatus.PAID,
-			OrderStatus.ACCEPT_PENDING)) {
+		// 简单取消集合（未支付/待处理）
+		if (statusEquals(status, OrderStatus.CREATED, OrderStatus.PAYMENT_PROCESSING)) {
 			return CancelDecisionType.ALLOW_SIMPLE;
 		}
-		// 需商家审批集合
-		if (statusEquals(status, OrderStatus.ACCEPTED, OrderStatus.PACKING, OrderStatus.SHIP_PENDING)) {
-			return CancelDecisionType.NEED_APPROVAL;
+		// 已支付未发货（包括待接单/待发货等） → 退款后取消
+		if (statusEquals(status, OrderStatus.PAID, OrderStatus.ACCEPT_PENDING, OrderStatus.ACCEPTED,
+			OrderStatus.PACKING, OrderStatus.SHIP_PENDING)) {
+			return CancelDecisionType.REFUND_THEN_CANCEL;
 		}
-		// 发货及终态集合 → 不允许
+		// 已发货及终态（含部分发货） → 不允许（引导售后）
+		if (statusEquals(status, OrderStatus.PARTIALLY_SHIPPED, OrderStatus.SHIPPED, OrderStatus.DELIVERED,
+			OrderStatus.COMPLETED)) {
+			return CancelDecisionType.NOT_ALLOWED;
+		}
+		// 其他异常/关闭类 → 不允许
 		return CancelDecisionType.NOT_ALLOWED;
 	}
 
@@ -52,9 +58,8 @@ public class OrderCancelDomainService {
 	 * @param order 订单
 	 * @return 订单状态
 	 */
-	private String getOrderStatus(Order order) {
-		// TODO: 实际项目中需要从order对象中获取状态
-		return "";
+	private String getOrderStatus(OrderLine order) {
+		return order.orderStatus().getCode();
 	}
 
 	private boolean statusEquals(String code, OrderStatus... statuses) {
