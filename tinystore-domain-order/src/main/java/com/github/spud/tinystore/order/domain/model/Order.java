@@ -1,11 +1,9 @@
 package com.github.spud.tinystore.order.domain.model;
 
-import com.github.spud.tinystore.order.domain.status.AfterSaleStatus;
-import com.github.spud.tinystore.order.domain.status.CancellationStatus;
-import com.github.spud.tinystore.order.domain.status.FulfillmentStatus;
-import com.github.spud.tinystore.order.domain.status.PaymentStatus;
 import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
 import java.util.List;
+import java.util.Map;
+import lombok.Builder;
 import lombok.Data;
 
 /**
@@ -13,22 +11,40 @@ import lombok.Data;
  * @date 2025/9/1
  */
 @Data
+@Builder
 public class Order {
 
-	private String id;
 	private Buyer buyer;
+
 	private List<OrderLine> lines;
-	private List<ChargeItem> charges;
-	private List<DiscountAllocation> discounts;
+	
+	private Map<Product, Integer> products;
+
+	private List<Coupon> coupons;
+
+	private List<Discount> discounts;
+
+	private List<CouponAllocation> couponAllocations;
+
+	private List<DiscountAllocation> discountAllocations;
+
 	private PricingSummary pricingSummary;
-	private Address shippingAddress;
-	private PaymentStatus paymentStatus;
-	private FulfillmentStatus fulfillmentStatus;
-	private CancellationStatus cancellationStatus;
-	private AfterSaleStatus afterSaleStatus;
+
 	private List<ReservationRef> reservations;
+
 	private Integer version;
+
 	private List<OrderDomainEvent> orderDomainEvents;
+
+	private String deviceId;
+	
+	private boolean calculated;
+	
+	private Address address;
+	
+	private Order() {
+		
+	}
 }
 
 

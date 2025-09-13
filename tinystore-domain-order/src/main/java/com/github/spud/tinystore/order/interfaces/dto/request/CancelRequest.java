@@ -1,5 +1,6 @@
 package com.github.spud.tinystore.order.interfaces.dto.request;
 
+import com.github.spud.tinystore.order.application.command.CancelOrderCommand;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -44,9 +45,13 @@ public class CancelRequest {
 	private String remark;
 
 	/**
-	 *
+	 * 幂等键
 	 */
 	@NotBlank(message = "幂等键不能为空")
 	@Size(max = 100)
 	private String idempotencyKey;
+
+	public CancelOrderCommand toCommand() {
+		return new CancelOrderCommand(orderId, reasonCode, clientRequestId, remark, idempotencyKey);
+	}
 }

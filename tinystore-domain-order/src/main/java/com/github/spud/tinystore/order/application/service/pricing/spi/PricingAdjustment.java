@@ -14,6 +14,6 @@ public class PricingAdjustment {
 	private Type type;
 	private Scope scope;
 	private String lineSkuId; // when scope=LINE
-	private long amountCents; // negative for discount
+	private long amountCents; // negative for amount
 	private String source;    // rule id or description
 }

@@ -1,4 +1,4 @@
-package com.github.spud.tinystore.order.infrastructure.acl.client;
+package com.github.spud.tinystore.order.infrastructure.acl;
 
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;

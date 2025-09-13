@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.order.domain.model;
 
-import com.github.spud.tinystore.order.domain.model.Order.BuyerType;
+
+import com.github.spud.tinystore.order.domain.enums.BuyerType;
 
 /**
  * @author Spud

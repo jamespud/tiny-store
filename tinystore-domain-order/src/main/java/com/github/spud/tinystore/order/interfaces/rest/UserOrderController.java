@@ -5,10 +5,12 @@ import com.github.spud.tinystore.infrastructure.vo.CommonResponse;
 import com.github.spud.tinystore.order.application.command.CreateOrderCommand;
 import com.github.spud.tinystore.order.application.command.PreviewOrderCommand;
 import com.github.spud.tinystore.order.application.service.OrderApplicationService;
+import com.github.spud.tinystore.order.interfaces.dto.request.CancelRequest;
 import com.github.spud.tinystore.order.interfaces.dto.request.CreateOrderRequest;
 import com.github.spud.tinystore.order.interfaces.dto.request.PreviewOrderRequest;
 import com.github.spud.tinystore.order.interfaces.dto.response.CreateOrderVO;
 import com.github.spud.tinystore.order.interfaces.dto.response.PreviewOrderVO;
+import org.apache.kafka.common.protocol.types.Field.Str;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,11 +25,11 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/order/user")
-public class OrderController {
+public class UserOrderController {
 
 	private final OrderApplicationService applicationService;
 
-	public OrderController(OrderApplicationService applicationService) {
+	public UserOrderController(OrderApplicationService applicationService) {
 		this.applicationService = applicationService;
 	}
 
@@ -47,12 +49,16 @@ public class OrderController {
 	}
 
 	@PostMapping(value = "/cancel/preview", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public CommonResponse<Object> cancelPreview() {
-		return CommonResponse.success("");
+	public CommonResponse<Object> cancelPreview(String orderId) {
+		Object o = applicationService.cancelPreview(orderId);
+		return CommonResponse.success(o);
 	}
 
 	@PostMapping(value = "/cancel/apply", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public CommonResponse<Object> cancelOrder() {
-		return CommonResponse.success("");
+	public CommonResponse<Object> cancelOrder(CancelRequest cancelRequest) {
+		Object o = applicationService.cancelOrder(cancelRequest.toCommand());
+		return CommonResponse.success(o);
 	}
+	
+	
 }
