@@ -8,10 +8,10 @@
 		<artifactId>tiny-store</artifactId>
 		<version>1.0-SNAPSHOT</version>
 	</parent>
-	
-	<artifactId>tinystore-domain-inventory</artifactId>
+
+	<artifactId>tinystore-domain-recommendation</artifactId>
 	<description>
-		实时库存管理，支持预扣减（下单时锁定库存，超时未支付自动释放）、分布式库存（多仓发货场景）
+		基于Elasticsearch实现商品搜索，结合字节的推荐算法（如用户行为画像）做 “猜你喜欢” 推荐
 	</description>
 
 	<properties>
@@ -19,19 +19,5 @@
 		<maven.compiler.target>17</maven.compiler.target>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
-	
-	<dependencies>
-		<dependency>
-			<groupId>com.github.spud.tinystore</groupId>
-			<artifactId>tinystore-library-infrastructure</artifactId>
-			<version>1.0-SNAPSHOT</version>
-		</dependency>
-		<!-- 测试依赖 -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-test</artifactId>
-			<scope>test</scope>
-		</dependency>
-	</dependencies>
 
 </project>

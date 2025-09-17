@@ -10,6 +10,9 @@
 	</parent>
 
 	<artifactId>tinystore-domain-product</artifactId>
+	<description>
+		负责商品基础信息（名称、图片）、SKU 管理（规格、库存）、类目体系，支持多规格（如颜色、尺寸）与动态属性（如直播专属价）
+	</description>
 
 	<properties>
 		<maven.compiler.source>17</maven.compiler.source>
