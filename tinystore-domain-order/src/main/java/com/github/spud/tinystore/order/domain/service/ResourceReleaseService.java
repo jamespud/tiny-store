@@ -1,6 +1,6 @@
 package com.github.spud.tinystore.order.domain.service;
 
-import com.github.spud.tinystore.infrastructure.domain.order.Order;
+import com.github.spud.tinystore.order.domain.model.Order;
 import org.springframework.stereotype.Service;
 
 /**

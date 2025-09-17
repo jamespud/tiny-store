@@ -1,6 +1,6 @@
 package com.github.spud.tinystore.order.infrastructure.persistence.repository;
 
-import com.github.spud.tinystore.infrastructure.domain.order.Order;
+import com.github.spud.tinystore.order.domain.model.Order;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
