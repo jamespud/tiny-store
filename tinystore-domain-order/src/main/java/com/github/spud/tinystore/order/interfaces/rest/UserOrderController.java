@@ -1,7 +1,7 @@
 package com.github.spud.tinystore.order.interfaces.rest;
 
 import com.github.spud.tinystore.infrastructure.service.UserIdProvider;
-import com.github.spud.tinystore.infrastructure.vo.CommonResponse;
+import com.github.spud.tinystore.infrastructure.vo.Response;
 import com.github.spud.tinystore.order.application.command.CreateOrderCommand;
 import com.github.spud.tinystore.order.application.command.PreviewOrderCommand;
 import com.github.spud.tinystore.order.application.service.OrderApplicationService;
@@ -10,7 +10,6 @@ import com.github.spud.tinystore.order.interfaces.dto.request.CreateOrderRequest
 import com.github.spud.tinystore.order.interfaces.dto.request.PreviewOrderRequest;
 import com.github.spud.tinystore.order.interfaces.dto.response.CreateOrderVO;
 import com.github.spud.tinystore.order.interfaces.dto.response.PreviewOrderVO;
-import org.apache.kafka.common.protocol.types.Field.Str;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -34,30 +33,30 @@ public class UserOrderController {
 	}
 
 	@PostMapping(value = "/submit/preview", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public CommonResponse<PreviewOrderVO> orderPreview(
+	public Response<PreviewOrderVO> orderPreview(
 		@RequestBody PreviewOrderRequest previewRequest) {
 		PreviewOrderCommand cmd = previewRequest.toCommand(UserIdProvider.getCurrentUserId());
 		PreviewOrderVO vo = applicationService.orderPreview(cmd).toVO();
-		return CommonResponse.success(vo);
+		return Response.ok(vo);
 	}
 
 	@PostMapping(value = "/submit/apply", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public CommonResponse<CreateOrderVO> submitOrder(@RequestBody CreateOrderRequest orderRequest) {
+	public Response<CreateOrderVO> submitOrder(@RequestBody CreateOrderRequest orderRequest) {
 		CreateOrderCommand cmd = orderRequest.toCommand(UserIdProvider.getCurrentUserId());
 		CreateOrderVO vo = applicationService.submitOrder(cmd).toVO();
-		return CommonResponse.success(vo);
+		return Response.ok(vo);
 	}
 
 	@PostMapping(value = "/cancel/preview", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public CommonResponse<Object> cancelPreview(String orderId) {
+	public Response<Object> cancelPreview(String orderId) {
 		Object o = applicationService.cancelPreview(orderId);
-		return CommonResponse.success(o);
+		return Response.ok(o);
 	}
 
 	@PostMapping(value = "/cancel/apply", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public CommonResponse<Object> cancelOrder(CancelRequest cancelRequest) {
+	public Response<Object> cancelOrder(CancelRequest cancelRequest) {
 		Object o = applicationService.cancelOrder(cancelRequest.toCommand());
-		return CommonResponse.success(o);
+		return Response.ok(o);
 	}
 	
 	

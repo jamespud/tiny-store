@@ -14,8 +14,8 @@ import org.springframework.stereotype.Repository;
 public interface OutboxRepository {
 
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	List<OrderOutbox> findPendingEventsWithLock(
-		Status status,
+	List<Object> findPendingEventsWithLock(
+		Object status,
 		LocalDateTime now,
 		org.springframework.data.domain.Pageable pageable
 	);

@@ -11,10 +11,6 @@ import org.springframework.cloud.openfeign.FeignClient;
 @FeignClient("tinystore-payment")
 public interface PaymentClient {
 
-
-	@Consumes("application/json")
-	PaymentIntent createPaymentIntent(long amount, String description, String orderId);
-
 	@Consumes("application/json")
 	String refundPayment(String paymentIntentId, long amount, String reason, Instant requestTime);
 }

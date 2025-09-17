@@ -1,7 +1,5 @@
 package com.github.spud.tinystore.order.interfaces.vo;
 
-import com.github.spud.tinystore.infrastructure.domain.order.Order;
-import com.github.spud.tinystore.order.domain.event.OrderStatus;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -32,16 +30,6 @@ public class SettlementPreviewVO {
 	// TODO: 优惠券
 	public record Snapshot(long productId, long skuId, String title, String spec, long unitPrice,
 	                       int quantity, long lineTotal) {
-
-		public Order toOrderLine(String useId) {
-			Order o = new Order();
-			// TODO: 填充金额/币种/地址/快照等字段
-			// 初始化主状态
-			o.setOrderStatus(OrderStatus.CREATED.getCode());
-			// 初始化版本
-			o.setVersion(1);
-			return o;
-		}
 
 	}
 
