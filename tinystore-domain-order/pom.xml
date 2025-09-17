@@ -10,6 +10,9 @@
 	</parent>
 
 	<artifactId>tinystore-domain-order</artifactId>
+	<description>
+		订单创建、状态流转、履约跟踪
+	</description>
 
 	<properties>
 		<maven.compiler.source>17</maven.compiler.source>

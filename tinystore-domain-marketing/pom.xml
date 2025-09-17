@@ -9,20 +9,15 @@
 		<version>1.0-SNAPSHOT</version>
 	</parent>
 
-	<artifactId>tinystore-domain-cart</artifactId>
+	<artifactId>tinystore-domain-marketing</artifactId>
+	<description>
+		优惠券、满减、秒杀活动，通过规则引擎动态配置活动策略（如直播专属券仅限直播间使用）
+	</description>
 
 	<properties>
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
-	
-	<dependencies>
-		<dependency>
-			<groupId>com.github.spud.tinystore</groupId>
-			<artifactId>tinystore-library-infrastructure</artifactId>
-			<version>1.0-SNAPSHOT</version>
-		</dependency>
-	</dependencies>
 
 </project>

@@ -10,6 +10,9 @@
 	</parent>
 
 	<artifactId>tinystore-domain-payment</artifactId>
+	<description>
+		对接微信、支付宝及字节支付，处理支付回调、退款，通过分布式事务（DTX） 确保 “支付成功” 与 “订单状态更新” 一致性
+	</description>
 
 	<properties>
 		<maven.compiler.source>17</maven.compiler.source>
