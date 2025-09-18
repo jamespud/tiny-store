@@ -1,3 +1,14 @@
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:9000
+
+tinystore:
+  security:
+    resource-server:
+      enabled: true
 server:
   servlet:
     context-path: /order/v1

@@ -1,0 +1,35 @@
+server:
+  port: 9000
+
+spring:
+  application:
+    name: tinystore-auth
+  datasource:
+    url: jdbc:postgresql://localhost:5432/tinystore
+    username: postgres
+    password: postgres
+  jpa:
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+  authorization-server:
+    issuer: http://localhost:9000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+# 开发态密钥配置（生产请改为 KMS/Vault 注入）
+tinystore:
+  auth:
+    keystore:
+      location: classpath:keystore/tinystore-auth.jks
+      password: changeit
+    key:
+      alias: auth
+      password: changeit
+    cors:
+      allowed-origins: "http://localhost:3000,http://localhost:8080"

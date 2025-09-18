@@ -1,9 +1,4 @@
-server:
-  port: 8080
-
 spring:
-  application:
-    name: tinystore-gateway
   security:
     oauth2:
       resourceserver:

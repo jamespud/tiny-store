@@ -15,9 +15,7 @@
 		<module>tinystore-domain-product</module>
 		<module>tinystore-domain-payment</module>
 		<module>tinystore-domain-gateway</module>
-		<module>tinystore-domain-account</module>
-		<module>tinystore-domain-marketing</module>
-		<module>tinystore-domain-recommendation</module>
+		<module>tinystore-domain-auth</module>
 	</modules>
 
 	<properties>
@@ -27,6 +25,7 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<spring.boot.version>3.5.0</spring.boot.version>
 		<spring.cloud.version>2025.0.0</spring.cloud.version>
+		<spring.authorization-server.version>1.4.2</spring.authorization-server.version>
 	</properties>
 
 
