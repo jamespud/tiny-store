@@ -7,11 +7,21 @@
 
 做速率限制、IP 黑白名单、请求聚合（把多个后端请求合并成一个对外接口）。
 
-② Auth / Identity Service（鉴权与用户认证）
+② Auth / Identity Service（鉴权与用户认证 / OIDC Provider）
 
-用户注册/登录、OAuth2 / JWT 发放与校验、刷新 token、权限（RBAC）管理。
+基于 Spring Authorization Server 自建 OIDC Provider：
 
-与用户服务分离：只负责认证/授权。
+- 能力：OIDC Discovery、Authorization Code + PKCE、Client Credentials、Refresh Token（轮换）、UserInfo、JWKS；
+- Token：JWT（RS256），短效 Access Token + 轮换 Refresh Token，`issuer` 统一对外；
+- 客户端：机密/公共客户端注册与管理，严格限制重定向 URI；
+- 授权：scope/role 最小化原则，下游服务基于 Resource Server 校验与授权；
+- 分工：与用户服务分离，仅负责认证与令牌发放/校验；用户资料、权限模型来源可由用户服务/目录系统提供。
+
+集成边界：
+
+- API Gateway 与各域服务统一作为 Resource Server，配置 `issuer-uri` 自动发现 JWKS 并离线验签；
+- 默认保护 `/api/**`，健康检查与静态/开放端点放行；
+- 安全基线：TLS、CORS/回调白名单、登录/授权/刷新限流、审计与指标。
 
 ③ User Service（用户资料）
 
