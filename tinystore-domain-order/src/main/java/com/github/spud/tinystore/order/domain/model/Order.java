@@ -16,7 +16,7 @@ public class Order {
 
 	private Buyer buyer;
 
-	private List<OrderLine> lines;
+	private List<SubOrder> subOrders;
 	
 	private Map<Product, Integer> products;
 

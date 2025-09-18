@@ -1,6 +1,6 @@
 package com.github.spud.tinystore.order.application.service.pricing.spi;
 
-import com.github.spud.tinystore.order.interfaces.dto.Product;
+import com.github.spud.tinystore.order.domain.model.Product;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;

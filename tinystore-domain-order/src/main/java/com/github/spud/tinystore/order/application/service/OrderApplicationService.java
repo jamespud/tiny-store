@@ -63,7 +63,7 @@ public class OrderApplicationService {
 	}
 
 	/**
-	 * 订单预览 验证商品是否下架，计算价格，使用优惠券达到最优价格，缓存预览结果
+	 * 订单预览 验证商品是否下架，计算价格，缓存预览结果
 	 *
 	 * @param cmd
 	 * @return
@@ -71,6 +71,7 @@ public class OrderApplicationService {
 	public PreviewOrderResult orderPreview(PreviewOrderCommand cmd) {
 		String userId = cmd.getUserId();
 		List<String> productIds = cmd.getProductIds();
+		// 验证参数
 		boolean validPram = validateOrderParam(userId, productIds, cmd.getCoupons(),
 			cmd.getAddressId());
 		if (!validPram) {
@@ -80,9 +81,11 @@ public class OrderApplicationService {
 		// 获取商品和优惠券信息
 		List<Product> products = productService.getProductsByIds(productIds);
 		List<Coupon> coupons = couponService.getAvailableCoupons(userId);
+		// 创建订单聚合
 		Order order = orderFactory.createOrder(cmd, products, coupons);
 		// 计算价格
 		Order discounted = orderPriceCalculationService.calculatePrice(order);
+		// 缓存预览结果
 		// TODO: 设置过期时间
 		return new PreviewOrderResult();
 	}

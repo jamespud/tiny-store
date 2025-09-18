@@ -9,6 +9,7 @@ import com.github.spud.tinystore.order.domain.model.Order;
 import com.github.spud.tinystore.order.domain.model.OrderLine;
 import com.github.spud.tinystore.order.domain.model.PricingSummary;
 import com.github.spud.tinystore.order.domain.model.Product;
+import com.github.spud.tinystore.order.domain.model.SubOrder;
 import com.github.spud.tinystore.order.infrastructure.acl.ProductClient;
 import java.util.HashMap;
 import java.util.List;
@@ -69,13 +70,13 @@ public class OrderPriceCalculationService {
 		Money chargeTotal = Money.zero();
 		for (Entry<String, Map<Product, Integer>> entry : shopProducts.entrySet()) {
 			List<ChargeItem> chargeItems = calculateLineChargeItem(entry.getValue(), order.getAddress());
-			OrderLine orderLine = orderFactory.createOrderLine(order.getBuyer().userId(), entry.getKey(),
+			SubOrder subOrder = orderFactory.createOrderLine(order.getBuyer().userId(), entry.getKey(),
 				entry.getValue(),
 				shopTotal.get(entry.getKey()), discountTotal.add(couponTotal),
 				shopTotal.get(entry.getKey()).subtract(discountTotal),
 				chargeItems, order.getAddress());
 			chargeItems.forEach(c -> chargeTotal.add(c.amount()));
-			order.getLines().add(orderLine);
+			order.getSubOrders().add(subOrder);
 		}
 		// TODO:
 		order.setPricingSummary(new PricingSummary(itemTotal.add(chargeTotal), discountTotal.add(couponTotal),
