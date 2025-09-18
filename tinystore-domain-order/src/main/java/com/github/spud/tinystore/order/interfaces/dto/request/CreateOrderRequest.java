@@ -1,7 +1,7 @@
 package com.github.spud.tinystore.order.interfaces.dto.request;
 
 import com.github.spud.tinystore.order.application.command.CreateOrderCommand;
-import com.github.spud.tinystore.order.interfaces.dto.request.PreviewOrderRequest.ShopProductDto;
+import com.github.spud.tinystore.order.interfaces.dto.ShopProductDto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;

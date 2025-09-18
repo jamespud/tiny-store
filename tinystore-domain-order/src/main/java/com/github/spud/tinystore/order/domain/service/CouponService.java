@@ -1,7 +1,6 @@
 package com.github.spud.tinystore.order.domain.service;
 
 import com.github.spud.tinystore.order.domain.model.Coupon;
-import com.github.spud.tinystore.order.domain.model.Product;
 import java.util.List;
 import org.springframework.stereotype.Service;
 

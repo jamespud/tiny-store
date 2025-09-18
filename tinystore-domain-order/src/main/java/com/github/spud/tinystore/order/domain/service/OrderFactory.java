@@ -14,6 +14,7 @@ import com.github.spud.tinystore.order.domain.model.Money;
 import com.github.spud.tinystore.order.domain.model.Order;
 import com.github.spud.tinystore.order.domain.model.OrderLine;
 import com.github.spud.tinystore.order.domain.model.Product;
+import com.github.spud.tinystore.order.domain.model.SubOrder;
 import com.github.spud.tinystore.order.domain.status.AfterSaleStatus;
 import com.github.spud.tinystore.order.domain.status.FulfillmentStatus;
 import com.github.spud.tinystore.order.domain.status.PaymentStatus;
@@ -31,6 +32,7 @@ public class OrderFactory {
 
 	public Order createOrder(PreviewOrderCommand cmd, List<Product> products, List<Coupon> coupons) {
 		Map<Product, Integer> collect = toProductMap(cmd.getProducts(), products);
+		// TODO: 订单拆分
 
 		return Order.builder()
 			.buyer(new Buyer(cmd.getUserId(), BuyerType.NORMAL, 1))
@@ -64,9 +66,10 @@ public class OrderFactory {
 			.collect(Collectors.toMap(p -> p, p -> quantityMap.get(p.skuId())));
 	}
 
-	public OrderLine createOrderLine(String userId, String shopId, Map<Product, Integer> products,
+	public SubOrder createOrderLine(String userId, String shopId, Map<Product, Integer> products,
 		Money total, Money discount, Money payable, List<ChargeItem> chargeItems, Address address) {
-		return new OrderLine("", userId, shopId, products, total, discount, payable, chargeItems,
+		return new SubOrder("", userId, shopId, products, total, discount, payable, chargeItems,
 			OrderStatus.CREATED, PaymentStatus.UNPAID, FulfillmentStatus.NONE, AfterSaleStatus.NONE, address);
 	}
+	
 }

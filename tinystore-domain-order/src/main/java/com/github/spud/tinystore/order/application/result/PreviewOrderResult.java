@@ -16,8 +16,6 @@ public class PreviewOrderResult {
 
 	private OrderSummary summary;
 
-	private String idempotencyKey;
-
 	// ttl in seconds
 	private long expireAt;
 
@@ -44,13 +42,17 @@ public class PreviewOrderResult {
 
 	}
 
-	public record OrderSummary(Money total, Money shipping, List<DiscountSnapshot> discounts,
+	public record OrderSummary(Money total, List<ChargeItemSnapshot> charges, List<DiscountSnapshot> discounts,
 	                           List<CouponSnapshot> coupons,
 	                           Money payable) {
 
 	}
 
 	public record DiscountSnapshot(String description, Money amount) {
+
+	}
+	
+	public record ChargeItemSnapshot(String type, String description, Money amount) {
 
 	}
 

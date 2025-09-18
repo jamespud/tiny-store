@@ -1,0 +1,24 @@
+digraph ORDER_STATE_MACHINE {
+  rankdir=LR;
+  subgraph cluster_core {
+    label="CORE_FLOW";style=filled;color=lightgrey;
+    PENDING_PAYMENT;PENDING_FINAL_PAYMENT;PAID_CONFIRMED;AWAITING_FULFILLMENT;FULFILLING;AFTER_SALE;CANCELLING;COMPLETED;CANCELLED;CLOSED;REFUNDED;
+  }
+  // Core transitions
+  PENDING_PAYMENT -> PAID_CONFIRMED [label="pay full"];
+  PENDING_PAYMENT -> PENDING_FINAL_PAYMENT [label="pay deposit"];
+  PENDING_FINAL_PAYMENT -> PAID_CONFIRMED [label="final pay"];
+  PENDING_FINAL_PAYMENT -> CANCELLED [label="timeout"];
+  PAID_CONFIRMED -> AWAITING_FULFILLMENT;
+  AWAITING_FULFILLMENT -> FULFILLING [label="first outbound"];
+  FULFILLING -> AFTER_SALE [label="after-sale request"];
+  COMPLETED -> AFTER_SALE [label="after-sale window"];
+  FULFILLING -> COMPLETED [label="delivered & no after-sale"];
+  FULFILLING -> CANCELLING [label="cancel req"];
+  CANCELLING -> CANCELLED [label="approve"];
+  CANCELLING -> FULFILLING [label="reject"];
+  AFTER_SALE -> REFUNDED [label="refund success"];
+  AFTER_SALE -> COMPLETED [label="exchange done"];
+  ANY -> CLOSED [label="risk"];
+}
+
