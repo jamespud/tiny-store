@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashSet;
+import java.util.Locale.Category;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -142,7 +143,38 @@ public enum OrderStatus {
 	AFTER_SALE_COMPLETED("AFTER_SALE_COMPLETED", "售后已完成", Category.AFTER_SALE, false),
 	
 	// 售后流程终止（如用户主动取消申请、验货拒绝后协商失败）。	
-	AFTER_SALE_CLOSED("AFTER_SALE_CLOSED", "售后已关闭", Category.AFTER_SALE, true)
+	AFTER_SALE_CLOSED("AFTER_SALE_CLOSED", "售后已关闭", Category.AFTER_SALE, true),
+	
+		/**
+	 * 检查当前状态是否为终态
+	 * @return true 如果是终态，false 否则
+	 */
+	public boolean isTerminal() {
+		return this == COMPLETED || this == CANCELLED;
+	}
+
+	/**
+	 * 获取状态的中文描述
+	 * @return 状态的中文名称
+	 */
+	public String getChineseName() {
+		return switch (this) {
+			case UNPAID -> "待支付";
+			case PAID -> "已支付";
+			case FULFILLMENT_PENDING -> "待履约";
+			case FULFILLING -> "履约中";
+			case COMPLETED -> "已完成";
+			case CANCELLED -> "已取消";
+		};
+	}
+	PAYMENT_EXPIRED("PAYMENT_EXPIRED", "支付过期", Category.PAYMENT, true),
+	PACKING("PACKING", "打包中", Category.FULFILLMENT, false),
+	PARTIALLY_SHIPPED("PARTIALLY_SHIPPED", "部分发货", Category.FULFILLMENT, false),
+	REFUND_PENDING("REFUND_PENDING", "待退款", Category.PAYMENT, false),
+	RETURN_REQUESTED("RETURN_REQUESTED", "申请退货", Category.AFTER_SALE, false),
+	PARTIALLY_REFUNDED("PARTIALLY_REFUNDED", "部分退款", Category.PAYMENT, false),
+	RETURNED("RETURNED", "已退货", Category.AFTER_SALE, false);
+
 	public enum Category {
 		CORE_FLOW, PAYMENT, FULFILLMENT, AFTER_SALE, ABNORMAL, CLOSED
 	}

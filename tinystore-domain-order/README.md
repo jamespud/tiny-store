@@ -1,3 +1,133 @@
+# 订单服务 (tinystore-domain-order)
+
+## 概述
+
+订单服务是商城项目的核心业务模块，采用领域驱动设计 (DDD) 架构，实现了完整的订单生命周期管理。基于新的 CoreFlowStatus 状态机设计，提供可靠的状态转换、幂等性保证和事件驱动的架构。
+
+## 核心特性
+
+### 状态机驱动
+- 基于 `CoreFlowStatus` 的严格状态转换规则
+- 支持复杂业务场景：预售、售后、取消等
+- 防止非法状态跳转，确保数据一致性
+
+### 幂等性保证
+- 所有状态变更操作支持幂等性
+- 基于幂等性键的请求去重
+- 自动关联ID追踪，便于问题排查
+
+### 事件驱动架构
+- 轻量级 Outbox 模式确保事件最终一致性
+- 支持异步事件处理和重试机制
+- 完整的事件审计和监控
+
+## 状态流转
+
+```mermaid
+graph LR
+    A[待支付] -->|支付成功| B[支付确认]
+    A -->|定金支付| C[待付尾款]
+    C -->|尾款支付| B
+    B -->|自动确认| D[待履约]
+    D -->|商家发货| E[履约中]
+    E -->|确认收货| F[已完成]
+    
+    D -->|申请取消| G[取消中]
+    E -->|申请取消| G
+    G -->|取消确认| H[已取消]
+    
+    E -->|申请售后| I[售后中]
+    F -->|售后窗口| I
+    I -->|退款成功| J[已退款]
+```
+
+## API 接口
+
+### 用户接口
+- `POST /api/v1/user/orders` - 创建订单
+- `POST /api/v1/user/orders/{id}/cancel` - 取消订单
+- `POST /api/v1/user/orders/{id}/confirm` - 确认收货
+
+### 商家接口  
+- `POST /api/v1/merchant/orders/{id}/accept` - 接受订单
+- `POST /api/v1/merchant/orders/{id}/ship` - 发货
+- `POST /api/v1/merchant/orders/{id}/delivered` - 确认妥投
+
+### 内部回调
+- `POST /api/v1/internal/orders/payment-success` - 支付成功回调
+- `POST /api/v1/internal/orders/logistics-pickup` - 物流揽收回调
+- `POST /api/v1/internal/orders/logistics-delivered` - 物流妥投回调
+
+## 快速开始
+
+### 创建订单示例
+
+```bash
+curl -X POST "http://localhost:8080/api/v1/user/orders" \
+  -H "Content-Type: application/json" \
+  -H "X-Idempotency-Key: user_12345_create_$(date +%s)" \
+  -H "X-Correlation-ID: $(uuidgen)" \
+  -d '{
+    "products": [
+      {
+        "skuId": "sku_001",
+        "quantity": 1,
+        "price": 99.99
+      }
+    ],
+    "deliveryAddress": {
+      "province": "北京",
+      "city": "北京市", 
+      "district": "朝阳区",
+      "detail": "xxx街道xxx号"
+    }
+  }'
+```
+
+### 状态查询
+订单状态会自动同步到相关系统，可通过事件订阅或 API 查询获取最新状态。
+
+## 配置说明
+
+### 幂等性配置
+```yaml
+order:
+  idempotency:
+    enabled: true
+    cache-duration: PT24H  # 24小时
+    redis-key-prefix: "order:idempotency:"
+```
+
+### 事件发布配置
+```yaml
+order:
+  outbox:
+    enabled: true
+    batch-size: 100
+    retry-max-attempts: 3
+    cleanup-schedule: "0 2 * * *"  # 每天凌晨2点清理
+```
+
+## 监控和度量
+
+### 关键指标
+- 订单创建成功率
+- 状态转换延迟  
+- 幂等性命中率
+- 事件发布成功率
+
+### 健康检查
+- `/actuator/health` - 服务健康状态
+- `/actuator/metrics` - 业务指标
+- `/actuator/info` - 服务信息
+
+## 开发指南
+
+详细的开发文档请参考：
+- [API 使用指南](doc/order/api-usage-guide.md)
+- [状态机设计](doc/order/state-machine-design.md)  
+- [状态迁移说明](doc/order/order-status-migration.md)
+
 商城项目的订单服务是核心业务模块，需覆盖**正向订单流程、逆向售后流程、订单管理、数据支撑**四大维度，具体功能如下：
 
 

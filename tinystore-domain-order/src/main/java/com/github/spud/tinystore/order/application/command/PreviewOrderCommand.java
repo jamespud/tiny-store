@@ -2,6 +2,7 @@ package com.github.spud.tinystore.order.application.command;
 
 import java.util.List;
 import java.util.Set;
+
 import lombok.Builder;
 import lombok.Getter;
 
@@ -15,7 +16,7 @@ public class PreviewOrderCommand {
 
 	String userId;
 
-	private List<ProductItem> products;
+	private List<ProductItem> productItems;
 
 	private Set<String> coupons;
 
@@ -24,7 +25,7 @@ public class PreviewOrderCommand {
 	private String deviceId;
 
 	public List<String> getProductIds() {
-		return products.stream()
+		return productItems.stream()
 			.flatMap(p -> p.products.stream().map(ProductDto::skuId))
 			.toList();
 	}

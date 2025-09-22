@@ -16,6 +16,9 @@
 		<module>tinystore-domain-payment</module>
 		<module>tinystore-domain-gateway</module>
 		<module>tinystore-domain-auth</module>
+        <module>tinystore-domain-recommendation</module>
+        <module>tinystore-domain-marketing</module>
+        <module>tinystore-domain-account</module>
 	</modules>
 
 	<properties>
@@ -47,5 +50,24 @@
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
+	
+	<profiles>
+		<profile>
+			<id>core-mainchain</id>
+			<modules>
+				<module>tinystore-library-infrastructure</module>
+				<module>tinystore-domain-order</module>
+				<module>tinystore-domain-payment</module>
+				<module>tinystore-domain-auth</module>
+				<module>tinystore-domain-inventory</module>
+				<!-- Temporarily exclude problematic modules -->
+				<!-- <module>tinystore-domain-product</module> -->
+				<!-- <module>tinystore-domain-gateway</module> -->
+				<!-- <module>tinystore-domain-recommendation</module> -->
+				<!-- <module>tinystore-domain-marketing</module> -->
+				<!-- <module>tinystore-domain-account</module> -->
+			</modules>
+		</profile>
+	</profiles>
 
 </project>
