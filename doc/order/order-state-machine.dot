@@ -1,24 +1,66 @@
 digraph ORDER_STATE_MACHINE {
   rankdir=LR;
-  subgraph cluster_core {
-    label="CORE_FLOW";style=filled;color=lightgrey;
-    PENDING_PAYMENT;PENDING_FINAL_PAYMENT;PAID_CONFIRMED;AWAITING_FULFILLMENT;FULFILLING;AFTER_SALE;CANCELLING;COMPLETED;CANCELLED;CLOSED;REFUNDED;
+  
+  // Define node styles
+  node [shape=box, style=rounded];
+  
+  // Terminal states (green)
+  COMPLETED [color=green, style="rounded,filled", fillcolor=lightgreen];
+  CANCELLED [color=red, style="rounded,filled", fillcolor=lightcoral];
+  CLOSED [color=gray, style="rounded,filled", fillcolor=lightgray];
+  REFUNDED [color=orange, style="rounded,filled", fillcolor=lightyellow];
+  
+  // Active states (blue)
+  PENDING_PAYMENT [color=blue, style="rounded,filled", fillcolor=lightblue];
+  PENDING_FINAL_PAYMENT [color=blue, style="rounded,filled", fillcolor=lightblue];
+  PAID_CONFIRMED [color=blue, style="rounded,filled", fillcolor=lightblue];
+  AWAITING_FULFILLMENT [color=blue, style="rounded,filled", fillcolor=lightblue];
+  FULFILLING [color=blue, style="rounded,filled", fillcolor=lightblue];
+  
+  // Transitional states (yellow)
+  AFTER_SALE [color=orange, style="rounded,filled", fillcolor=lightyellow];
+  CANCELLING [color=orange, style="rounded,filled", fillcolor=lightyellow];
+  
+  // Core payment flow
+  PENDING_PAYMENT -> PAID_CONFIRMED [label="全额支付\npayment_success"];
+  PENDING_PAYMENT -> PENDING_FINAL_PAYMENT [label="定金支付\ndeposit_payment"];
+  PENDING_FINAL_PAYMENT -> PAID_CONFIRMED [label="尾款支付\nfinal_payment"];
+  PENDING_FINAL_PAYMENT -> CANCELLED [label="支付超时\npayment_timeout"];
+  
+  // Fulfillment flow
+  PAID_CONFIRMED -> AWAITING_FULFILLMENT [label="确认支付\nauto_transition"];
+  AWAITING_FULFILLMENT -> FULFILLING [label="商家发货\nmerchant_ship"];
+  FULFILLING -> COMPLETED [label="确认收货\nuser_confirm"];
+  
+  // Cancellation flow
+  PENDING_PAYMENT -> CANCELLED [label="支付超时\npayment_timeout"];
+  AWAITING_FULFILLMENT -> CANCELLING [label="申请取消\nuser_cancel"];
+  FULFILLING -> CANCELLING [label="申请取消\nuser_cancel"];
+  CANCELLING -> CANCELLED [label="取消确认\ncancel_approved"];
+  CANCELLING -> AWAITING_FULFILLMENT [label="取消拒绝\ncancel_rejected"];
+  CANCELLING -> FULFILLING [label="取消拒绝\ncancel_rejected"];
+  
+  // After-sale flow
+  FULFILLING -> AFTER_SALE [label="申请售后\nafter_sale_request"];
+  COMPLETED -> AFTER_SALE [label="售后窗口\nafter_sale_window"];
+  AFTER_SALE -> REFUNDED [label="退款成功\nrefund_success"];
+  AFTER_SALE -> COMPLETED [label="换货完成\nexchange_completed"];
+  
+  // Risk control (from any state)
+  PENDING_PAYMENT -> CLOSED [label="风控关闭\nrisk_control"];
+  PAID_CONFIRMED -> CLOSED [label="风控关闭\nrisk_control"];
+  AWAITING_FULFILLMENT -> CLOSED [label="风控关闭\nrisk_control"];
+  FULFILLING -> CLOSED [label="风控关闭\nrisk_control"];
+  
+  // Legend
+  subgraph cluster_legend {
+    label="状态说明";
+    style=dashed;
+    color=gray;
+    
+    legend_active [label="活跃状态\n(可继续流转)", color=blue, style="rounded,filled", fillcolor=lightblue];
+    legend_terminal [label="终态\n(流程结束)", color=green, style="rounded,filled", fillcolor=lightgreen];
+    legend_transitional [label="过渡状态\n(等待处理)", color=orange, style="rounded,filled", fillcolor=lightyellow];
   }
-  // Core transitions
-  PENDING_PAYMENT -> PAID_CONFIRMED [label="pay full"];
-  PENDING_PAYMENT -> PENDING_FINAL_PAYMENT [label="pay deposit"];
-  PENDING_FINAL_PAYMENT -> PAID_CONFIRMED [label="final pay"];
-  PENDING_FINAL_PAYMENT -> CANCELLED [label="timeout"];
-  PAID_CONFIRMED -> AWAITING_FULFILLMENT;
-  AWAITING_FULFILLMENT -> FULFILLING [label="first outbound"];
-  FULFILLING -> AFTER_SALE [label="after-sale request"];
-  COMPLETED -> AFTER_SALE [label="after-sale window"];
-  FULFILLING -> COMPLETED [label="delivered & no after-sale"];
-  FULFILLING -> CANCELLING [label="cancel req"];
-  CANCELLING -> CANCELLED [label="approve"];
-  CANCELLING -> FULFILLING [label="reject"];
-  AFTER_SALE -> REFUNDED [label="refund success"];
-  AFTER_SALE -> COMPLETED [label="exchange done"];
-  ANY -> CLOSED [label="risk"];
 }
 

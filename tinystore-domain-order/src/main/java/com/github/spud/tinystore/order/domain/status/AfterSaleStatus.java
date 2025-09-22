@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
  * 售后明细状态（AFTER_SALE 细分）
  */
 public enum AfterSaleStatus {
+    NONE("NONE","无售后"),
     APPLY_SUBMITTED("APPLY_SUBMITTED","售后申请已提交"),
     REVIEWING("REVIEWING","审核中"),
     REVIEW_APPROVED("REVIEW_APPROVED","审核通过"),

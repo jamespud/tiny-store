@@ -1,10 +1,14 @@
 package com.github.spud.tinystore.order.domain.model;
 
-import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
 import java.util.List;
 import java.util.Map;
+
+import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
+
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * @author Spud
@@ -12,6 +16,8 @@ import lombok.Data;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class Order {
 
 	private Buyer buyer;
@@ -41,10 +47,6 @@ public class Order {
 	private boolean calculated;
 	
 	private Address address;
-	
-	private Order() {
-		
-	}
 }
 
 

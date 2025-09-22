@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
  * 仅在核心状态 AWAITING_FULFILLMENT / FULFILLING / AFTER_SALE(换货再发货阶段) 相关
  */
 public enum FulfillmentStatus {
+    NONE("NONE", "无"),
     MERCHANT_PENDING_ACCEPT("MERCHANT_PENDING_ACCEPT", "待商家接单"),
     MERCHANT_ACCEPTED("MERCHANT_ACCEPTED", "商家已接单"),
     READY_TO_SHIP("READY_TO_SHIP", "待发货"),

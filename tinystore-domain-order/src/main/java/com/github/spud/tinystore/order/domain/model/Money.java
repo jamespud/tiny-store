@@ -20,7 +20,11 @@ public record Money(long amount, String currency) {
 		return new Money(0, "CNY");
 	}
 
-	public Money plus(Money other) {
+    public static Money zeroLike(Money m) {
+        return new Money(0, m.currency);
+    }
+
+    public Money plus(Money other) {
 		assert ensureSameCurrency(other);
 		return new Money(this.amount + other.amount, this.currency);
 	}

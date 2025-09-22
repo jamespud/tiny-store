@@ -1,8 +1,27 @@
 package com.github.spud.tinystore.order.application.service;
 
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import com.github.spud.tinystore.order.application.command.AfterSaleApplyCommand;
+import com.github.spud.tinystore.order.application.command.AutoCompleteCommand;
+import com.github.spud.tinystore.order.application.command.CancelApproveCommand;
 import com.github.spud.tinystore.order.application.command.CancelOrderCommand;
+import com.github.spud.tinystore.order.application.command.CancelRejectCommand;
+import com.github.spud.tinystore.order.application.command.ConfirmReceiptCommand;
 import com.github.spud.tinystore.order.application.command.CreateOrderCommand;
+import com.github.spud.tinystore.order.application.command.DeliveredCommand;
+import com.github.spud.tinystore.order.application.command.MerchantAcceptCommand;
+import com.github.spud.tinystore.order.application.command.MoveToAwaitFulfillmentCommand;
+import com.github.spud.tinystore.order.application.command.PaymentSuccessCommand;
 import com.github.spud.tinystore.order.application.command.PreviewOrderCommand;
+import com.github.spud.tinystore.order.application.command.RefundSuccessCommand;
+import com.github.spud.tinystore.order.application.command.ShipOrderCommand;
+import com.github.spud.tinystore.order.application.command.UnpaidTimeoutCancelCommand;
 import com.github.spud.tinystore.order.application.result.CreateOrderResult;
 import com.github.spud.tinystore.order.application.result.PreviewOrderResult;
 import com.github.spud.tinystore.order.domain.model.Coupon;
@@ -14,15 +33,14 @@ import com.github.spud.tinystore.order.domain.service.OrderDomainService;
 import com.github.spud.tinystore.order.domain.service.OrderFactory;
 import com.github.spud.tinystore.order.domain.service.OrderOutboxService;
 import com.github.spud.tinystore.order.domain.service.OrderPriceCalculationService;
+import com.github.spud.tinystore.order.domain.service.OrderStatusTranslator;
 import com.github.spud.tinystore.order.domain.service.ProductService;
 import com.github.spud.tinystore.order.domain.service.ProductValidatorService;
 import com.github.spud.tinystore.order.domain.service.UserValidatorService;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import com.github.spud.tinystore.order.domain.status.CoreFlowStatus;
+import com.github.spud.tinystore.order.domain.status.OrderStateTransitionService;
+
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
 
 /**
  * @author Spud
@@ -34,6 +52,8 @@ public class OrderApplicationService {
 
 	private final OrderDomainService orderDomainService;
 	private final CancelDecisionService cancelDecisionService;
+	private final OrderStatusTranslator orderStatusTranslator;
+	private final OrderStateTransitionService orderStateTransitionService;
 	@Value("{order.preview.ttl:60}")
 	private long previewTTL = 60;
 
@@ -50,7 +70,8 @@ public class OrderApplicationService {
 		ProductValidatorService productValidatorService, UserValidatorService userValidatorService,
 		ProductService productService, OrderFactory orderFactory,
 		OrderOutboxService orderOutboxService, OrderDomainService orderDomainService,
-		CancelDecisionService cancelDecisionService) {
+		CancelDecisionService cancelDecisionService, OrderStatusTranslator orderStatusTranslator,
+		OrderStateTransitionService orderStateTransitionService) {
 		this.couponService = couponService;
 		this.productService = productService;
 		this.orderPriceCalculationService = priceCalculationService;
@@ -60,6 +81,8 @@ public class OrderApplicationService {
 		this.orderOutboxService = orderOutboxService;
 		this.orderDomainService = orderDomainService;
 		this.cancelDecisionService = cancelDecisionService;
+		this.orderStatusTranslator = orderStatusTranslator;
+		this.orderStateTransitionService = orderStateTransitionService;
 	}
 
 	/**
@@ -78,15 +101,17 @@ public class OrderApplicationService {
 			log.debug("");
 			return null;
 		}
+		// 获取地址信息
+		
 		// 获取商品和优惠券信息
 		List<Product> products = productService.getProductsByIds(productIds);
 		List<Coupon> coupons = couponService.getAvailableCoupons(userId);
 		// 创建订单聚合
 		Order order = orderFactory.createOrder(cmd, products, coupons);
-		// 计算价格
-		Order discounted = orderPriceCalculationService.calculatePrice(order);
 		// 缓存预览结果
 		// TODO: 设置过期时间
+		// TODO: 使用 order 和 orderPriceCalculationService
+		log.debug("Order preview created: {}", order);
 		return new PreviewOrderResult();
 	}
 
@@ -102,7 +127,7 @@ public class OrderApplicationService {
 		List<Product> products = productService.getProductsByIds(productIds);
 		List<Coupon> coupons = couponService.getAvailableCoupons(userId);
 		// 锁定库存
-		boolean productDeducted = productValidatorService.deductProductStocks(cmd.getProducts());
+		boolean productDeducted = productValidatorService.deductProductStocks(cmd.getProductItems());
 		// 库存不足，抛出异常
 		if (!productDeducted) {
 			throw new IllegalArgumentException("库存不足");
@@ -111,11 +136,11 @@ public class OrderApplicationService {
 			cmd.getCoupons());
 		// 创建订单聚合
 		Order order = orderFactory.createOrder(cmd, products, coupons);
-		// 计算价格，防止篡改
-		order = orderPriceCalculationService.calculatePrice(order);
 		orderDomainService.saveOrderLine(order);
 		// 发布订单创建事件
 		orderOutboxService.recordEvent(order);
+		// TODO: 使用 couponDeducted 结果
+		log.debug("Coupon deduction result: {}", couponDeducted);
 		return new CreateOrderResult();
 	}
 
@@ -137,6 +162,244 @@ public class OrderApplicationService {
 		// TODO: 释放库存, 优惠券等
 		// TODO: (支付服务) 异步退款
 		return "待确认";
+	}
+
+	// ==================== 新增的订单主流程接口方法 ====================
+
+	/**
+	 * 支付成功回调处理
+	 */
+	public void onPaymentSuccess(PaymentSuccessCommand cmd) {
+		// 1. 幂等性检查（由网关处理，这里仅记录日志）
+		log.info("Processing payment success for order: {}, payType: {}, eventId: {}", 
+			cmd.getOrderId(), cmd.getPayType(), cmd.getEventId());
+		
+		// 2. 加载订单 (load-for-update with version)
+		Order order = orderDomainService.loadForUpdate(cmd.getOrderId());
+		long expectedVersion = order.getVersion();
+		
+		// 3. 转换当前状态到 CoreFlowStatus (待实现 - Order 需要添加状态字段)
+		// CoreFlowStatus currentStatus = orderStatusTranslator.toCore(order.getCurrentStatus());
+		// 临时使用占位符
+		CoreFlowStatus currentStatus = CoreFlowStatus.PENDING_PAYMENT;
+		
+		// 4. 应用状态机过渡
+		boolean isDeposit = false; // 根据 payType 判断，暂时默认为全款支付
+		boolean isFinalPayment = true; // 根据订单类型判断，暂时默认为最终支付
+		CoreFlowStatus newStatus = orderStateTransitionService.paymentSuccess(currentStatus, isDeposit, isFinalPayment);
+		
+		// 5. 持久化 (save with optimistic lock) - 待实现 Order.setStatus
+		// order.setStatus(orderStatusTranslator.toLegacy(newStatus));
+		orderDomainService.save(order, expectedVersion);
+		
+		// 6. 追加状态日志 - 待实现 Order.getId()
+		// orderDomainService.appendStatusLog(order.getId(), currentStatus, newStatus, 
+		//	"Payment success", "system", cmd.getEventId());
+		
+		// 7. 记录 Outbox 事件
+		orderDomainService.recordOutbox(order, "payment.success", cmd);
+		
+		log.info("Payment success processed for order: {}", cmd.getOrderId());
+	}
+
+	/**
+	 * 商家接单
+	 */
+	public void merchantAccept(MerchantAcceptCommand cmd) {
+		log.info("Merchant accepting order: {}, operator: {}", cmd.getOrderId(), cmd.getOperatorId());
+		
+		// 1. 加载订单 (load-for-update with version)
+		Order order = orderDomainService.loadForUpdate(cmd.getOrderId());
+		long expectedVersion = order.getVersion();
+		
+		// 2. 转换当前状态到 CoreFlowStatus (待实现 - Order 需要添加状态字段)
+		// CoreFlowStatus currentStatus = orderStatusTranslator.toCore(order.getCurrentStatus());
+		// 临时使用占位符
+		CoreFlowStatus currentStatus = CoreFlowStatus.PAID_CONFIRMED;
+		
+		// 3. 应用状态机过渡
+		CoreFlowStatus newStatus = orderStateTransitionService.moveToAwaitingFulfillment(currentStatus);
+		
+		// 4. 持久化 (save with optimistic lock) - 待实现 Order.setStatus
+		// order.setStatus(orderStatusTranslator.toLegacy(newStatus));
+		orderDomainService.save(order, expectedVersion);
+		
+		// 5. 追加状态日志 - 待实现 Order.getId()
+		// orderDomainService.appendStatusLog(order.getId(), currentStatus, newStatus, 
+		//	"Merchant accepted", cmd.getOperatorId(), cmd.getRequestId());
+		
+		// 6. 记录 Outbox 事件
+		orderDomainService.recordOutbox(order, "merchant.accept", cmd);
+		
+		log.info("Merchant accept processed for order: {}", cmd.getOrderId());
+	}
+
+	/**
+	 * 商家发货
+	 */
+	public void shipOrder(ShipOrderCommand cmd) {
+		log.info("Shipping order: {}, operator: {}, logistics: {}", 
+			cmd.getOrderId(), cmd.getOperatorId(), cmd.getLogistics().getCompanyName());
+		
+		// 1. 加载订单 (load-for-update with version)
+		Order order = orderDomainService.loadForUpdate(cmd.getOrderId());
+		long expectedVersion = order.getVersion();
+		
+		// 2. 转换当前状态到 CoreFlowStatus (待实现 - Order 需要添加状态字段)
+		// CoreFlowStatus currentStatus = orderStatusTranslator.toCore(order.getCurrentStatus());
+		// 临时使用占位符
+		CoreFlowStatus currentStatus = CoreFlowStatus.AWAITING_FULFILLMENT;
+		
+		// 3. 应用状态机过渡
+		CoreFlowStatus newStatus = orderStateTransitionService.startFulfillment(currentStatus);
+		
+		// 4. 持久化 (save with optimistic lock) - 待实现 Order.setStatus
+		// order.setStatus(orderStatusTranslator.toLegacy(newStatus));
+		orderDomainService.save(order, expectedVersion);
+		
+		// 5. 追加状态日志 - 待实现 Order.getId()
+		// orderDomainService.appendStatusLog(order.getId(), currentStatus, newStatus, 
+		//	"Order shipped", cmd.getOperatorId(), cmd.getRequestId());
+		
+		// 6. 记录 Outbox 事件
+		orderDomainService.recordOutbox(order, "order.shipped", cmd);
+		
+		log.info("Ship order processed for order: {}", cmd.getOrderId());
+	}	/**
+	 * 商家同意取消
+	 */
+	public void approveCancelRequest(CancelApproveCommand cmd) {
+		// TODO: 实现取消审批通过逻辑
+		// TODO: 调用状态机 cancelApproved 方法
+		// TODO: 触发退款流程
+		log.info("Approving cancel request for order: {}, operator: {}", cmd.getOrderId(), cmd.getOperatorId());
+	}
+
+	/**
+	 * 商家拒绝取消
+	 */
+	public void rejectCancelRequest(CancelRejectCommand cmd) {
+		// TODO: 实现取消审批拒绝逻辑
+		// TODO: 调用状态机 cancelRejected 方法
+		// TODO: 回退到之前状态
+		log.info("Rejecting cancel request for order: {}, reason: {}", cmd.getOrderId(), cmd.getReasonCode());
+	}
+
+	/**
+	 * 物流妥投处理
+	 */
+	public void onLogisticsDelivered(DeliveredCommand cmd) {
+		log.info("Processing delivery for order: {}, source: {}", cmd.getOrderId(), cmd.getSource());
+		
+		// 1. 加载订单 (load-for-update with version)
+		Order order = orderDomainService.loadForUpdate(cmd.getOrderId());
+		long expectedVersion = order.getVersion();
+		
+		// 2. 转换当前状态到 CoreFlowStatus (待实现 - Order 需要添加状态字段)
+		// CoreFlowStatus currentStatus = orderStatusTranslator.toCore(order.getCurrentStatus());
+		// 临时使用占位符
+		CoreFlowStatus currentStatus = CoreFlowStatus.FULFILLING;
+		
+		// 3. 应用状态机过渡 (启用售后观察期)
+		boolean afterSaleWindowOpen = true; // 物流妥投后开启售后观察期
+		CoreFlowStatus newStatus = orderStateTransitionService.delivered(currentStatus, afterSaleWindowOpen);
+		
+		// 4. 持久化 (save with optimistic lock) - 待实现 Order.setStatus
+		// order.setStatus(orderStatusTranslator.toLegacy(newStatus));
+		orderDomainService.save(order, expectedVersion);
+		
+		// 5. 追加状态日志 - 待实现 Order.getId()
+		// orderDomainService.appendStatusLog(order.getId(), currentStatus, newStatus, 
+		//	"Logistics delivered", "system", cmd.getEventId());
+		
+		// 6. 记录 Outbox 事件
+		orderDomainService.recordOutbox(order, "logistics.delivered", cmd);
+		
+		log.info("Logistics delivery processed for order: {}", cmd.getOrderId());
+	}
+
+	/**
+	 * 用户确认收货
+	 */
+	public void confirmReceipt(ConfirmReceiptCommand cmd) {
+		log.info("User confirming receipt for order: {}, user: {}", cmd.getOrderId(), cmd.getUserId());
+		
+		// 1. 加载订单 (load-for-update with version)
+		Order order = orderDomainService.loadForUpdate(cmd.getOrderId());
+		long expectedVersion = order.getVersion();
+		
+		// 2. 转换当前状态到 CoreFlowStatus (待实现 - Order 需要添加状态字段)
+		// CoreFlowStatus currentStatus = orderStatusTranslator.toCore(order.getCurrentStatus());
+		// 临时使用占位符
+		CoreFlowStatus currentStatus = CoreFlowStatus.FULFILLING;
+		
+		// 3. 应用状态机过渡 (用户确认收货，不开启售后观察期)
+		boolean afterSaleWindowOpen = false; // 用户主动确认，直接完成
+		CoreFlowStatus deliveredStatus = orderStateTransitionService.delivered(currentStatus, afterSaleWindowOpen);
+		CoreFlowStatus newStatus = orderStateTransitionService.completeIfNoAfterSale(deliveredStatus);
+		
+		// 4. 持久化 (save with optimistic lock) - 待实现 Order.setStatus
+		// order.setStatus(orderStatusTranslator.toLegacy(newStatus));
+		orderDomainService.save(order, expectedVersion);
+		
+		// 5. 追加状态日志 - 待实现 Order.getId()
+		// orderDomainService.appendStatusLog(order.getId(), currentStatus, newStatus, 
+		//	"User confirmed receipt", cmd.getUserId(), cmd.getRequestId());
+		
+		// 6. 记录 Outbox 事件
+		orderDomainService.recordOutbox(order, "user.confirm_receipt", cmd);
+		
+		log.info("User receipt confirmation processed for order: {}", cmd.getOrderId());
+	}
+
+	/**
+	 * 申请售后
+	 */
+	public String applyAfterSale(AfterSaleApplyCommand cmd) {
+		// TODO: 实现售后申请逻辑
+		// TODO: 调用状态机 requestAfterSale 方法
+		// TODO: 创建售后单
+		log.info("Applying after-sale for order: {}, type: {}", cmd.getOrderId(), cmd.getType());
+		return UUID.randomUUID().toString(); // 返回售后单ID
+	}
+
+	/**
+	 * 退款成功回调处理
+	 */
+	public void onRefundSuccess(RefundSuccessCommand cmd) {
+		// TODO: 实现退款成功处理逻辑
+		// TODO: 调用状态机 refundSuccess 方法
+		// TODO: 处理优惠券回滚
+		log.info("Processing refund success for order: {}, amount: {}", cmd.getOrderId(), cmd.getAmount());
+	}
+
+	/**
+	 * 自动完成订单
+	 */
+	public void autoComplete(AutoCompleteCommand cmd) {
+		// TODO: 实现自动完成逻辑
+		// TODO: 调用状态机 completeIfNoAfterSale 方法
+		// TODO: 检查是否满足自动完成条件
+		log.info("Auto completing order: {}, grace days: {}", cmd.getOrderId(), cmd.getGraceDays());
+	}
+
+	/**
+	 * 支付超时自动取消
+	 */
+	public void timeoutCancel(UnpaidTimeoutCancelCommand cmd) {
+		// TODO: 实现超时取消逻辑
+		// TODO: 调用状态机 cancelRequest -> cancelApproved 方法
+		// TODO: 释放库存和优惠券
+		log.info("Timeout cancelling order: {}, schedule: {}", cmd.getOrderId(), cmd.getScheduleId());
+	}
+
+	/**
+	 * 转待履约（保障性作业）
+	 */
+	public void moveToAwaitFulfillment(MoveToAwaitFulfillmentCommand cmd) {
+		// TODO: 实现转待履约逻辑
+		// TODO: 调用状态机 moveToAwaitingFulfillment 方法
+		log.info("Moving order to await fulfillment: {}", cmd.getOrderId());
 	}
 
 	public boolean validateOrderParam(String userId, List<String> productIds, Set<String> couponIds,

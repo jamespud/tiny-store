@@ -1,4 +1,51 @@
-以「订单全生命周期」为轴，拆分出**核心订单状态**（全局状态）、**履约状态**（物流/执行子状态）、**关联状态**（支付/售后等联动状态）三类，且状态流转需满足“约束性”（如已签收订单无法直接回退到待发货）和“场景适配性”（如支持直播预售、短视频带货等字节特色场景）。
+## CoreFlowStatus 与 OrderStatus 映射关系
+
+为了确保系统向后兼容性，新的 `CoreFlowStatus` 与遗留的 `OrderStatus` 建立了双向映射关系：
+
+### 映射表
+
+| CoreFlowStatus | OrderStatus | 说明 |
+|---------------|-------------|------|
+| PENDING_PAYMENT | UNPAID | 待支付状态 |
+| PENDING_FINAL_PAYMENT | UNPAID | 预售待付尾款（归类为待支付） |
+| PAID_CONFIRMED | PAID | 支付确认状态 |
+| AWAITING_FULFILLMENT | FULFILLMENT_PENDING | 待履约状态 |
+| FULFILLING | FULFILLING | 履约中状态 |
+| AFTER_SALE | FULFILLING | 售后中（保持履约状态） |
+| CANCELLING | FULFILLING | 取消中（保持履约状态） |
+| COMPLETED | COMPLETED | 已完成状态 |
+| CANCELLED | CANCELLED | 已取消状态 |
+| CLOSED | CANCELLED | 已关闭（归类为已取消） |
+| REFUNDED | CANCELLED | 已退款（归类为已取消） |
+
+### 迁移策略
+
+1. **渐进式迁移**：
+   - 新功能使用 CoreFlowStatus
+   - 遗留接口继续使用 OrderStatus
+   - 通过 OrderStatusTranslator 实现透明转换
+
+2. **双向兼容**：
+   - API 响应根据客户端版本返回对应状态格式
+   - 内部处理统一使用 CoreFlowStatus
+   - 数据库存储保持 OrderStatus 格式
+
+3. **状态翻译器**：
+```java
+@Component
+public class OrderStatusTranslator {
+    // CoreFlowStatus -> OrderStatus
+    public OrderStatus toLegacy(CoreFlowStatus coreStatus);
+    
+    // OrderStatus -> CoreFlowStatus  
+    public CoreFlowStatus toCore(OrderStatus legacyStatus);
+    
+    // 可选映射（处理无法映射的情况）
+    public Optional<CoreFlowStatus> toCoreOptional(OrderStatus legacyStatus);
+}
+```
+
+以「订单全生命周期」为轴，拆分出**核心订单状态**（全局状态）、**履约状态**（物流/执行子状态）、**关联状态**（支付/售后等联动状态）三类，且状态流转需满足"约束性"（如已签收订单无法直接回退到待发货）和"场景适配性"（如支持直播预售、短视频带货等字节特色场景）。「订单全生命周期」为轴，拆分出**核心订单状态**（全局状态）、**履约状态**（物流/执行子状态）、**关联状态**（支付/售后等联动状态）三类，且状态流转需满足“约束性”（如已签收订单无法直接回退到待发货）和“场景适配性”（如支持直播预售、短视频带货等字节特色场景）。
 
 
 ### 一、核心订单状态：订单全局生命周期的“总开关”

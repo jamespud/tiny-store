@@ -1,10 +1,13 @@
 package com.github.spud.tinystore.order.domain.service;
 
-import com.github.spud.tinystore.order.application.command.PreviewOrderCommand.ProductItem;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
 import org.springframework.stereotype.Service;
+
+import com.github.spud.tinystore.order.application.command.PreviewOrderCommand.ProductDto;
+import com.github.spud.tinystore.order.application.command.PreviewOrderCommand.ProductItem;
 
 /**
  * TODO: 远程调用商品服务和优惠券服务
@@ -34,8 +37,15 @@ public class ProductValidatorService {
 	}
 
 	public boolean deductProductStocks(List<ProductItem> items) {
-		List<String> skuIds = items.stream().map(ProductItem::skuId).toList();
-		List<Integer> quantities = items.stream().map(ProductItem::quantity).toList();
+		// 提取商品信息：从嵌套的ProductDto中获取skuId和数量
+		List<String> skuIds = items.stream()
+			.flatMap(item -> item.products().stream())
+			.map(ProductDto::skuId)
+			.toList();
+		List<Integer> quantities = items.stream()
+			.flatMap(item -> item.products().stream())
+			.map(ProductDto::quantity)
+			.toList();
 		return deductProductStocks(skuIds, quantities);
 	}
 

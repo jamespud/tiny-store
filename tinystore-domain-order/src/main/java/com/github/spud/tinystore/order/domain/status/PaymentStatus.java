@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
  * 支付 & 退款状态域（PAYMENT）
  */
 public enum PaymentStatus {
+    NONE("NONE", "无"),
     PAYMENT_PENDING("PAYMENT_PENDING", "待支付"),
     PAYMENT_PROCESSING("PAYMENT_PROCESSING", "支付处理中"),
     PAYMENT_SUCCESS("PAYMENT_SUCCESS", "支付成功"),
