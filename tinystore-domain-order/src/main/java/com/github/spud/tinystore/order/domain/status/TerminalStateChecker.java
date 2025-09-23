@@ -12,8 +12,11 @@ public final class TerminalStateChecker {
             CoreFlowStatus.CLOSED,
             CoreFlowStatus.REFUNDED
     );
-    private TerminalStateChecker(){}
-    public static boolean isTerminal(CoreFlowStatus status){
+
+    private TerminalStateChecker() {
+    }
+
+    public static boolean isTerminal(CoreFlowStatus status) {
         return status != null && TERMINALS.contains(status);
     }
 }

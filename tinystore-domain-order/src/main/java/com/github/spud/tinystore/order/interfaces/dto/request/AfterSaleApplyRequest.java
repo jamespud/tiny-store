@@ -15,7 +15,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * 售后申请请求DTO
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -28,46 +28,46 @@ public class AfterSaleApplyRequest {
      */
     @NotNull(message = "订单ID不能为空")
     private UUID orderId;
-    
+
     /**
      * 售后类型: REFUND-仅退款, RETURN_REFUND-退货退款, EXCHANGE-换货
      */
     @NotNull(message = "售后类型不能为空")
     private AfterSaleType type;
-    
+
     /**
      * 原因代码
      */
     @Size(max = 64)
     private String reasonCode;
-    
+
     /**
      * 退款金额（部分退款时使用）
      */
     private BigDecimal amount;
-    
+
     /**
      * 退货商品明细（部分退货时使用）
      */
     private List<AfterSaleItem> items;
-    
+
     /**
      * 幂等键
      */
     @NotBlank(message = "幂等键不能为空")
     @Size(max = 100)
     private String idempotencyKey;
-    
+
     /**
      * 备注说明
      */
     @Size(max = 500)
     private String remark;
-    
+
     public AfterSaleApplyCommand toCommand(String userId) {
         return new AfterSaleApplyCommand(orderId, userId, type, reasonCode, amount, items, idempotencyKey, remark);
     }
-    
+
     /**
      * 售后类型枚举
      */
@@ -76,7 +76,7 @@ public class AfterSaleApplyRequest {
         RETURN_REFUND,  // 退货退款
         EXCHANGE        // 换货
     }
-    
+
     /**
      * 售后商品项
      */

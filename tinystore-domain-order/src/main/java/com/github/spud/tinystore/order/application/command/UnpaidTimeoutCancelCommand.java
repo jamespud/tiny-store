@@ -7,7 +7,7 @@ import lombok.Data;
 
 /**
  * 支付超时取消命令
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -18,12 +18,12 @@ public class UnpaidTimeoutCancelCommand {
      * 订单ID
      */
     private UUID orderId;
-    
+
     /**
      * 调度ID
      */
     private String scheduleId;
-    
+
     /**
      * 事件ID（幂等键）
      */

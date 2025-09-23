@@ -1,67 +1,78 @@
 package com.github.spud.tinystore.order.domain.repository;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
-import com.github.spud.tinystore.order.domain.model.Outbox;
+import com.github.spud.tinystore.order.domain.event.OutboxEventEnvelope;
 
 /**
- * Outbox 仓储接口
- * 
+ * Outbox Repository for transactional event publishing
+ *
  * @author Spud
  * @date 2025/9/22
  */
 public interface OutboxRepository {
-    
+
     /**
-     * 保存 Outbox 事件
-     * 
-     * @param outbox Outbox 实体
+     * Append event to outbox for publishing
+     *
+     * @param envelope Event envelope to store
      */
-    void save(Outbox outbox);
-    
+    void append(OutboxEventEnvelope envelope);
+
     /**
-     * 查找待发布的事件
-     * 
-     * @param limit 数量限制
-     * @return 待发布事件列表
+     * Fetch pending events for publishing
+     *
+     * @param batchSize Maximum number of events to fetch
+     * @return List of pending events
      */
-    List<Outbox> findPendingEvents(int limit);
-    
+    List<OutboxEventEnvelope> fetchPendingBatch(int batchSize);
+
     /**
-     * 查找需要重试的事件
-     * 
-     * @param beforeTime 重试时间之前
-     * @param limit 数量限制
-     * @return 需要重试的事件列表
+     * Mark event as published
+     *
+     * @param eventId Event ID to mark as published
      */
-    List<Outbox> findEventsForRetry(Instant beforeTime, int limit);
-    
+    void markPublished(String eventId);
+
     /**
-     * 更新事件状态
-     * 
-     * @param eventId 事件ID
-     * @param status 新状态
-     * @param retryCount 重试次数
-     * @param nextRetryAt 下次重试时间
-     * @param errorMessage 错误信息
+     * Mark event as failed with error
+     *
+     * @param eventId Event ID to mark as failed
+     * @param errorMessage Error message
      */
-    void updateStatus(UUID eventId, Outbox.PublishStatus status, 
-                     Integer retryCount, Instant nextRetryAt, String errorMessage);
-    
+    void markFailed(String eventId, String errorMessage);
+
     /**
-     * 标记事件为已发布
-     * 
-     * @param eventId 事件ID
+     * Check if event exists (for idempotency)
+     *
+     * @param eventId Event ID to check
+     * @return true if event exists
      */
-    void markAsPublished(UUID eventId);
-    
+    boolean existsById(String eventId);
+
     /**
-     * 删除已发布的老事件（清理任务）
-     * 
-     * @param beforeTime 时间之前
-     * @return 删除的数量
+     * Check if event exists by idempotency key
+     *
+     * @param idempotencyKey Idempotency key to check
+     * @return true if event with this idempotency key exists
      */
-    int deletePublishedEventsBefore(Instant beforeTime);
+    boolean existsByIdempotencyKey(String idempotencyKey);
+
+    /**
+     * Fetch failed events for retry
+     *
+     * @param maxRetries Maximum retry count to consider
+     * @param batchSize Maximum number of events to fetch
+     * @return List of failed events eligible for retry
+     */
+    List<OutboxEventEnvelope> fetchFailedForRetry(int maxRetries, int batchSize);
+
+    /**
+     * Delete old published events (cleanup)
+     *
+     * @param beforeTime Delete events published before this time
+     * @return Number of deleted events
+     */
+    int deletePublishedBefore(LocalDateTime beforeTime);
 }

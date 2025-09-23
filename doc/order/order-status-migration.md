@@ -1,3 +1,5 @@
+> 提示：最新的订单域分册与跨域状态映射请参考：`../domain/order-es.md`、`../domain/order-payment-inventory-status-mapping.md`；本文件保留迁移背景与细节。
+
 ## CoreFlowStatus 与 OrderStatus 映射关系
 
 为了确保系统向后兼容性，新的 `CoreFlowStatus` 与遗留的 `OrderStatus` 建立了双向映射关系：

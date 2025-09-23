@@ -13,17 +13,17 @@ import com.github.spud.tinystore.order.application.service.pricing.spi.PricingSt
 public class PriceLoadingStep implements PricingStep {
 
 
-	@Override
-	public void execute(PricingContext context) {
-		// Populate product map if missing
-		if (context.getProductMap() == null) {
-			// Expect caller to set productMap via ProductClient.replenishProductInformation
-			throw new IllegalStateException("Product map is required for pricing");
-		}
+    @Override
+    public void execute(PricingContext context) {
+        // Populate product map if missing
+        if (context.getProductMap() == null) {
+            // Expect caller to set productMap via ProductClient.replenishProductInformation
+            throw new IllegalStateException("Product map is required for pricing");
+        }
 
-		List<PricingLine> lines = new ArrayList<>();
-		// TEMPORARY FIX: Comment out problematic code for compilation
-		// TODO: Fix type issues with context.getItems() returning wrong type
+        List<PricingLine> lines = new ArrayList<>();
+        // TEMPORARY FIX: Comment out problematic code for compilation
+        // TODO: Fix type issues with context.getItems() returning wrong type
 		/*
 		context.getItems().forEach(item -> {
 			Product p = context.getProductMap().get(item.getProductId());
@@ -43,8 +43,8 @@ public class PriceLoadingStep implements PricingStep {
 				.build());
 		});
 		*/
-		context.setLines(lines);
-		long itemsTotal = lines.stream().mapToLong(PricingLine::getRawLineTotalCents).sum();
-		context.setItemsTotal(itemsTotal);
-	}
+        context.setLines(lines);
+        long itemsTotal = lines.stream().mapToLong(PricingLine::getRawLineTotalCents).sum();
+        context.setItemsTotal(itemsTotal);
+    }
 }

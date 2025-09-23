@@ -7,22 +7,22 @@ package com.github.spud.tinystore.order.domain.enums;
  * @date 2025/8/28
  */
 public enum CancelDecisionType {
-	/**
-	 * 允许简单取消（未支付订单）
-	 */
-	ALLOW_SIMPLE,
+    /**
+     * 允许简单取消（未支付订单）
+     */
+    ALLOW_SIMPLE,
 
-	/**
-	 * 允许取消但需要商家同意
-	 */
-	NEED_APPROVAL,
-	/**
-	 * 已支付未发货
-	 */
-	REFUND_THEN_CANCEL,
+    /**
+     * 允许取消但需要商家同意
+     */
+    NEED_APPROVAL,
+    /**
+     * 已支付未发货
+     */
+    REFUND_THEN_CANCEL,
 
-	/**
-	 * 不允许取消
-	 */
-	NOT_ALLOWED;
+    /**
+     * 不允许取消
+     */
+    NOT_ALLOWED;
 }

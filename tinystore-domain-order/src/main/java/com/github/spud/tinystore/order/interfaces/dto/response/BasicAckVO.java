@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * 基础响应VO
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -18,12 +18,12 @@ public class BasicAckVO {
      * 状态
      */
     private String status;
-    
+
     /**
      * 消息
      */
     private String message;
-    
+
     /**
      * 追踪ID（可选）
      */

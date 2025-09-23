@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * 转待履约请求DTO
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -26,18 +26,18 @@ public class MoveToAwaitFulfillmentRequest {
      */
     @NotNull(message = "订单ID不能为空")
     private UUID orderId;
-    
+
     /**
      * 事件ID（幂等键）
      */
     @NotBlank(message = "事件ID不能为空")
     @Size(max = 100)
     private String eventId;
-    
+
     public MoveToAwaitFulfillmentCommand toCommand() {
         return new MoveToAwaitFulfillmentCommand(orderId, eventId);
     }
-    
+
     public String getEventId() {
         return eventId;
     }

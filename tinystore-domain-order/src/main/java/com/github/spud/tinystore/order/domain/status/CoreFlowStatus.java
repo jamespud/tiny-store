@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
  * 终态集合: COMPLETED, CANCELLED, CLOSED, REFUNDED
  */
 public enum CoreFlowStatus {
+    CREATED("CREATED", "已创建", false, "CORE_FLOW"),
     PENDING_PAYMENT("PENDING_PAYMENT", "待支付", false, "CORE_FLOW"),
     PENDING_FINAL_PAYMENT("PENDING_FINAL_PAYMENT", "待付尾款", false, "CORE_FLOW"),
     PAID_CONFIRMED("PAID_CONFIRMED", "支付已确认", false, "CORE_FLOW"),
@@ -32,8 +33,19 @@ public enum CoreFlowStatus {
     }
 
     @JsonValue
-    public String getCode() {return code;}
-    public String getLabel() {return label;}
-    public boolean isTerminal() {return terminal;}
-    public String getDomain() {return domain;}
+    public String getCode() {
+        return code;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public boolean isTerminal() {
+        return terminal;
+    }
+
+    public String getDomain() {
+        return domain;
+    }
 }

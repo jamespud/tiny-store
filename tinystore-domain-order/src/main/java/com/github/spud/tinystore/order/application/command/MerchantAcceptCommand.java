@@ -7,7 +7,7 @@ import lombok.Data;
 
 /**
  * 商家接单命令
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -18,12 +18,12 @@ public class MerchantAcceptCommand {
      * 订单ID
      */
     private UUID orderId;
-    
+
     /**
      * 操作员ID
      */
     private String operatorId;
-    
+
     /**
      * 幂等键
      */

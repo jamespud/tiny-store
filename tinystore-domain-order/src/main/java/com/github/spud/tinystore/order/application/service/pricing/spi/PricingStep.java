@@ -5,5 +5,5 @@ package com.github.spud.tinystore.order.application.service.pricing.spi;
  */
 public interface PricingStep {
 
-	void execute(PricingContext context);
+    void execute(PricingContext context);
 }

@@ -7,9 +7,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class TaxStep implements PricingStep {
 
-	@Override
-	public void execute(PricingContext context) {
-		// Placeholder: no tax for now
-		context.setTaxTotal(0L);
-	}
+    @Override
+    public void execute(PricingContext context) {
+        // Placeholder: no tax for now
+        context.setTaxTotal(0L);
+    }
 }

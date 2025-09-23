@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * 确认收货请求DTO
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -26,20 +26,20 @@ public class ConfirmReceiptRequest {
      */
     @NotNull(message = "订单ID不能为空")
     private UUID orderId;
-    
+
     /**
      * 幂等键
      */
     @NotBlank(message = "幂等键不能为空")
     @Size(max = 100)
     private String idempotencyKey;
-    
+
     /**
      * 备注
      */
     @Size(max = 256)
     private String remark;
-    
+
     public ConfirmReceiptCommand toCommand(String userId) {
         return new ConfirmReceiptCommand(orderId, userId, idempotencyKey, remark);
     }

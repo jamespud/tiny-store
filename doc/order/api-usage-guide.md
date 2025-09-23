@@ -1,4 +1,5 @@
 # 订单服务 API 使用指南
+> 对齐提示：订单域分册 `../domain/order-es.md` 与 Saga `../architecture/saga-checkout.md` 提供状态、事件与编排的完整语义参考；读模型见 `../readmodels/order-summary.md`。
 
 ## 概述
 

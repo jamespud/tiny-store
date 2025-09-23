@@ -7,7 +7,7 @@ import lombok.Data;
 
 /**
  * 确认收货命令
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -18,17 +18,17 @@ public class ConfirmReceiptCommand {
      * 订单ID
      */
     private UUID orderId;
-    
+
     /**
      * 用户ID
      */
     private String userId;
-    
+
     /**
      * 幂等键
      */
     private String idempotencyKey;
-    
+
     /**
      * 备注
      */

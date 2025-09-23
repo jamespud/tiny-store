@@ -7,7 +7,7 @@ import lombok.Data;
 
 /**
  * 物流妥投命令
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -18,22 +18,22 @@ public class DeliveredCommand {
      * 订单ID
      */
     private UUID orderId;
-    
+
     /**
      * 运单号
      */
     private String trackingNo;
-    
+
     /**
      * 妥投时间戳
      */
     private Long deliveredAt;
-    
+
     /**
      * 来源
      */
     private String source;
-    
+
     /**
      * 事件ID（幂等键）
      */

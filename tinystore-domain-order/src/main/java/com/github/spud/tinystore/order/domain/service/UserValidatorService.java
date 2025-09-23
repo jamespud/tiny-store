@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.order.domain.service;
 
 import java.util.List;
+
 import org.springframework.stereotype.Service;
 
 /**
@@ -10,12 +11,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class UserValidatorService {
 
-	public boolean canUserPlaceOrder(String userId, List<String> skuId) {
-		return true;
-	}
+    public boolean canUserPlaceOrder(String userId, List<String> skuId) {
+        return true;
+    }
 
-	public boolean validateAddress(String userId, String addressId) {
-		return true;
-	}
+    public boolean validateAddress(String userId, String addressId) {
+        return true;
+    }
 
 }
