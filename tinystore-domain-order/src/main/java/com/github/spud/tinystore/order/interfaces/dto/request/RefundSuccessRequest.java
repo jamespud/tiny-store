@@ -15,7 +15,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * 退款成功回调请求DTO
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -28,46 +28,46 @@ public class RefundSuccessRequest {
      */
     @NotNull(message = "订单ID不能为空")
     private UUID orderId;
-    
+
     /**
      * 退款ID
      */
     @NotBlank(message = "退款ID不能为空")
     @Size(max = 100)
     private String refundId;
-    
+
     /**
      * 退款金额
      */
     @NotNull(message = "退款金额不能为空")
     private BigDecimal amount;
-    
+
     /**
      * 退款商品明细（部分退款时使用）
      */
     private List<RefundItem> items;
-    
+
     /**
      * 退款时间戳
      */
     @NotNull(message = "退款时间不能为空")
     private Long time;
-    
+
     /**
      * 事件ID（幂等键）
      */
     @NotBlank(message = "事件ID不能为空")
     @Size(max = 100)
     private String eventId;
-    
+
     public RefundSuccessCommand toCommand() {
         return new RefundSuccessCommand(orderId, refundId, amount, items, time, eventId);
     }
-    
+
     public String getEventId() {
         return eventId;
     }
-    
+
     /**
      * 退款商品项
      */

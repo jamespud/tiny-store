@@ -1,7 +1,7 @@
 package com.github.spud.tinystore.order.interfaces.dto.response;
 
+import com.github.spud.tinystore.order.application.result.PreviewOrderResult;
 import com.github.spud.tinystore.order.application.result.PreviewOrderResult.ShopProductSnapshot;
-import com.github.spud.tinystore.order.interfaces.dto.OrderSummary;
 
 import java.util.List;
 
@@ -11,7 +11,7 @@ import java.util.List;
  */
 public class CreateOrderVO {
 
-	private List<ShopProductSnapshot> lines;
-	private OrderSummary summary;
-	private String idempotencyKey;
+    private List<ShopProductSnapshot> lines;
+    private PreviewOrderResult.OrderSummary summary;
+    private String idempotencyKey;
 }

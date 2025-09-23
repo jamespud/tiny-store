@@ -1,3 +1,9 @@
+# 状态机设计
+
+> 注意：本文件为历史与细节补充。最新的域分册与跨域映射请参考：
+> - 订单域分册：`../domain/order-es.md`
+> - 状态映射：`../domain/order-payment-inventory-status-mapping.md`
+> - Saga 编排：`../architecture/saga-checkout.md`
 # 订单状态机设计文档
 
 ## 设计概述

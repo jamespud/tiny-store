@@ -6,7 +6,7 @@ package com.github.spud.tinystore.order.infrastructure.constant;
  */
 public class RedisConstants {
 
-	public static final String ORDER_PREVIEW_PREFIX = "pre:order:";
-	public static final String ORDER_IDEMPOTENCY_PREFIX = "idem:order:";
+    public static final String ORDER_PREVIEW_PREFIX = "pre:order:";
+    public static final String ORDER_IDEMPOTENCY_PREFIX = "idem:order:";
 
 }

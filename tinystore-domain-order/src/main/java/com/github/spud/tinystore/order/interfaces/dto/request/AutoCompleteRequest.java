@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * 自动完成订单请求DTO
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -26,29 +26,29 @@ public class AutoCompleteRequest {
      */
     @NotNull(message = "订单ID不能为空")
     private UUID orderId;
-    
+
     /**
      * 宽限天数
      */
     private Integer graceDays = 7;
-    
+
     /**
      * 调度时间戳
      */
     @NotNull(message = "调度时间不能为空")
     private Long scheduledAt;
-    
+
     /**
      * 事件ID（幂等键）
      */
     @NotBlank(message = "事件ID不能为空")
     @Size(max = 100)
     private String eventId;
-    
+
     public AutoCompleteCommand toCommand() {
         return new AutoCompleteCommand(orderId, graceDays, scheduledAt, eventId);
     }
-    
+
     public String getEventId() {
         return eventId;
     }

@@ -11,7 +11,7 @@ import lombok.Data;
 
 /**
  * 退款成功命令
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -22,27 +22,27 @@ public class RefundSuccessCommand {
      * 订单ID
      */
     private UUID orderId;
-    
+
     /**
      * 退款ID
      */
     private String refundId;
-    
+
     /**
      * 退款金额
      */
     private BigDecimal amount;
-    
+
     /**
      * 退款商品明细
      */
     private List<RefundSuccessRequest.RefundItem> items;
-    
+
     /**
      * 退款时间戳
      */
     private Long time;
-    
+
     /**
      * 事件ID（幂等键）
      */

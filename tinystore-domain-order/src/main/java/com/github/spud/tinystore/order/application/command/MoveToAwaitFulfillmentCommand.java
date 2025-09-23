@@ -7,7 +7,7 @@ import lombok.Data;
 
 /**
  * 转待履约命令
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -18,7 +18,7 @@ public class MoveToAwaitFulfillmentCommand {
      * 订单ID
      */
     private UUID orderId;
-    
+
     /**
      * 事件ID（幂等键）
      */

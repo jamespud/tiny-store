@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * 物流妥投/签收请求DTO
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -26,34 +26,34 @@ public class DeliveredRequest {
      */
     @NotNull(message = "订单ID不能为空")
     private UUID orderId;
-    
+
     /**
      * 运单号
      */
     @Size(max = 100)
     private String trackingNo;
-    
+
     /**
      * 妥投时间戳（可选）
      */
     private Long deliveredAt;
-    
+
     /**
      * 事件ID（幂等键）
      */
     @NotBlank(message = "事件ID不能为空")
     @Size(max = 100)
     private String eventId;
-    
+
     /**
      * 来源：LOGISTICS-物流回调, MERCHANT-商家确认, USER-用户确认
      */
     private String source = "LOGISTICS";
-    
+
     public DeliveredCommand toCommand() {
         return new DeliveredCommand(orderId, trackingNo, deliveredAt, source, eventId);
     }
-    
+
     public String getEventId() {
         return eventId;
     }

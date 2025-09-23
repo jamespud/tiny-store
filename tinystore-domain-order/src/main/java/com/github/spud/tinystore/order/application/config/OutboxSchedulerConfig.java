@@ -6,7 +6,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Outbox 调度器配置
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */

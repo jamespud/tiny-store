@@ -29,6 +29,11 @@ public enum FulfillmentStatus {
     }
 
     @JsonValue
-    public String getCode() {return code;}
-    public String getLabel() {return label;}
+    public String getCode() {
+        return code;
+    }
+
+    public String getLabel() {
+        return label;
+    }
 }

@@ -14,7 +14,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * 商家发货请求DTO
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -27,36 +27,36 @@ public class ShipOrderRequest {
      */
     @NotNull(message = "订单ID不能为空")
     private UUID orderId;
-    
+
     /**
      * 物流信息
      */
     @NotNull(message = "物流信息不能为空")
     private LogisticsInfo logistics;
-    
+
     /**
      * 发货商品明细（可选，部分发货时使用）
      */
     private List<ShipItem> items;
-    
+
     /**
      * 操作员ID
      */
     @NotBlank(message = "操作员ID不能为空")
     @Size(max = 64)
     private String operatorId;
-    
+
     /**
      * 幂等键
      */
     @NotBlank(message = "幂等键不能为空")
     @Size(max = 100)
     private String idempotencyKey;
-    
+
     public ShipOrderCommand toCommand() {
         return new ShipOrderCommand(orderId, logistics, items, operatorId, idempotencyKey);
     }
-    
+
     /**
      * 物流信息
      */
@@ -69,19 +69,19 @@ public class ShipOrderRequest {
          */
         @NotBlank(message = "物流公司代码不能为空")
         private String companyCode;
-        
+
         /**
          * 运单号
          */
         @NotBlank(message = "运单号不能为空")
         private String trackingNo;
-        
+
         /**
          * 物流公司名称
          */
         private String companyName;
     }
-    
+
     /**
      * 发货商品项
      */

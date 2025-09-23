@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.order.domain.event;
 
 import java.time.LocalDateTime;
+
 import lombok.Data;
 
 /**
@@ -10,21 +11,21 @@ import lombok.Data;
 @Data
 public class OrderDomainEvent {
 
-	private String eventId;
+    private String eventId;
 
-	private EventType eventType;
+    private EventType eventType;
 
-	private LocalDateTime occurredAt;
+    private LocalDateTime occurredAt;
 
-	private Object aggregateType;
+    private Object aggregateType;
 
-	private String aggregateId;
+    private String aggregateId;
 
-	private Integer version;
+    private Integer version;
 
-	private Object payloadType;
+    private Object payloadType;
 
-	private Object payload;
+    private Object payload;
 
-	private Object dataHash;
+    private Object dataHash;
 }

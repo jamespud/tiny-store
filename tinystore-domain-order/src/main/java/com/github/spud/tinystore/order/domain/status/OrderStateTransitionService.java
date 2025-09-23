@@ -5,16 +5,16 @@ import org.springframework.stereotype.Component;
 /**
  * 核心订单状态转换服务（精简版，仅用于当前重构测试）
  * 说明：未引入订单实体，纯函数式状态机。
- * 
+ *
  * <h2>接口与状态机方法映射关系</h2>
- * 
+ *
  * <h3>用户侧接口 (/order/user)</h3>
  * <ul>
  *   <li>POST /order/user/confirm-receipt → delivered(current, afterSaleWindowOpen=false) → completeIfNoAfterSale()</li>
  *   <li>POST /order/user/after-sale/apply → requestAfterSale(current)</li>
  *   <li>POST /order/user/cancel/apply → cancelRequest(current)</li>
  * </ul>
- * 
+ *
  * <h3>商家侧接口 (/order/merchant)</h3>
  * <ul>
  *   <li>POST /order/merchant/order/receive → moveToAwaitingFulfillment(current)</li>
@@ -22,7 +22,7 @@ import org.springframework.stereotype.Component;
  *   <li>POST /order/merchant/cancel/approve → cancelApproved(current)</li>
  *   <li>POST /order/merchant/cancel/reject → cancelRejected(current, previous)</li>
  * </ul>
- * 
+ *
  * <h3>内部回调接口 (/order/internal)</h3>
  * <ul>
  *   <li>POST /order/internal/payment/success → paymentSuccess(current, isDeposit, isFinalPayment)</li>
@@ -32,24 +32,24 @@ import org.springframework.stereotype.Component;
  *   <li>POST /order/internal/auto/complete → completeIfNoAfterSale(current)</li>
  *   <li>POST /order/internal/auto/await-fulfillment → moveToAwaitingFulfillment(current)</li>
  * </ul>
- * 
+ *
  * <h3>状态流转链路</h3>
  * <pre>
  * 正常流程：
- * PENDING_PAYMENT → (支付成功) → PAID_CONFIRMED → (商家接单) → AWAITING_FULFILLMENT 
+ * PENDING_PAYMENT → (支付成功) → PAID_CONFIRMED → (商家接单) → AWAITING_FULFILLMENT
  * → (发货) → FULFILLING → (妥投) → COMPLETED
- * 
+ *
  * 预售流程：
  * PENDING_PAYMENT → (定金支付) → PENDING_FINAL_PAYMENT → (尾款支付) → PAID_CONFIRMED → ...
- * 
+ *
  * 取消流程：
  * 任意非终态 → (申请取消) → CANCELLING → (审批通过) → CANCELLED
  *                                    → (审批拒绝) → 回退到原状态
- * 
+ *
  * 售后流程：
  * FULFILLING/COMPLETED → (申请售后) → AFTER_SALE → (退款成功) → REFUNDED
  * </pre>
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -58,11 +58,11 @@ public class OrderStateTransitionService {
 
     /**
      * 支付成功状态转换
-     * 
+     * <p>
      * 触发接口：POST /order/internal/payment/success
-     * 
-     * @param current 当前状态
-     * @param isDeposit 是否为定金支付
+     *
+     * @param current        当前状态
+     * @param isDeposit      是否为定金支付
      * @param isFinalPayment 是否为尾款支付
      * @return 新状态
      */
@@ -81,11 +81,11 @@ public class OrderStateTransitionService {
 
     /**
      * 转为待履约状态
-     * 
+     * <p>
      * 触发接口：
      * - POST /order/merchant/order/receive (商家接单)
      * - POST /order/internal/auto/await-fulfillment (自动转换)
-     * 
+     *
      * @param current 当前状态
      * @return 新状态
      */
@@ -98,9 +98,9 @@ public class OrderStateTransitionService {
 
     /**
      * 开始履约（发货）
-     * 
+     * <p>
      * 触发接口：POST /order/merchant/ship
-     * 
+     *
      * @param current 当前状态
      * @return 新状态
      */
@@ -113,12 +113,12 @@ public class OrderStateTransitionService {
 
     /**
      * 妥投/签收处理
-     * 
+     * <p>
      * 触发接口：
      * - POST /order/internal/logistics/delivered (物流回调)
      * - POST /order/user/confirm-receipt (用户确认收货)
-     * 
-     * @param current 当前状态
+     *
+     * @param current             当前状态
      * @param afterSaleWindowOpen 是否开启售后观察期
      * @return 新状态
      */
@@ -132,11 +132,11 @@ public class OrderStateTransitionService {
 
     /**
      * 无售后自动完成
-     * 
+     * <p>
      * 触发接口：
      * - POST /order/internal/auto/complete (定时任务)
      * - POST /order/user/confirm-receipt (用户确认收货后)
-     * 
+     *
      * @param current 当前状态
      * @return 新状态
      */
@@ -149,9 +149,9 @@ public class OrderStateTransitionService {
 
     /**
      * 申请售后
-     * 
+     * <p>
      * 触发接口：POST /order/user/after-sale/apply
-     * 
+     *
      * @param current 当前状态
      * @return 新状态
      */
@@ -164,9 +164,9 @@ public class OrderStateTransitionService {
 
     /**
      * 退款成功
-     * 
+     * <p>
      * 触发接口：POST /order/internal/refund/success
-     * 
+     *
      * @param current 当前状态
      * @return 新状态
      */
@@ -179,11 +179,11 @@ public class OrderStateTransitionService {
 
     /**
      * 申请取消
-     * 
+     * <p>
      * 触发接口：
      * - POST /order/user/cancel/apply (用户申请)
      * - POST /order/internal/timeout/unpaid-cancel (超时取消)
-     * 
+     *
      * @param current 当前状态
      * @return 新状态
      */
@@ -196,11 +196,11 @@ public class OrderStateTransitionService {
 
     /**
      * 取消审批通过
-     * 
+     * <p>
      * 触发接口：
      * - POST /order/merchant/cancel/approve (商家同意)
      * - POST /order/internal/timeout/unpaid-cancel (超时自动取消)
-     * 
+     *
      * @param current 当前状态
      * @return 新状态
      */
@@ -213,10 +213,10 @@ public class OrderStateTransitionService {
 
     /**
      * 取消审批拒绝
-     * 
+     * <p>
      * 触发接口：POST /order/merchant/cancel/reject
-     * 
-     * @param current 当前状态
+     *
+     * @param current  当前状态
      * @param previous 拒绝后回退的状态
      * @return 新状态
      */
@@ -229,9 +229,9 @@ public class OrderStateTransitionService {
 
     /**
      * 换货完成
-     * 
+     * <p>
      * 触发场景：售后换货流程完成
-     * 
+     *
      * @param current 当前状态
      * @return 新状态
      */

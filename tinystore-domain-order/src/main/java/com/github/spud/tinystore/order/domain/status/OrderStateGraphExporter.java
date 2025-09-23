@@ -30,7 +30,13 @@ public class OrderStateGraphExporter {
             "  AFTER_SALE -> COMPLETED [label=\"exchange done\"];\n" +
             "  ANY -> CLOSED [label=\"risk\"];\n" +
             "}\n";
-    public static void export(Path path) throws IOException { Files.writeString(path, DOT); }
-    public static String dot(){return DOT;}
+
+    public static void export(Path path) throws IOException {
+        Files.writeString(path, DOT);
+    }
+
+    public static String dot() {
+        return DOT;
+    }
 }
 

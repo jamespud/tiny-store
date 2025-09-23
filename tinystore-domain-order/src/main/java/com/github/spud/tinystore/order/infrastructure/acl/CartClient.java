@@ -13,11 +13,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 @FeignClient(name = "cart-service")
 public interface CartClient {
 
-	// 这里可以定义与购物车服务交互的方法，例如获取购物车内容、添加商品到购物车等
-	// 例如：
-	@GetMapping("/cart/{userId}")
-	Object getCartByUserId(@PathVariable("userId") Long userId);
+    // 这里可以定义与购物车服务交互的方法，例如获取购物车内容、添加商品到购物车等
+    // 例如：
+    @GetMapping("/cart/{userId}")
+    Object getCartByUserId(@PathVariable("userId") Long userId);
 
-	@PostMapping("/cart/add")
-	void addToCart(@RequestBody Object cartItem);
+    @PostMapping("/cart/add")
+    void addToCart(@RequestBody Object cartItem);
 }

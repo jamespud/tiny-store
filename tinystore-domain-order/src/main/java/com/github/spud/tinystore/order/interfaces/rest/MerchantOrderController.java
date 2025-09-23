@@ -20,7 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * 商家订单控制器 - 处理商家侧订单操作
- * 
+ *
  * @author Spud
  * @date 2025/9/9
  */
@@ -28,73 +28,73 @@ import lombok.extern.slf4j.Slf4j;
 @RestController
 @RequestMapping("/order/merchant")
 public class MerchantOrderController {
-	
-	private final OrderApplicationService applicationService;
 
-	public MerchantOrderController(OrderApplicationService applicationService) {
-		this.applicationService = applicationService;
-	}
+    private final OrderApplicationService applicationService;
 
-	/**
-	 * 商家接单
-	 */
-	@PostMapping(value = "/order/receive", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> receiveOrder(@RequestBody MerchantAcceptRequest request) {
-		// 记录关联ID追踪日志
-		log.info("Merchant accepting order: {}, operator: {}, correlationId: {}", 
-			request.getOrderId(), request.getOperatorId(), IdempotencyHelper.getCurrentCorrelationId());
-		
-		// TODO: 商家身份校验
-		applicationService.merchantAccept(request.toCommand());
-		
-		log.info("Merchant accept operation completed for order: {}", request.getOrderId());
-		return Response.ok(new BasicAckVO("success", "Order accepted", null));
-	}
-	
-	/**
-	 * 商家同意取消
-	 */
-	@PostMapping(value = "/cancel/approve", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> approveCancel(@RequestBody CancelApproveRequest request) {
-		// TODO: 商家身份校验
-		applicationService.approveCancelRequest(request.toCommand());
-		return Response.ok(new BasicAckVO("success", "Cancel approved", null));
-	}
-	
-	/**
-	 * 商家拒绝取消
-	 */
-	@PostMapping(value = "/cancel/reject", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> rejectCancel(@RequestBody CancelRejectRequest request) {
-		// TODO: 商家身份校验
-		applicationService.rejectCancelRequest(request.toCommand());
-		return Response.ok(new BasicAckVO("success", "Cancel rejected", null));
-	}
-	
-	/**
-	 * 商家发货
-	 */
-	@PostMapping(value = "/ship", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> shipOrder(@RequestBody ShipOrderRequest request) {
-		// 记录关联ID追踪日志
-		log.info("Merchant shipping order: {}, operator: {}, logistics: {}, correlationId: {}", 
-			request.getOrderId(), request.getOperatorId(), 
-			request.getLogistics().getCompanyName(), IdempotencyHelper.getCurrentCorrelationId());
-		
-		// TODO: 商家身份校验
-		applicationService.shipOrder(request.toCommand());
-		
-		log.info("Merchant ship operation completed for order: {}", request.getOrderId());
-		return Response.ok(new BasicAckVO("success", "Order shipped", null));
-	}
-	
-	/**
-	 * 商家确认妥投（可选）
-	 */
-	@PostMapping(value = "/delivery/confirm", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> confirmDelivery(@RequestBody DeliveredRequest request) {
-		// TODO: 商家身份校验
-		// TODO: 实现确认妥投逻辑
-		return Response.ok(new BasicAckVO("success", "Delivery confirmed", null));
-	}
+    public MerchantOrderController(OrderApplicationService applicationService) {
+        this.applicationService = applicationService;
+    }
+
+    /**
+     * 商家接单
+     */
+    @PostMapping(value = "/order/receive", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Response<BasicAckVO> receiveOrder(@RequestBody MerchantAcceptRequest request) {
+        // 记录关联ID追踪日志
+        log.info("Merchant accepting order: {}, operator: {}, correlationId: {}",
+                request.getOrderId(), request.getOperatorId(), IdempotencyHelper.getCurrentCorrelationId());
+
+        // TODO: 商家身份校验
+        applicationService.merchantAccept(request.toCommand());
+
+        log.info("Merchant accept operation completed for order: {}", request.getOrderId());
+        return Response.ok(new BasicAckVO("success", "Order accepted", null));
+    }
+
+    /**
+     * 商家同意取消
+     */
+    @PostMapping(value = "/cancel/approve", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Response<BasicAckVO> approveCancel(@RequestBody CancelApproveRequest request) {
+        // TODO: 商家身份校验
+        applicationService.approveCancelRequest(request.toCommand());
+        return Response.ok(new BasicAckVO("success", "Cancel approved", null));
+    }
+
+    /**
+     * 商家拒绝取消
+     */
+    @PostMapping(value = "/cancel/reject", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Response<BasicAckVO> rejectCancel(@RequestBody CancelRejectRequest request) {
+        // TODO: 商家身份校验
+        applicationService.rejectCancelRequest(request.toCommand());
+        return Response.ok(new BasicAckVO("success", "Cancel rejected", null));
+    }
+
+    /**
+     * 商家发货
+     */
+    @PostMapping(value = "/ship", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Response<BasicAckVO> shipOrder(@RequestBody ShipOrderRequest request) {
+        // 记录关联ID追踪日志
+        log.info("Merchant shipping order: {}, operator: {}, logistics: {}, correlationId: {}",
+                request.getOrderId(), request.getOperatorId(),
+                request.getLogistics().getCompanyName(), IdempotencyHelper.getCurrentCorrelationId());
+
+        // TODO: 商家身份校验
+        applicationService.shipOrder(request.toCommand());
+
+        log.info("Merchant ship operation completed for order: {}", request.getOrderId());
+        return Response.ok(new BasicAckVO("success", "Order shipped", null));
+    }
+
+    /**
+     * 商家确认妥投（可选）
+     */
+    @PostMapping(value = "/delivery/confirm", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Response<BasicAckVO> confirmDelivery(@RequestBody DeliveredRequest request) {
+        // TODO: 商家身份校验
+        // TODO: 实现确认妥投逻辑
+        return Response.ok(new BasicAckVO("success", "Delivery confirmed", null));
+    }
 }

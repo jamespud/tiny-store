@@ -11,7 +11,7 @@ import lombok.Data;
 
 /**
  * 售后申请命令
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -22,37 +22,37 @@ public class AfterSaleApplyCommand {
      * 订单ID
      */
     private UUID orderId;
-    
+
     /**
      * 用户ID
      */
     private String userId;
-    
+
     /**
      * 售后类型
      */
     private AfterSaleApplyRequest.AfterSaleType type;
-    
+
     /**
      * 原因代码
      */
     private String reasonCode;
-    
+
     /**
      * 退款金额
      */
     private BigDecimal amount;
-    
+
     /**
      * 退货商品明细
      */
     private List<AfterSaleApplyRequest.AfterSaleItem> items;
-    
+
     /**
      * 幂等键
      */
     private String idempotencyKey;
-    
+
     /**
      * 备注
      */

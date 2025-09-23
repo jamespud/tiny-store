@@ -14,28 +14,28 @@ import lombok.Getter;
 @Getter
 public class PreviewOrderCommand {
 
-	String userId;
+    String userId;
 
-	private List<ProductItem> productItems;
+    private List<ProductItem> productItems;
 
-	private Set<String> coupons;
+    private Set<String> coupons;
 
-	private String addressId;
+    private String addressId;
 
-	private String deviceId;
+    private String deviceId;
 
-	public List<String> getProductIds() {
-		return productItems.stream()
-			.flatMap(p -> p.products.stream().map(ProductDto::skuId))
-			.toList();
-	}
+    public List<String> getProductIds() {
+        return productItems.stream()
+                .flatMap(p -> p.products.stream().map(ProductDto::skuId))
+                .toList();
+    }
 
-	public record ProductItem(String shopId, List<ProductDto> products) {
+    public record ProductItem(String shopId, List<ProductDto> products) {
 
-	}
+    }
 
-	public record ProductDto(String spuId, String skuId, Integer quantity) {
-		
-	}
+    public record ProductDto(String spuId, String skuId, Integer quantity) {
+
+    }
 
 }

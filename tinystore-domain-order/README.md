@@ -1,52 +1,156 @@
 # 订单服务 (tinystore-domain-order)
 
-## 概述
+本服务提供订单的写模型与事件源处理，负责从创建到完成/取消的主流程推进；读模型通过投影提供订单汇总与时间线查询。
 
-订单服务是商城项目的核心业务模块，采用领域驱动设计 (DDD) 架构，实现了完整的订单生命周期管理。基于新的 CoreFlowStatus 状态机设计，提供可靠的状态转换、幂等性保证和事件驱动的架构。
+## 我是谁 / 依赖 / 事件产出 / SLO
+- 我是谁：订单域服务（ES + CQRS 写侧），状态机以 CoreFlowStatus 为准
+- 依赖：Kafka（事件）、PostgreSQL（events/snapshots/投影）、Redis（幂等与缓存，可选）
+- 事件：`order.events`（源流），对外由投影/下游消费
+- SLO（示例）：下单接口 p95 < 300ms（不含支付跳转）
 
-## 核心特性
-
-### 状态机驱动
-- 基于 `CoreFlowStatus` 的严格状态转换规则
-- 支持复杂业务场景：预售、售后、取消等
-- 防止非法状态跳转，确保数据一致性
-
-### 幂等性保证
-- 所有状态变更操作支持幂等性
-- 基于幂等性键的请求去重
-- 自动关联ID追踪，便于问题排查
-
-### 事件驱动架构
-- 轻量级 Outbox 模式确保事件最终一致性
-- 支持异步事件处理和重试机制
-- 完整的事件审计和监控
-
-## 状态流转
-
+## 快速时序
 ```mermaid
-graph LR
-    A[待支付] -->|支付成功| B[支付确认]
-    A -->|定金支付| C[待付尾款]
-    C -->|尾款支付| B
-    B -->|自动确认| D[待履约]
-    D -->|商家发货| E[履约中]
-    E -->|确认收货| F[已完成]
-    
-    D -->|申请取消| G[取消中]
-    E -->|申请取消| G
-    G -->|取消确认| H[已取消]
-    
-    E -->|申请售后| I[售后中]
-    F -->|售后窗口| I
-    I -->|退款成功| J[已退款]
+sequenceDiagram
+    participant U as User
+    participant O as Order Service
+    participant I as Inventory
+    participant P as Payment
+    U->>O: POST /api/v1/user/orders
+    O-->>I: ReserveInventoryCommand
+    I-->>O: InventoryReserved
+    O-->>P: CreatePaymentIntent
+    P-->>O: PaymentSucceeded (webhook)
+    O-->>I: CommitInventoryCommand
 ```
 
-## API 接口
+## API 使用指南
+
+### 创建订单（新模型）
+```java
+// 使用新的权威数据来源
+CreateOrderArgs args = CreateOrderArgs.builder()
+    .buyer(Buyer.of("buyer-123"))
+    .subOrders(List.of(
+        SubOrder.builder()
+            .shopId("shop-1")
+            .lines(List.of(
+                LineItem.createSimple(
+                    LineId.generate(),
+                    SkuSnapshot.of("sku-1", "商品A", Money.ofCents(1000)),
+                    3
+                ),
+                LineItem.createComposite(  // 套装
+                    LineId.generate(),
+                    SkuSnapshot.of("combo-1", "套装A", Money.ofCents(2000)),
+                    1,
+                    List.of(
+                        LineItem.createComponent(
+                            LineId.generate(),
+                            SkuSnapshot.of("sku-2", "组件1", Money.ofCents(800)),
+                            1
+                        )
+                    )
+                )
+            ))
+            .address(fulfillmentAddress)
+            .build()
+    ))
+    .address(displayAddress)  // 非权威，仅展示
+    .build();
+
+Order order = Order.create(args);
+```
+
+### 行级售后申请
+```java
+ApplyAfterSaleCommand command = ApplyAfterSaleCommand.builder()
+    .orderId("order-123")
+    .applicantId("buyer-456")
+    .caseType(AfterSaleCaseType.REFUND)
+    .scope(AfterSaleScope.LINE)
+    .items(List.of(
+        Item.builder()
+            .lineId("line-123")
+            .requestedQty(2)
+            .reasonCode("QUALITY_ISSUE")
+            .reasonText("商品质量问题")
+            .build()
+    ))
+    .evidenceUrls(List.of("https://example.com/evidence.jpg"))
+    .pickupInfo(PickupInfo.builder()
+        .needPickup(true)
+        .contactName("张三")
+        .contactPhone("13800138000")
+        .address("北京市朝阳区...")
+        .build())
+    .idempotencyKey("key-789")
+    .build();
+```
+
+### 金额计算示例
+```java
+// 安全的金额运算
+Money lineTotal = Money.ofCents(1000);  // 10.00元
+Money lineDiscount = Money.ofCents(200); // 2.00元
+Money linePayable = lineTotal.subtract(lineDiscount); // 8.00元
+
+// 货币一致性检查（自动抛异常）
+Money cnyAmount = Money.ofCents(1000, Currency.CNY);
+Money usdAmount = Money.ofCents(100, Currency.USD);
+// Money result = cnyAmount.add(usdAmount); // 抛出 OrderDomainException
+```
+
+## 幂等与事件
+- 请求幂等：`X-Idempotency-Key`；内部映射 `commandId`
+- 回调幂等：支付回调以 `deliveryId/channel` 消重
+- 事件信封：[见这里](../doc/messaging/event-envelope.md)
+
+## 读模型与查询
+- `order_summary`：列表/筛选/分页（见 `../doc/readmodels/order-summary.md`）
+- `order_timeline`：订单状态时间轴（见 `../doc/readmodels/order-timeline.md`）
+
+## 可观测与运维
+- 指标：`projection_lag`, `consumer_lag` 等（见 `../doc/operations/observability.md`）
+- Runbooks：消费者积压、DLQ 回放、Webhook 风暴（见 `../doc/operations/runbooks/*`）
+
+## 迁移指南
+
+### 废弃字段处理
+```java
+// ❌ 旧代码 - 已废弃
+Order order = ...;
+List<OrderProduct> products = order.getProducts(); // @Deprecated
+
+// ✅ 新代码 - 使用权威数据源
+List<LineItem> lines = order.getSubOrders().stream()
+    .flatMap(sub -> sub.getLines().stream())
+    .collect(toList());
+```
+
+### OrderLine 迁移到 LineItem
+```java
+// ❌ 旧模型
+OrderLine oldLine = OrderLine.builder()
+    .productId("sku-1")
+    .price(BigDecimal.valueOf(10.00))
+    .quantity(2)
+    .build();
+
+// ✅ 新模型
+LineItem newLine = LineItem.createSimple(
+    LineId.generate(),
+    SkuSnapshot.of("sku-1", "商品名称", Money.ofCents(1000)),
+    2
+);
+```
+
+### API 接口
 
 ### 用户接口
 - `POST /api/v1/user/orders` - 创建订单
 - `POST /api/v1/user/orders/{id}/cancel` - 取消订单
 - `POST /api/v1/user/orders/{id}/confirm` - 确认收货
+- `POST /api/v1/user/orders/{id}/after-sale` - 申请售后（新）
 
 ### 商家接口  
 - `POST /api/v1/merchant/orders/{id}/accept` - 接受订单
@@ -87,6 +191,11 @@ curl -X POST "http://localhost:8080/api/v1/user/orders" \
 ### 状态查询
 订单状态会自动同步到相关系统，可通过事件订阅或 API 查询获取最新状态。
 
+## 领域与架构参考
+- 订单域分册：`../doc/domain/order-es.md`
+- 状态映射：`../doc/domain/order-payment-inventory-status-mapping.md`
+- Saga 编排：`../doc/architecture/saga-checkout.md`
+
 ## 配置说明
 
 ### 幂等性配置
@@ -124,9 +233,9 @@ order:
 ## 开发指南
 
 详细的开发文档请参考：
-- [API 使用指南](doc/order/api-usage-guide.md)
-- [状态机设计](doc/order/state-machine-design.md)  
-- [状态迁移说明](doc/order/order-status-migration.md)
+- [API 使用指南](../doc/order/api-usage-guide.md)
+- [状态机设计](../doc/order/state-machine-design.md)  
+- [状态迁移说明](../doc/order/order-status-migration.md)
 
 商城项目的订单服务是核心业务模块，需覆盖**正向订单流程、逆向售后流程、订单管理、数据支撑**四大维度，具体功能如下：
 

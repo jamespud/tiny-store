@@ -10,7 +10,7 @@ import lombok.Data;
 
 /**
  * 商家发货命令
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -21,22 +21,22 @@ public class ShipOrderCommand {
      * 订单ID
      */
     private UUID orderId;
-    
+
     /**
      * 物流信息
      */
     private ShipOrderRequest.LogisticsInfo logistics;
-    
+
     /**
      * 发货商品明细（可选）
      */
     private List<ShipOrderRequest.ShipItem> items;
-    
+
     /**
      * 操作员ID
      */
     private String operatorId;
-    
+
     /**
      * 幂等键
      */

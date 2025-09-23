@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import com.github.spud.tinystore.order.domain.model.line.LineItem;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -58,7 +59,7 @@ public class OrderFactory {
             Map<Product, Integer> shopProducts = entry.getValue();
 
             // 2.1 行项：单行包含该店铺所有商品
-            List<OrderLine> lines = buildOrderLines(shopProducts);
+            List<LineItem> lines = buildOrderLines(shopProducts);
 
             // 2.2 商品小计
             Money goodsTotal = sumLines(lines);
@@ -112,7 +113,7 @@ public class OrderFactory {
     }
 
     public Order createOrder(CreateOrderCommand cmd, List<Product> products, List<Coupon> coupons) {
-        return createOrder(cmd. getUserId(), cmd.getAddressId(), cmd.getProductItems(), products, coupons);
+        return createOrder(cmd.getUserId(), cmd.getAddressId(), cmd.getProductItems(), products, coupons);
     }
 
     private Map<Product, Integer> toProductMap(List<ProductItem> items, List<Product> products) {
@@ -149,7 +150,7 @@ public class OrderFactory {
     // ===== 辅助方法 =====
 
     // 按产品与数量构建行项：单行包含店铺所有商品
-    private List<OrderLine> buildOrderLines(Map<Product, Integer> products) {
+    private List<LineItem> buildOrderLines(Map<Product, Integer> products) {
         // 单行：包含该店铺的所有商品，products 中剔除数量<=0
         Map<Product, Integer> lineProducts = products.entrySet().stream()
                 .filter(e -> e.getValue() != null && e.getValue() > 0)
@@ -164,19 +165,19 @@ public class OrderFactory {
         Money total = lineSubtotalFromMap(lineProducts);
         Money discount = Money.zeroLike(total);
         Money payable = total;
-        OrderLine line = new OrderLine(lineProducts, total, discount, payable);
+        LineItem line = new LineItem(lineProducts, total, discount, payable);
         return List.of(line);
     }
 
     // 商品小计
-    private Money sumLines(List<OrderLine> lines) {
+    private Money sumLines(List<LineItem> lines) {
         if (lines == null || lines.isEmpty())
             return Money.zero();
-        return lines.stream().map(OrderLine::total).reduce(Money::add).orElse(Money.zero());
+        return lines.stream().map(LineItem::total).reduce(Money::add).orElse(Money.zero());
     }
 
     // 单行小计
-    private Money lineSubtotal(OrderLine line) {
+    private Money lineSubtotal(LineItem line) {
         if (line == null)
             return Money.zero();
         if (line.total() != null)

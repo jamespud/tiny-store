@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * 支付超时取消请求DTO
- * 
+ *
  * @author Spud
  * @date 2025/9/22
  */
@@ -26,25 +26,25 @@ public class UnpaidTimeoutRequest {
      */
     @NotNull(message = "订单ID不能为空")
     private UUID orderId;
-    
+
     /**
      * 调度ID
      */
     @NotBlank(message = "调度ID不能为空")
     @Size(max = 100)
     private String scheduleId;
-    
+
     /**
      * 事件ID（幂等键）
      */
     @NotBlank(message = "事件ID不能为空")
     @Size(max = 100)
     private String eventId;
-    
+
     public UnpaidTimeoutCancelCommand toCommand() {
         return new UnpaidTimeoutCancelCommand(orderId, scheduleId, eventId);
     }
-    
+
     public String getEventId() {
         return eventId;
     }
