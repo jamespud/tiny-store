@@ -1,9 +1,9 @@
 package com.github.spud.tinystore.order.application.command;
 
-import java.util.UUID;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
+
+import java.util.UUID;
 
 /**
  * 转待履约命令
@@ -14,13 +14,13 @@ import lombok.Data;
 @Data
 @AllArgsConstructor
 public class MoveToAwaitFulfillmentCommand {
-    /**
-     * 订单ID
-     */
-    private UUID orderId;
+	/**
+	 * 订单ID
+	 */
+	private UUID orderId;
 
-    /**
-     * 事件ID（幂等键）
-     */
-    private String eventId;
+	/**
+	 * 事件ID（幂等键）
+	 */
+	private String eventId;
 }

@@ -9,8 +9,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class CancelDecisionService {
 
-    public boolean canCancel(String orderId) {
-        return true;
-    }
+	public boolean canCancel(String orderId) {
+		return true;
+	}
 
 }

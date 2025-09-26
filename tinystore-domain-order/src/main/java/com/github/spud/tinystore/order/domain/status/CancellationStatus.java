@@ -5,5 +5,5 @@ package com.github.spud.tinystore.order.domain.status;
  * @date 2025/9/6
  */
 public enum CancellationStatus {
-    NONE, REQUESTED, APPROVING, CANCELLED
+	NONE, REQUESTED, APPROVING, CANCELLED
 }

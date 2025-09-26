@@ -8,11 +8,11 @@ import org.springframework.stereotype.Service;
 public class UserService {
 
 
-    public Address getAddressById(String addressId) {
-        return null;
-    }
+	public Address getAddressById(String addressId) {
+		return null;
+	}
 
-    public Buyer getBuyerById(String buyerId) {
-        return null;
-    }
+	public Buyer getBuyerById(String buyerId) {
+		return null;
+	}
 }

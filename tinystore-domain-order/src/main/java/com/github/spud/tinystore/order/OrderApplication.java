@@ -12,7 +12,7 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 @SpringBootApplication(scanBasePackages = "com.github.spud.tinystore")
 public class OrderApplication {
 
-    public static void main(String[] args) {
-        SpringApplication.run(OrderApplication.class, args);
-    }
+	public static void main(String[] args) {
+		SpringApplication.run(OrderApplication.class, args);
+	}
 }

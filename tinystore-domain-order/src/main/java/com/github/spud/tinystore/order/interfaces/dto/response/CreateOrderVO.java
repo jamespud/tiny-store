@@ -11,7 +11,7 @@ import java.util.List;
  */
 public class CreateOrderVO {
 
-    private List<ShopProductSnapshot> lines;
-    private PreviewOrderResult.OrderSummary summary;
-    private String idempotencyKey;
+	private List<ShopProductSnapshot> lines;
+	private PreviewOrderResult.OrderSummary summary;
+	private String idempotencyKey;
 }

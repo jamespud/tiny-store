@@ -14,18 +14,18 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class BasicAckVO {
-    /**
-     * 状态
-     */
-    private String status;
+	/**
+	 * 状态
+	 */
+	private String status;
 
-    /**
-     * 消息
-     */
-    private String message;
+	/**
+	 * 消息
+	 */
+	private String message;
 
-    /**
-     * 追踪ID（可选）
-     */
-    private String traceId;
+	/**
+	 * 追踪ID（可选）
+	 */
+	private String traceId;
 }

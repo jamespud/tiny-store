@@ -14,5 +14,5 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 @EnableAsync
 public class OutboxSchedulerConfig {
-    // 启用定时任务和异步执行
+	// 启用定时任务和异步执行
 }
