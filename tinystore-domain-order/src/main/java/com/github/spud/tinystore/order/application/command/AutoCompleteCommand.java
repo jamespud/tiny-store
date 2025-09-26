@@ -1,7 +1,5 @@
 package com.github.spud.tinystore.order.application.command;
 
-import java.util.UUID;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -14,23 +12,23 @@ import lombok.Data;
 @Data
 @AllArgsConstructor
 public class AutoCompleteCommand {
-    /**
-     * 订单ID
-     */
-    private String orderId;
+	/**
+	 * 订单ID
+	 */
+	private String orderId;
 
-    /**
-     * 宽限天数
-     */
-    private Integer graceDays;
+	/**
+	 * 宽限天数
+	 */
+	private Integer graceDays;
 
-    /**
-     * 调度时间戳
-     */
-    private Long scheduledAt;
+	/**
+	 * 调度时间戳
+	 */
+	private Long scheduledAt;
 
-    /**
-     * 事件ID（幂等键）
-     */
-    private String eventId;
+	/**
+	 * 事件ID（幂等键）
+	 */
+	private String eventId;
 }

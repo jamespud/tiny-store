@@ -17,8 +17,8 @@
 		<module>tinystore-domain-gateway</module>
 		<module>tinystore-domain-auth</module>
         <module>tinystore-domain-recommendation</module>
-        <module>tinystore-domain-marketing</module>
         <module>tinystore-domain-account</module>
+		<module>tinystore-domain-promotion</module>
 	</modules>
 
 	<properties>

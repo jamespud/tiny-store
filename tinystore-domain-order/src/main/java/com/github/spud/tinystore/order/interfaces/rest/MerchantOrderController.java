@@ -1,22 +1,16 @@
 package com.github.spud.tinystore.order.interfaces.rest;
 
+import com.github.spud.tinystore.infrastructure.vo.Response;
+import com.github.spud.tinystore.order.application.service.OrderApplicationService;
+import com.github.spud.tinystore.order.interfaces.dto.request.*;
+import com.github.spud.tinystore.order.interfaces.dto.response.BasicAckVO;
+import com.github.spud.tinystore.order.interfaces.util.IdempotencyHelper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import com.github.spud.tinystore.infrastructure.vo.Response;
-import com.github.spud.tinystore.order.application.service.OrderApplicationService;
-import com.github.spud.tinystore.order.interfaces.dto.request.CancelApproveRequest;
-import com.github.spud.tinystore.order.interfaces.dto.request.CancelRejectRequest;
-import com.github.spud.tinystore.order.interfaces.dto.request.DeliveredRequest;
-import com.github.spud.tinystore.order.interfaces.dto.request.MerchantAcceptRequest;
-import com.github.spud.tinystore.order.interfaces.dto.request.ShipOrderRequest;
-import com.github.spud.tinystore.order.interfaces.dto.response.BasicAckVO;
-import com.github.spud.tinystore.order.interfaces.util.IdempotencyHelper;
-
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * 商家订单控制器 - 处理商家侧订单操作
@@ -29,72 +23,72 @@ import lombok.extern.slf4j.Slf4j;
 @RequestMapping("/order/merchant")
 public class MerchantOrderController {
 
-    private final OrderApplicationService applicationService;
+	private final OrderApplicationService applicationService;
 
-    public MerchantOrderController(OrderApplicationService applicationService) {
-        this.applicationService = applicationService;
-    }
+	public MerchantOrderController(OrderApplicationService applicationService) {
+		this.applicationService = applicationService;
+	}
 
-    /**
-     * 商家接单
-     */
-    @PostMapping(value = "/order/receive", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public Response<BasicAckVO> receiveOrder(@RequestBody MerchantAcceptRequest request) {
-        // 记录关联ID追踪日志
-        log.info("Merchant accepting order: {}, operator: {}, correlationId: {}",
-                request.getOrderId(), request.getOperatorId(), IdempotencyHelper.getCurrentCorrelationId());
+	/**
+	 * 商家接单
+	 */
+	@PostMapping(value = "/order/receive", consumes = MediaType.APPLICATION_JSON_VALUE)
+	public Response<BasicAckVO> receiveOrder(@RequestBody MerchantAcceptRequest request) {
+		// 记录关联ID追踪日志
+		log.info("Merchant accepting order: {}, operator: {}, correlationId: {}",
+			request.getOrderId(), request.getOperatorId(), IdempotencyHelper.getCurrentCorrelationId());
 
-        // TODO: 商家身份校验
-        applicationService.merchantAccept(request.toCommand());
+		// TODO: 商家身份校验
+		applicationService.merchantAccept(request.toCommand());
 
-        log.info("Merchant accept operation completed for order: {}", request.getOrderId());
-        return Response.ok(new BasicAckVO("success", "Order accepted", null));
-    }
+		log.info("Merchant accept operation completed for order: {}", request.getOrderId());
+		return Response.ok(new BasicAckVO("success", "Order accepted", null));
+	}
 
-    /**
-     * 商家同意取消
-     */
-    @PostMapping(value = "/cancel/approve", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public Response<BasicAckVO> approveCancel(@RequestBody CancelApproveRequest request) {
-        // TODO: 商家身份校验
-        applicationService.approveCancelRequest(request.toCommand());
-        return Response.ok(new BasicAckVO("success", "Cancel approved", null));
-    }
+	/**
+	 * 商家同意取消
+	 */
+	@PostMapping(value = "/cancel/approve", consumes = MediaType.APPLICATION_JSON_VALUE)
+	public Response<BasicAckVO> approveCancel(@RequestBody CancelApproveRequest request) {
+		// TODO: 商家身份校验
+		applicationService.approveCancelRequest(request.toCommand());
+		return Response.ok(new BasicAckVO("success", "Cancel approved", null));
+	}
 
-    /**
-     * 商家拒绝取消
-     */
-    @PostMapping(value = "/cancel/reject", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public Response<BasicAckVO> rejectCancel(@RequestBody CancelRejectRequest request) {
-        // TODO: 商家身份校验
-        applicationService.rejectCancelRequest(request.toCommand());
-        return Response.ok(new BasicAckVO("success", "Cancel rejected", null));
-    }
+	/**
+	 * 商家拒绝取消
+	 */
+	@PostMapping(value = "/cancel/reject", consumes = MediaType.APPLICATION_JSON_VALUE)
+	public Response<BasicAckVO> rejectCancel(@RequestBody CancelRejectRequest request) {
+		// TODO: 商家身份校验
+		applicationService.rejectCancelRequest(request.toCommand());
+		return Response.ok(new BasicAckVO("success", "Cancel rejected", null));
+	}
 
-    /**
-     * 商家发货
-     */
-    @PostMapping(value = "/ship", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public Response<BasicAckVO> shipOrder(@RequestBody ShipOrderRequest request) {
-        // 记录关联ID追踪日志
-        log.info("Merchant shipping order: {}, operator: {}, logistics: {}, correlationId: {}",
-                request.getOrderId(), request.getOperatorId(),
-                request.getLogistics().getCompanyName(), IdempotencyHelper.getCurrentCorrelationId());
+	/**
+	 * 商家发货
+	 */
+	@PostMapping(value = "/ship", consumes = MediaType.APPLICATION_JSON_VALUE)
+	public Response<BasicAckVO> shipOrder(@RequestBody ShipOrderRequest request) {
+		// 记录关联ID追踪日志
+		log.info("Merchant shipping order: {}, operator: {}, logistics: {}, correlationId: {}",
+			request.getOrderId(), request.getOperatorId(),
+			request.getLogistics().getCompanyName(), IdempotencyHelper.getCurrentCorrelationId());
 
-        // TODO: 商家身份校验
-        applicationService.shipOrder(request.toCommand());
+		// TODO: 商家身份校验
+		applicationService.shipOrder(request.toCommand());
 
-        log.info("Merchant ship operation completed for order: {}", request.getOrderId());
-        return Response.ok(new BasicAckVO("success", "Order shipped", null));
-    }
+		log.info("Merchant ship operation completed for order: {}", request.getOrderId());
+		return Response.ok(new BasicAckVO("success", "Order shipped", null));
+	}
 
-    /**
-     * 商家确认妥投（可选）
-     */
-    @PostMapping(value = "/delivery/confirm", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public Response<BasicAckVO> confirmDelivery(@RequestBody DeliveredRequest request) {
-        // TODO: 商家身份校验
-        // TODO: 实现确认妥投逻辑
-        return Response.ok(new BasicAckVO("success", "Delivery confirmed", null));
-    }
+	/**
+	 * 商家确认妥投（可选）
+	 */
+	@PostMapping(value = "/delivery/confirm", consumes = MediaType.APPLICATION_JSON_VALUE)
+	public Response<BasicAckVO> confirmDelivery(@RequestBody DeliveredRequest request) {
+		// TODO: 商家身份校验
+		// TODO: 实现确认妥投逻辑
+		return Response.ok(new BasicAckVO("success", "Delivery confirmed", null));
+	}
 }

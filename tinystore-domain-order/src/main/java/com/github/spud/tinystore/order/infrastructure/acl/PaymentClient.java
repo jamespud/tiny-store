@@ -1,10 +1,9 @@
 package com.github.spud.tinystore.order.infrastructure.acl;
 
 import jakarta.ws.rs.Consumes;
+import org.springframework.cloud.openfeign.FeignClient;
 
 import java.time.Instant;
-
-import org.springframework.cloud.openfeign.FeignClient;
 
 /**
  * @author Spud
@@ -13,6 +12,6 @@ import org.springframework.cloud.openfeign.FeignClient;
 @FeignClient("tinystore-payment")
 public interface PaymentClient {
 
-    @Consumes("application/json")
-    String refundPayment(String paymentIntentId, long amount, String reason, Instant requestTime);
+	@Consumes("application/json")
+	String refundPayment(String paymentIntentId, long amount, String reason, Instant requestTime);
 }
