@@ -1,7 +1,12 @@
 package com.github.spud.tinystore.auth.config;
 
-import com.github.spud.tinystore.auth.domain.user.MallUser;
-import com.github.spud.tinystore.auth.security.MallUserPrincipal;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,12 +17,8 @@ import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Collection;
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
+import com.tinystore.auth.application.dto.MallUserView;
+import com.tinystore.auth.interfaces.security.MallUserPrincipal;
 
 @Configuration
 public class TokenCustomizerConfig {
@@ -49,17 +50,17 @@ public class TokenCustomizerConfig {
 
 			if (new OAuth2TokenType(OidcParameterNames.ID_TOKEN).equals(context.getTokenType())) {
 				if (principal instanceof MallUserPrincipal mallUserPrincipal) {
-					MallUser user = mallUserPrincipal.getUser();
-					context.getClaims().subject(user.getId().toString());
-					if (user.getNickname() != null) {
-						context.getClaims().claim("nickname", user.getNickname());
+					MallUserView user = mallUserPrincipal.getUser();
+					context.getClaims().subject(user.id().toString());
+					if (user.nickname() != null) {
+						context.getClaims().claim("nickname", user.nickname());
 					}
-					if (user.getAvatar() != null) {
-						context.getClaims().claim("avatar", user.getAvatar());
+					if (user.avatar() != null) {
+						context.getClaims().claim("avatar", user.avatar());
 					}
 					Set<String> scopes = context.getAuthorizedScopes();
 					if (scopes.contains("user.phone")) {
-						context.getClaims().claim("phone_number", user.getPhone());
+						context.getClaims().claim("phone_number", user.phone());
 					}
 					if (scopes.contains("user.address")) {
 						context.getClaims().claim("address_scope_granted", true);
