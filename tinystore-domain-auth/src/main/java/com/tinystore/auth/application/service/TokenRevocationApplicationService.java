@@ -1,12 +1,17 @@
 package com.tinystore.auth.application.service;
 
+import java.util.Set;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.tinystore.auth.application.dto.RevokeUserTokensCommand;
 import com.tinystore.auth.application.port.in.TokenRevocationUseCase;
+import com.tinystore.auth.application.port.out.AuditLogPort;
 import com.tinystore.auth.application.port.out.AuthorizationStorePort;
+import com.tinystore.auth.application.port.out.OutboxPort;
 import com.tinystore.auth.application.port.out.UserRepositoryPort;
+import com.tinystore.auth.domain.audit.AuditEvent;
 import com.tinystore.auth.domain.primitives.UserId;
 import com.tinystore.auth.domain.service.RefreshTokenVersionService;
 
@@ -16,13 +21,19 @@ public class TokenRevocationApplicationService implements TokenRevocationUseCase
 	private final UserRepositoryPort userRepository;
 	private final AuthorizationStorePort authorizationStorePort;
 	private final RefreshTokenVersionService refreshTokenVersionService;
+	private final OutboxPort outboxPort;
+	private final AuditLogPort auditLogPort;
 
 	public TokenRevocationApplicationService(UserRepositoryPort userRepository,
 	                                        AuthorizationStorePort authorizationStorePort,
-	                                        RefreshTokenVersionService refreshTokenVersionService) {
+	                                        RefreshTokenVersionService refreshTokenVersionService,
+	                                        OutboxPort outboxPort,
+	                                        AuditLogPort auditLogPort) {
 		this.userRepository = userRepository;
 		this.authorizationStorePort = authorizationStorePort;
 		this.refreshTokenVersionService = refreshTokenVersionService;
+		this.outboxPort = outboxPort;
+		this.auditLogPort = auditLogPort;
 	}
 
 	@Override
@@ -33,6 +44,9 @@ public class TokenRevocationApplicationService implements TokenRevocationUseCase
 			.orElseThrow(() -> new IllegalArgumentException("user not found"));
 		var event = refreshTokenVersionService.revokeAll(user, command.reason());
 		userRepository.update(user);
+		outboxPort.save(event);
 		authorizationStorePort.clearAuthorizationsOf(event.userId());
+		auditLogPort.append(AuditEvent.success(user.getId().getValue(), user.getPhone().getValue(), null,
+			"TOKEN_REVOKE", Set.of(), null, null, command.reason()));
 	}
 }

@@ -8,18 +8,24 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.tinystore.auth.application.dto.UserStatusView;
 import com.tinystore.auth.application.port.in.UserAdminUseCase;
+import com.tinystore.auth.application.port.out.AuditLogPort;
 import com.tinystore.auth.application.port.out.UserRepositoryPort;
+import com.tinystore.auth.domain.audit.AuditEvent;
 import com.tinystore.auth.domain.model.user.MallUser;
 import com.tinystore.auth.domain.primitives.PhoneNumber;
 import com.tinystore.auth.domain.primitives.UserId;
+
+import java.util.Set;
 
 @Service
 public class UserAdminApplicationService implements UserAdminUseCase {
 
 	private final UserRepositoryPort userRepository;
+ private final AuditLogPort auditLogPort;
 
-	public UserAdminApplicationService(UserRepositoryPort userRepository) {
+ public UserAdminApplicationService(UserRepositoryPort userRepository, AuditLogPort auditLogPort) {
 		this.userRepository = userRepository;
+	this.auditLogPort = auditLogPort;
 	}
 
 	@Override
@@ -28,6 +34,8 @@ public class UserAdminApplicationService implements UserAdminUseCase {
 		var user = loadUser(userId);
 		user.freeze();
 		userRepository.update(user);
+	 auditLogPort.append(AuditEvent.success(user.getId().getValue(), user.getPhone().getValue(), null,
+	  "USER_FREEZE", Set.of(), null, null, null));
 	}
 
 	@Override
@@ -36,6 +44,8 @@ public class UserAdminApplicationService implements UserAdminUseCase {
 		var user = loadUser(userId);
 		user.unfreeze();
 		userRepository.update(user);
+	 auditLogPort.append(AuditEvent.success(user.getId().getValue(), user.getPhone().getValue(), null,
+	  "USER_UNFREEZE", Set.of(), null, null, null));
 	}
 
 	@Override
