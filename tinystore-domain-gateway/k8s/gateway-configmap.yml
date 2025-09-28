@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tinystore-gateway-config
+  labels:
+    app: tinystore-gateway
+data:
+  gateway-routes.yml: |
+    routes:
+      - id: order-service
+        uri: lb://order-service
+        predicates:
+          - Path=/api/order/**
+        filters:
+          - StripPrefix=1
+        policies:
+          rateLimit:
+            type: ip
+            capacity: 100
+            refillRate: 100
+          idempotency:
+            enabled: true
+            keyTemplate: "idempotent:tinystore:order:create:{unique}"
+      - id: pay-service
+        uri: lb://pay-service
+        predicates:
+          - Path=/api/pay/**
+        filters:
+          - StripPrefix=1
+        policies:
+          rateLimit:
+            type: ip
+            capacity: 80
+            refillRate: 80
+          idempotency:
+            enabled: false

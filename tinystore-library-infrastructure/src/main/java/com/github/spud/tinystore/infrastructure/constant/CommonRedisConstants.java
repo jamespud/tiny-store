@@ -6,7 +6,9 @@ package com.github.spud.tinystore.infrastructure.constant;
  */
 public class CommonRedisConstants {
 
-	public static String REDIS_KEY_PREFIX = "tinystore:";
-	public static String REDIS_LOCK_PREFIX = "lock:";
-	public static String ORDER_SUBMIT_LOCK = REDIS_LOCK_PREFIX + "order:submit:";
+	// idempotent:{domain}:{service_id}:{api_id}:{unique_key}
+	// idempotent:tinystore:order:create:userId=123_orderNum=999 -> deviceId=abc
+	public static String IDEMPOTENT_KEY_PREFIX = "idempotent:";
+
+
 }
