@@ -21,7 +21,7 @@ public record AuditEvent(
 	public AuditEvent {
 		Objects.requireNonNull(action, "action must not be null");
 		Objects.requireNonNull(occurredAt, "occurredAt must not be null");
-		this.scopes = scopes == null ? Set.of() : Set.copyOf(scopes);
+		scopes = scopes == null ? Set.of() : Set.copyOf(scopes);
 	}
 
 	public static AuditEvent success(UUID userId,
