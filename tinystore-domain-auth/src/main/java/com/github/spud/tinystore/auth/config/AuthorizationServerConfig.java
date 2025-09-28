@@ -15,20 +15,20 @@ import org.springframework.security.web.SecurityFilterChain;
 @Configuration
 public class AuthorizationServerConfig {
 
-    @Bean
-    @Order(Ordered.HIGHEST_PRECEDENCE)
-    SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
-        OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
-        http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
-            .oidc(Customizer.withDefaults()); // 启用 OIDC 端点
-        return http.build();
-    }
+	@Bean
+	@Order(Ordered.HIGHEST_PRECEDENCE)
+	SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
+		OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
+		http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
+			.oidc(oidc -> oidc.logoutEndpoint(Customizer.withDefaults())); // 启用 OIDC 端点及RP注销
+		return http.build();
+	}
 
-    @Bean
-    AuthorizationServerSettings authorizationServerSettings(
-            @Value("${spring.authorization-server.issuer:http://localhost:9000}") String issuer) {
-        return AuthorizationServerSettings.builder()
-                .issuer(issuer)
-                .build();
-    }
+	@Bean
+	AuthorizationServerSettings authorizationServerSettings(
+		@Value("${spring.authorization-server.issuer:http://localhost:9000}") String issuer) {
+		return AuthorizationServerSettings.builder()
+			.issuer(issuer)
+			.build();
+	}
 }

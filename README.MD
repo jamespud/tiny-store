@@ -17,6 +17,15 @@
 	- Checkout 编排：`doc/architecture/saga-checkout.md`
 	- 本地联调（docker-compose、伪支付/伪物流）：`doc/playbooks/local-dev.md`
 
+## 认证服务概览
+
+- 自建 OAuth2/OIDC 授权服务器位于 `tinystore-domain-auth`
+- Scope 前缀区分用户向（`user.*`）与内部服务向（`svc.*`）；默认仅下发 `openid` + `user.profile`
+- C 端令牌：AT/IDT 2 小时、RT 30 天；M2M 令牌：AT 5 分钟（无 RT）
+- 支持手机号 + OTP 登录（开发态 Stub 验证码 `123456`）与 RP 发起注销 `/oauth2/logout`
+- Token 撤销：标准 `/oauth2/revoke` + 管理端 `/api/admin/tokens/revoke`
+- 更多说明见 `tinystore-domain-auth/README.MD`
+
 ## 文档地图（A+B 融合：导航 + 分册）
 
 - Architecture
