@@ -14,7 +14,7 @@ spring:
   flyway:
     enabled: true
   authorization-server:
-    issuer: http://localhost:9000
+    issuer: https://auth.dev.tinystore.com
 
 management:
   endpoints:
@@ -22,8 +22,8 @@ management:
       exposure:
         include: health,info,metrics,prometheus
 
-# 开发态密钥配置（生产请改为 KMS/Vault 注入）
-tinystore:
+# dev defaults; use per-profile overrides below
+ tinystore:
   auth:
     keystore:
       location: classpath:keystore/tinystore-auth.jks
@@ -32,4 +32,29 @@ tinystore:
       alias: auth
       password: changeit
     cors:
-      allowed-origins: "http://localhost:3000,http://localhost:8080"
+      allowed-origins: "http://localhost:3000,http://localhost:8080,https://*.dev.tinystore.com"
+    tokens:
+      user:
+        access-token-ttl: PT2H
+        id-token-ttl: PT2H
+        refresh-token-ttl: P30D
+      m2m:
+        access-token-ttl: PT5M
+    otp:
+      ttl: PT5M
+
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+  authorization-server:
+    issuer: https://auth.test.tinystore.com
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  authorization-server:
+    issuer: https://auth.tinystore.com

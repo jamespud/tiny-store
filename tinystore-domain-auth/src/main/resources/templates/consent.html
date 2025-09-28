@@ -1,39 +1,48 @@
-<!doctype html>
-<html lang="zh-CN">
+<!DOCTYPE html>
+<html lang="zh">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>授权同意 - TinyStore Auth</title>
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Microsoft Yahei", sans-serif; background:#f6f7f9; padding:40px; }
-    .card { max-width:480px; margin:40px auto; background:#fff; border-radius:12px; padding:24px; box-shadow:0 6px 20px rgba(0,0,0,0.08);} 
-    .title { font-size:20px; margin-bottom:16px; }
-    ul { padding-left: 1.2em; }
-    button { margin-right:8px; padding:10px 12px; background:#276ef1; color:#fff; border:0; border-radius:8px; cursor:pointer; }
-    .cancel { background:#999; }
-  </style>
+    <meta charset="UTF-8">
+    <title>授权确认</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2rem auto; max-width: 520px; color: #1f2d3d; }
+        h1 { text-align: center; margin-bottom: 1.5rem; }
+        ul { list-style: none; padding: 0; }
+        li { padding: .6rem 1rem; border: 1px solid #dfe4ea; border-radius: 6px; margin-bottom: .6rem; }
+        button { background-color: #2563eb; color: #fff; padding: .6rem 1.2rem; border: none; border-radius: 4px; cursor: pointer; }
+        .secondary { background-color: #e2e8f0; color: #0f172a; }
+        .scopes-section { margin-bottom: 1.5rem; }
+        .meta { color: #64748b; margin-bottom: 1rem; font-size: .9rem; }
+    </style>
 </head>
 <body>
-  <div class="card">
-    <div class="title">请求授权</div>
-    <p>应用 <strong th:text="${clientId}"></strong> 请求访问以下权限：</p>
-    <form method="post" action="/oauth2/authorize">
-      <input type="hidden" name="client_id" th:value="${clientId}" />
-      <input type="hidden" name="state" th:value="${state}" />
-      <ul>
-        <li th:each="s : ${scopesToApprove}">
-          <label>
-            <input type="checkbox" name="scope" th:value="${s}" checked="checked" />
-            <span th:text="${s}"></span>
-          </label>
-        </li>
-      </ul>
-      <div th:each="ps : ${previouslyApprovedScopes}">
-        <input type="hidden" name="scope" th:value="${ps}" />
-      </div>
-      <button type="submit" name="user_consent" value="true">同意</button>
-      <a class="cancel" href="/">取消</a>
-    </form>
-  </div>
+<h1>授权确认</h1>
+<p class="meta">应用 <strong th:text="${clientId}"></strong> 请求访问以下商城权限，请确认。</p>
+
+<form method="post" th:action="@{/oauth2/authorize}" th:object="${authorizationRequest}">
+    <div class="scopes-section" th:if="${#lists.isEmpty(scopesToApprove) == false}">
+        <h2>本次新增授权</h2>
+        <ul>
+            <li th:each="scope : ${scopesToApprove}" th:text="${scope}"></li>
+        </ul>
+    </div>
+
+    <div class="scopes-section" th:if="${#lists.isEmpty(previouslyApprovedScopes) == false}">
+        <h2>已授权权限</h2>
+        <ul>
+            <li th:each="scope : ${previouslyApprovedScopes}" th:text="${scope}"></li>
+        </ul>
+    </div>
+
+    <input type="hidden" name="client_id" th:value="${clientId}">
+    <input type="hidden" name="state" th:value="${state}">
+
+    <div th:each="scope : ${scopesToApprove}">
+        <input type="hidden" th:name="'scope_' + ${scope}" th:value="${scope}">
+    </div>
+
+    <button type="submit" name="consent_action" value="approve">同意并继续</button>
+    <button type="submit" name="consent_action" value="cancel" class="secondary">拒绝</button>
+</form>
 </body>
 </html>
