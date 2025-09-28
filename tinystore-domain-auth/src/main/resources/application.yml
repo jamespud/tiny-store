@@ -13,6 +13,10 @@ spring:
       ddl-auto: none
   flyway:
     enabled: true
+  data:
+    redis:
+      host: localhost
+      port: 6379
   authorization-server:
     issuer: https://auth.dev.tinystore.com
 
@@ -23,7 +27,7 @@ management:
         include: health,info,metrics,prometheus
 
 # dev defaults; use per-profile overrides below
- tinystore:
+tinystore:
   auth:
     keystore:
       location: classpath:keystore/tinystore-auth.jks
@@ -42,6 +46,15 @@ management:
         access-token-ttl: PT5M
     otp:
       ttl: PT5M
+      max-send-per-window: 2
+      rate-window: PT1M
+      block-duration: PT5M
+      request-lock-ttl: PT3S
+      request-cache-ttl: PT10M
+    outbox:
+      enabled: true
+      publish-interval: PT5S
+      batch-size: 100
 
 ---
 spring:
