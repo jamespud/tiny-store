@@ -4,11 +4,52 @@ server:
 spring:
   application:
     name: tinystore-gateway
+  cloud:
+    config:
+      uri: ${CONFIG_SERVER_URI:}
+      fail-fast: false
+      enabled: true
+    gateway:
+      metrics:
+        enabled: true
   security:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:9000
+          jwk-set-uri: ${JWKS_URI:http://localhost:9000/.well-known/jwks.json}
+
+gateway:
+  dynamic:
+    refresh-interval: ${GATEWAY_REFRESH_INTERVAL:PT10S}
+    routes-location: ${GATEWAY_ROUTES_LOCATION:classpath:gateway-routes.yml}
+
+redis:
+  host: ${REDIS_HOST:redis}
+  port: ${REDIS_PORT:6379}
+  password: ${REDIS_PASSWORD:}
+
+idempotency:
+  ttl: ${IDEMPOTENCY_TTL:PT5M}
+  key-prefix: ${IDEMPOTENCY_KEY_PREFIX:idempotent}
+
+security:
+  jwks:
+    cache-ttl: ${JWKS_CACHE_TTL:PT5M}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,gateway-refresh
+  endpoint:
+    prometheus:
+      enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        tinystore.gateway.requests.latency: true
+    tags:
+      application: ${spring.application.name}
 
 tinystore:
   security:

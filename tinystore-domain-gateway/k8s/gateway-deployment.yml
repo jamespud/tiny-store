@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tinystore-gateway
+  labels:
+    app: tinystore-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: tinystore-gateway
+  template:
+    metadata:
+      labels:
+        app: tinystore-gateway
+        version: v1
+    spec:
+      containers:
+        - name: gateway
+          image: ghcr.io/tinystore/gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: prod
+            - name: SPRING_CONFIG_IMPORT
+              value: configserver:${CONFIG_SERVER_URL}
+            - name: SPRING_DATA_REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: tinystore-redis-config
+                  key: host
+            - name: SPRING_DATA_REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: tinystore-redis-config
+                  key: port
+            - name: SPRING_DATA_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: tinystore-redis-secret
+                  key: password
+            - name: TINYSTORE_GATEWAY_JWKS_URI
+              valueFrom:
+                secretKeyRef:
+                  name: tinystore-auth-secret
+                  key: jwksUri
+          volumeMounts:
+            - name: gateway-routes
+              mountPath: /workspace/routes
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+      volumes:
+        - name: gateway-routes
+          configMap:
+            name: tinystore-gateway-config
