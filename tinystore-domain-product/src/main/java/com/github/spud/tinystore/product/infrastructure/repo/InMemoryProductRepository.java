@@ -1,6 +1,6 @@
 package com.github.spud.tinystore.product.infrastructure.repo;
 
-import com.github.spud.tinystore.product.domain.model.Product;
+import com.github.spud.tinystore.product.domain.model.aggregate.Product;
 import com.github.spud.tinystore.product.domain.model.id.ProductId;
 import com.github.spud.tinystore.product.domain.repo.ProductRepository;
 

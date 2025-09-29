@@ -1,6 +1,6 @@
 package com.github.spud.tinystore.product.application;
 
-import com.github.spud.tinystore.product.domain.model.Sku;
+import com.github.spud.tinystore.product.domain.model.aggregate.Sku;
 import com.github.spud.tinystore.product.domain.pricing.PricingContext;
 import com.github.spud.tinystore.product.domain.pricing.PricingResult;
 import com.github.spud.tinystore.product.domain.rules.PricingRule;

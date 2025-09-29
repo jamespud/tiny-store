@@ -3,8 +3,6 @@ package com.github.spud.tinystore.order.application.command.merchant;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
-import java.util.UUID;
-
 /**
  * 商家接单命令
  *

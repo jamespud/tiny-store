@@ -1,6 +1,6 @@
 package com.github.spud.tinystore.product.domain.pricing;
 
-import com.github.spud.tinystore.product.domain.model.Sku;
+import com.github.spud.tinystore.product.domain.model.aggregate.Sku;
 
 import java.time.Instant;
 import java.util.Map;
