@@ -1,4 +1,4 @@
-package com.github.spud.tinystore.order.infrastructure.repository;
+package com.github.spud.tinystore.order.infrastructure.persistence.repository;
 
 import com.github.spud.tinystore.order.domain.event.OutboxEventEnvelope;
 import com.github.spud.tinystore.order.domain.model.Outbox;
@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 @Repository
 public class InMemoryOutboxRepository implements OutboxRepository {
 
-	private final Map<UUID, Outbox> storage = new ConcurrentHashMap<>();
+	private final Map<String, Outbox> storage = new ConcurrentHashMap<>();
 
 	public void save(Outbox outbox) {
 		storage.put(outbox.getEventId(), outbox);

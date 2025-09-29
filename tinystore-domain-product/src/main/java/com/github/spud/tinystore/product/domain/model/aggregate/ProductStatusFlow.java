@@ -4,6 +4,7 @@ import com.github.spud.tinystore.product.domain.model.valueobject.ProductId;
 import com.github.spud.tinystore.product.domain.model.valueobject.ProductStatus;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public class ProductStatusFlow {
     private FlowId flowId;                // 领域标识

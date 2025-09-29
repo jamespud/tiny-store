@@ -1,5 +1,7 @@
 package com.github.spud.tinystore.product.domain.model.aggregate;
 
+import com.github.spud.tinystore.product.domain.model.id.ProductId;
+
 import java.time.LocalDateTime;
 
 // Placeholder identifier

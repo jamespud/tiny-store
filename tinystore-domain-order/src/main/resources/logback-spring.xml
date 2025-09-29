@@ -4,7 +4,9 @@
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <!-- Pattern includes correlationId, requestId, and idempotencyKey from MDC -->
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [correlationId=%X{correlationId:-N/A}] [requestId=%X{requestId:-N/A}] [idempotencyKey=%X{idempotencyKey:-N/A}] - %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [correlationId=%X{correlationId:-N/A}]
+                [requestId=%X{requestId:-N/A}] [idempotencyKey=%X{idempotencyKey:-N/A}] - %msg%n
+            </pattern>
         </encoder>
     </appender>
 

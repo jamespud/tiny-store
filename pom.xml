@@ -29,6 +29,7 @@
 		<spring.boot.version>3.5.0</spring.boot.version>
 		<spring.cloud.version>2025.0.0</spring.cloud.version>
 		<spring.authorization-server.version>1.4.2</spring.authorization-server.version>
+		<spring-statemachine.version>4.0.1</spring-statemachine.version>
 	</properties>
 
 
@@ -48,6 +49,13 @@
 				<scope>import</scope>
 				<type>pom</type>
 			</dependency>
+				<dependency>
+					<groupId>org.springframework.statemachine</groupId>
+					<artifactId>spring-statemachine-bom</artifactId>
+					<version>${spring-statemachine.version}</version>
+					<type>pom</type>
+					<scope>import</scope>
+				</dependency>
 		</dependencies>
 	</dependencyManagement>
 	

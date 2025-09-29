@@ -2,8 +2,8 @@ package com.github.spud.tinystore.product.application;
 
 import com.github.spud.tinystore.product.domain.common.DomainEventPublisher;
 import com.github.spud.tinystore.product.domain.event.ProductCreated;
-import com.github.spud.tinystore.product.domain.model.Product;
-import com.github.spud.tinystore.product.domain.model.Sku;
+import com.github.spud.tinystore.product.domain.model.aggregate.Product;
+import com.github.spud.tinystore.product.domain.model.aggregate.Sku;
 import com.github.spud.tinystore.product.domain.model.id.ProductId;
 import com.github.spud.tinystore.product.domain.model.id.SkuId;
 import com.github.spud.tinystore.product.domain.model.value.Money;
