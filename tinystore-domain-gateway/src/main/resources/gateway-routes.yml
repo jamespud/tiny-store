@@ -10,6 +10,10 @@ routes:
         type: ip
         capacity: 100
         refillRate: 100
+        overrides:
+          - path: /api/promotion/seckill/**
+            capacity: 5
+            refillRate: 5
       idempotency:
         enabled: true
         keyTemplate: "idempotent:tinystore:order:create:{unique}"
@@ -26,3 +30,16 @@ routes:
         refillRate: 80
       idempotency:
         enabled: false
+  - id: promotion-service
+    uri: lb://promotion-service
+    predicates:
+      - Path=/api/promotion/**
+    filters:
+      - StripPrefix=1
+    policies:
+      rateLimit:
+        type: ip
+        capacity: 100
+        refillRate: 100
+      idempotency:
+        enabled: true
