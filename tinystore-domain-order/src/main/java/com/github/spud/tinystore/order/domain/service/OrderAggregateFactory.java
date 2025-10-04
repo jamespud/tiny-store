@@ -1,24 +1,33 @@
 package com.github.spud.tinystore.order.domain.service;
 
-import com.github.spud.tinystore.order.application.command.user.PreviewOrderCommand;
-import com.github.spud.tinystore.order.application.command.user.PreviewOrderCommand.ProductDto;
-import com.github.spud.tinystore.order.application.command.user.PreviewOrderCommand.ProductItem;
-import com.github.spud.tinystore.order.application.command.user.SubmitOrderCommand;
-import com.github.spud.tinystore.order.domain.event.OrderStatus;
-import com.github.spud.tinystore.order.domain.model.*;
-import com.github.spud.tinystore.order.domain.model.line.LineItem;
-import com.github.spud.tinystore.order.domain.status.AfterSaleStatus;
-import com.github.spud.tinystore.order.domain.status.FulfillmentStatus;
-import com.github.spud.tinystore.order.domain.status.PaymentStatus;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.github.spud.tinystore.order.application.command.user.PreviewOrderCommand;
+import com.github.spud.tinystore.order.application.command.user.PreviewOrderCommand.ProductItem;
+import com.github.spud.tinystore.order.application.command.user.SubmitOrderCommand;
+import com.github.spud.tinystore.order.domain.event.OrderStatus;
+import com.github.spud.tinystore.order.domain.model.Address;
+import com.github.spud.tinystore.order.domain.model.Buyer;
+import com.github.spud.tinystore.order.domain.model.ChargeItem;
+import com.github.spud.tinystore.order.domain.model.Coupon;
+import com.github.spud.tinystore.order.domain.model.DiscountAllocation;
+import com.github.spud.tinystore.order.domain.model.Money;
+import com.github.spud.tinystore.order.domain.model.OrderAggregate;
+import com.github.spud.tinystore.order.domain.model.Product;
+import com.github.spud.tinystore.order.domain.model.SubOrder;
+import com.github.spud.tinystore.order.domain.model.line.LineItem;
+import com.github.spud.tinystore.order.domain.status.AfterSaleStatus;
+import com.github.spud.tinystore.order.domain.status.FulfillmentStatus;
+import com.github.spud.tinystore.order.domain.status.PaymentStatus;
+import com.github.spud.tinystore.order.interfaces.dto.ProductDto;
 
 /**
  * @author Spud

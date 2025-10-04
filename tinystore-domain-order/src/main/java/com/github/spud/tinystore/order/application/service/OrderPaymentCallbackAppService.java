@@ -1,23 +1,23 @@
 package com.github.spud.tinystore.order.application.service;
 
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import org.slf4j.MDC;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.github.spud.tinystore.order.domain.event.DomainEvent;
 import com.github.spud.tinystore.order.domain.model.OrderAggregateEnhanced;
 import com.github.spud.tinystore.order.domain.statemachine.OrderStateMachineService;
 import com.github.spud.tinystore.order.infrastructure.audit.OrderStatusAuditService;
 import com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService;
 import com.github.spud.tinystore.order.infrastructure.idempotency.OrderIdempotencyService;
-import com.github.spud.tinystore.order.infrastructure.statemachine.enums.OrderEvent;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.math.BigDecimal;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 /**
  * 订单支付回调应用服务
@@ -87,27 +87,10 @@ public class OrderPaymentCallbackAppService {
 				request.getAmount()
 			);
 
-			// Step 4: 状态机处理
-			Map<String, Object> context = new HashMap<>();
-			context.put("paymentTransactionId", request.getPaymentTransactionId());
-			context.put("paymentMethod", request.getPaymentMethod());
-			context.put("amount", request.getAmount());
-
-			boolean stateMachineResult = stateMachineService.sendEvent(
-				request.getOrderNo(),
-				OrderEvent.PAYMENT_SUCCEEDED,
-				context
-			);
-
-			if (!stateMachineResult) {
-				log.warn("状态机处理失败: orderNo={}, event={}",
-					request.getOrderNo(), OrderEvent.PAYMENT_SUCCEEDED);
-			}
-
-			// Step 5: 持久化订单聚合 (更新数据库)
+			// Step 4: 持久化订单聚合 (更新数据库)
 			saveOrderAggregate(orderAggregate);
 
-			// Step 6: 处理领域事件 - 保存到 Outbox
+			// Step 5: 处理领域事件 - 保存到 Outbox
 			List<DomainEvent> domainEvents = orderAggregate.pullDomainEvents();
 			if (!domainEvents.isEmpty()) {
 				outboxEventService.saveEvents(domainEvents);
@@ -115,7 +98,7 @@ public class OrderPaymentCallbackAppService {
 					request.getOrderNo(), domainEvents.size());
 			}
 
-			// Step 7: 记录状态变更审计
+			// Step 6: 记录状态变更审计
 			auditService.recordSystemStatusChange(
 				request.getOrderNo(),
 				"PENDING_PAYMENT",
@@ -125,7 +108,7 @@ public class OrderPaymentCallbackAppService {
 				domainEvents.isEmpty() ? null : domainEvents.get(0).getEventId()
 			);
 
-			// Step 8: 完成幂等性处理
+			// Step 7: 完成幂等性处理
 			PaymentCallbackResult result = PaymentCallbackResult.success(
 				request.getOrderNo(),
 				orderAggregate.getMainStatus().name(),

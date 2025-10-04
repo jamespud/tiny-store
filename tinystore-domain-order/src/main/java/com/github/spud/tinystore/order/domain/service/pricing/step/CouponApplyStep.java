@@ -1,15 +1,23 @@
 package com.github.spud.tinystore.order.domain.service.pricing.step;
 
+import org.springframework.stereotype.Component;
+
 import com.github.spud.tinystore.order.domain.service.pricing.spi.PricingContext;
 import com.github.spud.tinystore.order.domain.service.pricing.spi.PricingStep;
-import org.springframework.stereotype.Component;
+import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient;
 
 @Component
 public class CouponApplyStep implements PricingStep {
 
+	@SuppressWarnings("unused")
+	private final PromotionClient promotionClient;
+
+	public CouponApplyStep(PromotionClient promotionClient) {
+		this.promotionClient = promotionClient;
+	}
+
 	@Override
 	public void execute(PricingContext context) {
-		// Placeholder: no coupon amount for now (keep 0)
-		// If future coupons apply, add an ORDER-scoped negative adjustment and roll into amount.
+		// TODO: Invoke promotionClient.preUse(...) with idempotency key and convert response into pricing adjustments.
 	}
 }
