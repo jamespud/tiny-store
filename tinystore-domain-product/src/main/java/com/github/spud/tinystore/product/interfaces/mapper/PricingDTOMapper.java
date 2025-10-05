@@ -7,7 +7,6 @@ import com.github.spud.tinystore.product.interfaces.dto.PricingContextDTO;
 import com.github.spud.tinystore.product.interfaces.dto.PricingResultDTO;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -16,7 +15,6 @@ import java.util.stream.Collectors;
 
 /**
  * PricingDTOMapper - Maps between Pricing domain objects and DTOs
- * TODO: Complete implementation with proper Money type conversion
  */
 @Component
 public class PricingDTOMapper {
@@ -45,14 +43,13 @@ public class PricingDTOMapper {
     
     /**
      * Convert PricingResult domain object to PricingResultDTO
-     * TODO: Fix Money type conversion when Money class structure is known
      */
     public PricingResultDTO toResponseDTO(PricingResult result) {
         PricingResultDTO dto = new PricingResultDTO();
         
-        // Placeholder values - need proper Money type conversion
-        dto.setOriginalPrice(BigDecimal.ZERO); // TODO: result.basePrice()
-        dto.setFinalPrice(BigDecimal.ZERO);    // TODO: result.finalPrice()
+        // Use Money.amount() method to get BigDecimal
+        dto.setOriginalPrice(result.basePrice().amount());
+        dto.setFinalPrice(result.finalPrice().amount());
         
         // Convert adjustments
         List<PricingResultDTO.PriceAdjustmentDTO> adjustmentDTOs = result.adjustments().stream()
@@ -60,7 +57,7 @@ public class PricingDTOMapper {
                     PricingResultDTO.PriceAdjustmentDTO adjDTO = new PricingResultDTO.PriceAdjustmentDTO();
                     adjDTO.setRuleCode(adj.ruleCode);
                     adjDTO.setDescription(adj.description);
-                    adjDTO.setAdjustmentAmount(BigDecimal.ZERO); // TODO: adj.delta
+                    adjDTO.setAdjustmentAmount(adj.delta.amount()); // Use Money.amount()
                     return adjDTO;
                 })
                 .collect(Collectors.toList());
