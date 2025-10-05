@@ -5,6 +5,6 @@ package com.github.spud.tinystore.product.domain.model.valueobject;
  */
 public enum ProductStatus {
 
-    DRAFT, ACTIVE, INACTIVE, AUDITING, REJECTED, ONLINE, OFFLINE, UNDER_REVIEW;
+	DRAFT, ACTIVE, INACTIVE, AUDITING, REJECTED, ONLINE, OFFLINE, UNDER_REVIEW;
 
 }

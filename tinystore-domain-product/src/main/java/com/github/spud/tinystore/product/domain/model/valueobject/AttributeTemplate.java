@@ -8,26 +8,26 @@ import java.util.List;
  */
 public class AttributeTemplate {
 
-    private List<AttributeDefinition> mandatoryAttributes = new ArrayList<>();
-    private List<AttributeDefinition> optionalAttributes = new ArrayList<>();
+	private List<AttributeDefinition> mandatoryAttributes = new ArrayList<>();
+	private List<AttributeDefinition> optionalAttributes = new ArrayList<>();
 
-    public void addMandatory(AttributeDefinition attribute) {
-        if (attribute != null && !mandatoryAttributes.contains(attribute)) {
-            mandatoryAttributes.add(attribute);
-        }
-    }
+	public void addMandatory(AttributeDefinition attribute) {
+		if (attribute != null && !mandatoryAttributes.contains(attribute)) {
+			mandatoryAttributes.add(attribute);
+		}
+	}
 
-    public void addOptional(AttributeDefinition attribute) {
-        if (attribute != null && !optionalAttributes.contains(attribute)) {
-            optionalAttributes.add(attribute);
-        }
-    }
+	public void addOptional(AttributeDefinition attribute) {
+		if (attribute != null && !optionalAttributes.contains(attribute)) {
+			optionalAttributes.add(attribute);
+		}
+	}
 
-    public List<AttributeDefinition> getMandatoryAttributes() {
-        return new ArrayList<>(mandatoryAttributes);
-    }
+	public List<AttributeDefinition> getMandatoryAttributes() {
+		return new ArrayList<>(mandatoryAttributes);
+	}
 
-    public List<AttributeDefinition> getOptionalAttributes() {
-        return new ArrayList<>(optionalAttributes);
-    }
+	public List<AttributeDefinition> getOptionalAttributes() {
+		return new ArrayList<>(optionalAttributes);
+	}
 }

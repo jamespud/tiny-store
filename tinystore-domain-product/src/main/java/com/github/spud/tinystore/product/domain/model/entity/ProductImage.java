@@ -2,9 +2,9 @@ package com.github.spud.tinystore.product.domain.model.entity;
 
 public class ProductImage {
 
-    private String imageId;
+	private String imageId;
 
-    private String url;
+	private String url;
 
-    private Integer sort;
+	private Integer sort;
 }

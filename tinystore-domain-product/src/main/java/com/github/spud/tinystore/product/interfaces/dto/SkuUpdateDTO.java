@@ -6,5 +6,5 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = false)
 public class SkuUpdateDTO extends SkuCreateDTO {
-    // Inherits all fields from SkuCreateDTO
+	// Inherits all fields from SkuCreateDTO
 }
