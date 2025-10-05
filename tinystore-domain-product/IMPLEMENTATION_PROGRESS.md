@@ -71,17 +71,35 @@
 - ✅ SimpleRuleEnginePropertiesTest (jqwik property-based tests)
 - ✅ JpaRepositoryIntegrationTest (Testcontainers PostgreSQL)
 
-## Remaining Items (Phase 2 - Implementation)
+## Phase 2 Progress - Mappers & Adapters
+
+### Completed Items ✅
+1. **Value Objects Fixed**
+   - ✅ ProductCategory: Added @Data annotation for getters/setters
+   - ✅ SkuStatus: Converted from class to enum (AVAILABLE, DISABLED)
+
+2. **Mapper Implementations**
+   - ✅ ProductMapper: toEntity/toDomain/updateEntity with tenantId parameter
+   - ✅ SkuMapper: toEntity/toDomain with simplified spec handling
+   - ⚠️ PricingRuleMapper: Skeleton created, needs JSONB serialization
+
+3. **Repository Adapters**
+   - ✅ ProductRepositoryAdapter: Implements domain ProductRepository (save/findById/delete)
+   - ✅ SkuRepositoryAdapter: Implements domain SkuRepository (save/findById/findByProductId/delete)
+   - ⚠️ PricingRuleRepositoryAdapter: Skeleton created, needs tag filtering logic
+
+### Known TODOs in Code
+- ProductMapper.toDomain: Needs factory method for Product reconstruction
+- SkuMapper.toDomain: Spec parsing from spec_combination string
+- ProductRepositoryAdapter.findById: ProductId to Long conversion logic
+- SkuRepositoryAdapter.findById: SkuId to Long conversion logic
+- PricingRuleRepositoryAdapter.save: Rule to entity conversion
+- PricingRuleRepositoryAdapter.findByRuleCode: Implementation needed
+- PricingRuleRepositoryAdapter.findActiveRulesByTags: Tag-based filtering
+
+## Remaining Items (Phase 3 - Service Layer)
 
 ### Implementation TODOs
-1. **Mapper Implementations**
-   - Implement ProductMapper.toEntity/toDomain
-   - Implement SkuMapper.toEntity/toDomain with spec normalization
-   - Implement PricingRuleMapper with JSONB serialization
-
-2. **Repository Implementations**
-   - Create JPA repository adapter classes implementing domain interfaces
-   - Wire BaseRepository tenant filtering into all queries
 
 3. **Service Layer**
    - Implement ProductService business logic
