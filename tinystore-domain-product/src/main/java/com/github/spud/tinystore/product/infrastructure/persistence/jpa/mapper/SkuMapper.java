@@ -1,6 +1,8 @@
 package com.github.spud.tinystore.product.infrastructure.persistence.jpa.mapper;
 
 import com.github.spud.tinystore.product.domain.model.aggregate.Sku;
+import com.github.spud.tinystore.product.domain.model.valueobject.SkuStatus;
+import com.github.spud.tinystore.product.domain.model.valueobject.SpecificationCombination;
 import com.github.spud.tinystore.product.infrastructure.persistence.jpa.entity.SkuEntity;
 import org.springframework.stereotype.Component;
 
@@ -20,11 +22,26 @@ public class SkuMapper {
      * Convert domain Sku to SkuEntity
      * 
      * @param sku Domain sku aggregate
+     * @param tenantId Tenant identifier
      * @return SkuEntity for persistence
      */
-    public SkuEntity toEntity(Sku sku) {
-        // TODO: Implement mapping logic including spec combination normalization
-        throw new UnsupportedOperationException("SkuMapper.toEntity not yet implemented");
+    public SkuEntity toEntity(Sku sku, String tenantId) {
+        if (sku == null) {
+            return null;
+        }
+        
+        SkuEntity entity = new SkuEntity();
+        entity.setTenantId(tenantId);
+        entity.setProductId(sku.getProductId());
+        entity.setBarCode(sku.getBarCode());
+        entity.setStatus(sku.getStatus() != null ? sku.getStatus().name() : SkuStatus.AVAILABLE.name());
+        
+        // Normalize spec combination for uniqueness (simplified)
+        if (sku.getSpecs() != null) {
+            entity.setSpecCombination(sku.getSpecs().toString());
+        }
+        
+        return entity;
     }
     
     /**
@@ -34,7 +51,19 @@ public class SkuMapper {
      * @return Domain sku aggregate
      */
     public Sku toDomain(SkuEntity entity) {
-        // TODO: Implement mapping logic
-        throw new UnsupportedOperationException("SkuMapper.toDomain not yet implemented");
+        if (entity == null) {
+            return null;
+        }
+        
+        // Simplified: Use Sku factory method to create domain object
+        // TODO: Parse spec combination properly based on SpecificationCombination API
+        return Sku.create(
+            String.valueOf(entity.getId()),
+            entity.getProductId(),
+            null, // Placeholder for specs parsing
+            entity.getBarCode()
+        );
     }
 }
+
+
