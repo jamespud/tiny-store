@@ -1,10 +1,20 @@
 package com.github.spud.tinystore.product.interfaces.rest;
 
+import com.github.spud.tinystore.product.application.service.SkuService;
+import com.github.spud.tinystore.product.domain.model.aggregate.Sku;
+import com.github.spud.tinystore.product.domain.model.id.SkuId;
+import com.github.spud.tinystore.product.domain.model.valueobject.SkuAttributePack;
 import com.github.spud.tinystore.product.interfaces.dto.*;
+import com.github.spud.tinystore.product.interfaces.mapper.SkuDTOMapper;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.net.URI;
+import java.util.Optional;
 
 /**
  * SkuController - REST API for SKU management
@@ -23,9 +33,14 @@ import org.springframework.web.bind.annotation.*;
  * - All operations scoped to tenant
  * - Validates product ownership within tenant
  */
+@Slf4j
 @RestController
 @RequestMapping("/api")
+@RequiredArgsConstructor
 public class SkuController {
+    
+    private final SkuService skuService;
+    private final SkuDTOMapper skuDTOMapper;
     
     /**
      * Create a new SKU for a product
@@ -43,12 +58,23 @@ public class SkuController {
             @Valid @RequestBody SkuCreateDTO request,
             @RequestHeader("X-Tenant-Id") String tenantId,
             @RequestHeader("Idempotency-Key") String idempotencyKey) {
-        // TODO: Implement SKU creation
-        // 1. Validate product exists and belongs to tenant
-        // 2. Validate spec combination uniqueness
-        // 3. Call SkuService.createSku
-        // 4. Return created SKU
-        throw new UnsupportedOperationException("SkuController.createSku not yet implemented");
+        
+        log.info("Creating SKU for product: {} with spec: {} for tenant: {}", 
+                productId, request.getSpecCombination(), tenantId);
+        
+        // Convert DTO to domain object
+        Sku sku = skuDTOMapper.toDomain(request, productId);
+        
+        // Create SKU via service
+        Sku createdSku = skuService.createSku(sku);
+        
+        // Convert to response DTO
+        SkuResponseDTO response = skuDTOMapper.toResponseDTO(createdSku);
+        
+        // Return 201 Created with Location header
+        return ResponseEntity
+                .created(URI.create("/api/skus/" + createdSku.getSkuId()))
+                .body(response);
     }
     
     /**
@@ -67,8 +93,29 @@ public class SkuController {
             @Valid @RequestBody SkuUpdateDTO request,
             @RequestHeader("X-Tenant-Id") String tenantId,
             @RequestHeader("Idempotency-Key") String idempotencyKey) {
-        // TODO: Implement SKU update
-        throw new UnsupportedOperationException("SkuController.updateSku not yet implemented");
+        
+        log.info("Updating SKU: {} for tenant: {}", id, tenantId);
+        
+        SkuId skuId = new SkuId(id);
+        
+        // Get existing SKU
+        Optional<Sku> existingSkuOpt = skuService.getSku(skuId);
+        if (existingSkuOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        
+        Sku existingSku = existingSkuOpt.get();
+        
+        // Apply updates via mapper
+        skuDTOMapper.applyUpdate(existingSku, request);
+        
+        // Save via service
+        Sku updatedSku = skuService.updateSku(skuId, existingSku);
+        
+        // Convert to response DTO
+        SkuResponseDTO response = skuDTOMapper.toResponseDTO(updatedSku);
+        
+        return ResponseEntity.ok(response);
     }
     
     /**
@@ -82,8 +129,22 @@ public class SkuController {
     public ResponseEntity<SkuResponseDTO> getSku(
             @PathVariable String id,
             @RequestHeader("X-Tenant-Id") String tenantId) {
-        // TODO: Implement SKU retrieval with caching
-        throw new UnsupportedOperationException("SkuController.getSku not yet implemented");
+        
+        log.debug("Getting SKU: {} for tenant: {}", id, tenantId);
+        
+        SkuId skuId = new SkuId(id);
+        
+        // Get SKU via service (cached)
+        Optional<Sku> skuOpt = skuService.getSku(skuId);
+        
+        if (skuOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        
+        // Convert to response DTO
+        SkuResponseDTO response = skuDTOMapper.toResponseDTO(skuOpt.get());
+        
+        return ResponseEntity.ok(response);
     }
     
     /**
@@ -100,7 +161,29 @@ public class SkuController {
             @PathVariable String id,
             @Valid @RequestBody SkuAttributeUpdateDTO request,
             @RequestHeader("X-Tenant-Id") String tenantId) {
-        // TODO: Implement dynamic attribute update
-        throw new UnsupportedOperationException("SkuController.updateAttributes not yet implemented");
+        
+        log.info("Updating attributes for SKU: {} for tenant: {}", id, tenantId);
+        
+        SkuId skuId = new SkuId(id);
+        
+        // Get existing SKU
+        Optional<Sku> existingSkuOpt = skuService.getSku(skuId);
+        if (existingSkuOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        
+        Sku existingSku = existingSkuOpt.get();
+        
+        // Update attributes
+        SkuAttributePack attributePack = new SkuAttributePack(request.getAttributes());
+        existingSku.setAttributes(attributePack);
+        
+        // Save via service
+        Sku updatedSku = skuService.updateSku(skuId, existingSku);
+        
+        // Convert to response DTO
+        SkuResponseDTO response = skuDTOMapper.toResponseDTO(updatedSku);
+        
+        return ResponseEntity.ok(response);
     }
 }
