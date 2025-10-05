@@ -1,0 +1,45 @@
+spring:
+  # Local profile - use in-memory implementations for development
+  profiles:
+    active: local
+    
+  # H2 in-memory database for local development (optional)
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+    
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+      
+  # Embedded Redis (if using embedded-redis dependency)
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      
+  # Embedded Kafka (if using spring-kafka-test)
+  kafka:
+    bootstrap-servers: localhost:9092
+
+# Feature toggles for local development
+tinystore:
+  feature:
+    outbox:
+      enabled: false  # Use logging publisher for local dev
+    pricing-rule:
+      enabled: true
+      
+  product:
+    cache:
+      ttl:
+        product: 60    # Short TTL for testing
+        sku: 60
+        pricing: 30
+        channel: 10
+        
+logging:
+  level:
+    com.github.spud.tinystore: DEBUG
