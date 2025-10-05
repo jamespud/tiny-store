@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import com.github.spud.tinystore.product.domain.common.DomainEvent;
-import com.github.spud.tinystore.product.domain.model.id.ProductId;
+import com.github.spud.tinystore.product.domain.model.valueobject.ProductId;
 
 public record ProductCreatedEvent(String id,
                                   Instant occurredAt,

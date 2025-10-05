@@ -16,8 +16,8 @@
 		<module>tinystore-domain-payment</module>
 		<module>tinystore-domain-gateway</module>
 		<module>tinystore-domain-auth</module>
-        <module>tinystore-domain-recommendation</module>
-        <module>tinystore-domain-account</module>
+		<module>tinystore-domain-recommendation</module>
+		<module>tinystore-domain-account</module>
 		<module>tinystore-domain-promotion</module>
 	</modules>
 
@@ -49,16 +49,16 @@
 				<scope>import</scope>
 				<type>pom</type>
 			</dependency>
-				<dependency>
-					<groupId>org.springframework.statemachine</groupId>
-					<artifactId>spring-statemachine-bom</artifactId>
-					<version>${spring-statemachine.version}</version>
-					<type>pom</type>
-					<scope>import</scope>
-				</dependency>
+			<dependency>
+				<groupId>org.springframework.statemachine</groupId>
+				<artifactId>spring-statemachine-bom</artifactId>
+				<version>${spring-statemachine.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
-	
+
 	<profiles>
 		<profile>
 			<id>core-mainchain</id>

@@ -2,7 +2,7 @@ package com.github.spud.tinystore.product.interfaces.rest;
 
 import com.github.spud.tinystore.product.application.service.ProductService;
 import com.github.spud.tinystore.product.domain.model.aggregate.Product;
-import com.github.spud.tinystore.product.domain.model.id.ProductId;
+import com.github.spud.tinystore.product.domain.model.valueobject.ProductId;
 import com.github.spud.tinystore.product.interfaces.dto.*;
 import com.github.spud.tinystore.product.interfaces.mapper.ProductDTOMapper;
 import jakarta.validation.Valid;
@@ -98,7 +98,7 @@ public class ProductController {
         
         // Convert DTO to domain object
         Product updatedProduct = productDTOMapper.toDomain(request);
-        ProductId productId = new ProductId(id);
+        ProductId productId = ProductId.of(id);
         
         // Update via service
         Product product = productService.updateProduct(productId, updatedProduct);
@@ -124,7 +124,7 @@ public class ProductController {
         
         log.info("Publishing product: {} for tenant: {}", id, tenantId);
         
-        ProductId productId = new ProductId(id);
+        ProductId productId = ProductId.of(id);
         
         // Publish via service
         Product product = productService.publishProduct(productId);
@@ -150,7 +150,7 @@ public class ProductController {
         
         log.info("Archiving product: {} for tenant: {}", id, tenantId);
         
-        ProductId productId = new ProductId(id);
+        ProductId productId = ProductId.of(id);
         
         // Archive via service
         productService.archiveProduct(productId);
@@ -172,7 +172,7 @@ public class ProductController {
         
         log.debug("Getting product: {} for tenant: {}", id, tenantId);
         
-        ProductId productId = new ProductId(id);
+        ProductId productId = ProductId.of(id);
         
         // Get product via service (cached)
         Optional<Product> productOpt = productService.getProduct(productId);
@@ -204,7 +204,7 @@ public class ProductController {
         
         log.info("Updating tags for product: {} for tenant: {}", id, tenantId);
         
-        ProductId productId = new ProductId(id);
+        ProductId productId = ProductId.of(id);
         
         // Update tags via service
         Product product = productService.updateTags(productId, request.getTags());

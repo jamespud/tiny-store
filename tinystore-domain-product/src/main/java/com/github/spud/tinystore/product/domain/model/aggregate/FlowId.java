@@ -1,6 +1,6 @@
 package com.github.spud.tinystore.product.domain.model.aggregate;
 
-import com.github.spud.tinystore.product.domain.model.id.ProductId;
+import com.github.spud.tinystore.product.domain.model.valueobject.ProductId;
 
 import java.time.LocalDateTime;
 

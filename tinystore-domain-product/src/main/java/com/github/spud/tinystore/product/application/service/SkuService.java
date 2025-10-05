@@ -1,8 +1,8 @@
 package com.github.spud.tinystore.product.application.service;
 
 import com.github.spud.tinystore.product.domain.model.aggregate.Sku;
-import com.github.spud.tinystore.product.domain.model.id.ProductId;
-import com.github.spud.tinystore.product.domain.model.id.SkuId;
+import com.github.spud.tinystore.product.domain.model.valueobject.ProductId;
+import com.github.spud.tinystore.product.domain.model.valueobject.SkuId;
 import com.github.spud.tinystore.product.domain.repository.SkuRepository;
 import com.github.spud.tinystore.product.infrastructure.persistence.jpa.config.TenantRepositoryConfig;
 import lombok.RequiredArgsConstructor;
