@@ -1,19 +1,22 @@
 package com.github.spud.tinystore.product.domain.event;
 
-import com.github.spud.tinystore.product.domain.model.valueobject.ProductId;
-import lombok.Getter;
+import java.time.Instant;
+import java.util.UUID;
 
-import java.time.LocalDateTime;
+import com.github.spud.tinystore.product.domain.common.DomainEvent;
+import com.github.spud.tinystore.product.domain.model.id.ProductId;
 
-@Getter
-public class ProductCreatedEvent {
-    private final ProductId productId;
-    private final String productName;
-    private final LocalDateTime createTime;
+public record ProductCreatedEvent(String id,
+                                  Instant occurredAt,
+                                  ProductId productId,
+                                  String productName) implements DomainEvent {
 
     public ProductCreatedEvent(ProductId productId, String productName) {
-        this.productId = productId;
-        this.productName = productName;
-        this.createTime = LocalDateTime.now();
+        this(UUID.randomUUID().toString(), Instant.now(), productId, productName);
+    }
+
+    @Override
+    public String type() {
+        return "product.created";
     }
 }
