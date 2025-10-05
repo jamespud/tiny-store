@@ -1,7 +1,7 @@
 package com.github.spud.tinystore.product.infrastructure.persistence.jpa.adapter;
 
 import com.github.spud.tinystore.product.domain.model.aggregate.Product;
-import com.github.spud.tinystore.product.domain.model.id.ProductId;
+import com.github.spud.tinystore.product.domain.model.valueobject.ProductId;
 import com.github.spud.tinystore.product.domain.repository.ProductRepository;
 import com.github.spud.tinystore.product.infrastructure.persistence.jpa.config.TenantRepositoryConfig;
 import com.github.spud.tinystore.product.infrastructure.persistence.jpa.entity.ProductEntity;
@@ -47,17 +47,18 @@ public class ProductRepositoryAdapter implements ProductRepository {
     @Override
     public Optional<Product> findById(ProductId productId) {
         String tenantId = tenantContext.getTenantId();
-        // TODO: Convert ProductId to entity ID (Long) and implement lookup
-        // This requires understanding ProductId structure
-        return Optional.empty();
+        // Use productId.getId() to get the string ID
+        Optional<ProductEntity> entity = jpaRepository.findByProductIdAndTenantId(
+                productId.getId(), tenantId);
+        return entity.map(mapper::toDomain);
     }
     
     @Override
     public void delete(ProductId productId) {
         String tenantId = tenantContext.getTenantId();
-        // TODO: Implement soft delete or hard delete based on requirements
-        // Convert ProductId to entity ID first
-        throw new UnsupportedOperationException("Delete not yet implemented");
+        // Soft delete: find and mark as deleted
+        Optional<ProductEntity> entity = jpaRepository.findByProductIdAndTenantId(
+                productId.getId(), tenantId);
+        entity.ifPresent(jpaRepository::delete);
     }
 }
-

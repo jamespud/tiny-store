@@ -5,7 +5,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.github.spud.tinystore.product.domain.model.aggregate.Product;
-import com.github.spud.tinystore.product.domain.model.id.ProductId;
+import com.github.spud.tinystore.product.domain.model.valueobject.ProductId;
 import com.github.spud.tinystore.product.domain.repository.ProductRepository;
 
 public class InMemoryProductRepository implements ProductRepository {
@@ -19,11 +19,11 @@ public class InMemoryProductRepository implements ProductRepository {
 
     @Override
     public Optional<Product> findById(ProductId productId) {
-        return Optional.ofNullable(store.get(productId.value()));
+        return Optional.ofNullable(store.get(productId.getId()));
     }
 
     @Override
     public void delete(ProductId productId) {
-        store.remove(productId.value());
+        store.remove(productId.getId());
     }
 }

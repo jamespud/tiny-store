@@ -35,6 +35,15 @@ public interface JpaProductRepository extends JpaRepository<ProductEntity, Long>
     Optional<ProductEntity> findByTenantIdAndId(String tenantId, Long id);
     
     /**
+     * Find product by tenant ID and product ID (domain ID string)
+     * 
+     * @param productId Product domain identifier (string)
+     * @param tenantId Tenant identifier
+     * @return Optional product entity
+     */
+    Optional<ProductEntity> findByProductIdAndTenantId(String productId, String tenantId);
+    
+    /**
      * Find all products by tenant and category
      * 
      * @param tenantId Tenant identifier

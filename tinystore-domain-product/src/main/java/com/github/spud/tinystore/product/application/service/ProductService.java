@@ -1,7 +1,7 @@
 package com.github.spud.tinystore.product.application.service;
 
 import com.github.spud.tinystore.product.domain.model.aggregate.Product;
-import com.github.spud.tinystore.product.domain.model.id.ProductId;
+import com.github.spud.tinystore.product.domain.model.valueobject.ProductId;
 import com.github.spud.tinystore.product.domain.model.valueobject.ProductStatus;
 import com.github.spud.tinystore.product.domain.repository.ProductRepository;
 import com.github.spud.tinystore.product.infrastructure.persistence.jpa.config.TenantRepositoryConfig;
@@ -43,7 +43,7 @@ public class ProductService {
      * Update product attributes (only in DRAFT or OFFLINE status)
      */
     @Transactional
-    @CacheEvict(value = "products", key = "#productId.value")
+    @CacheEvict(value = "products", key = "#productId.id")
     public Product updateProduct(ProductId productId, Product updatedProduct) {
         String tenantId = tenantContext.getTenantId();
         log.info("Updating product: {} for tenant: {}", productId, tenantId);
@@ -70,7 +70,7 @@ public class ProductService {
      * Publish product (transition to PUBLISHED status)
      */
     @Transactional
-    @CacheEvict(value = "products", key = "#productId.value")
+    @CacheEvict(value = "products", key = "#productId.id")
     public Product publishProduct(ProductId productId) {
         String tenantId = tenantContext.getTenantId();
         log.info("Publishing product: {} for tenant: {}", productId, tenantId);
@@ -97,7 +97,7 @@ public class ProductService {
      * Archive product (soft delete)
      */
     @Transactional
-    @CacheEvict(value = "products", key = "#productId.value")
+    @CacheEvict(value = "products", key = "#productId.id")
     public void archiveProduct(ProductId productId) {
         String tenantId = tenantContext.getTenantId();
         log.info("Archiving product: {} for tenant: {}", productId, tenantId);
@@ -113,7 +113,7 @@ public class ProductService {
     /**
      * Get product by ID (with caching)
      */
-    @Cacheable(value = "products", key = "#productId.value")
+    @Cacheable(value = "products", key = "#productId.id")
     public Optional<Product> getProduct(ProductId productId) {
         String tenantId = tenantContext.getTenantId();
         log.debug("Getting product: {} for tenant: {}", productId, tenantId);
@@ -125,7 +125,7 @@ public class ProductService {
      * Update product tags
      */
     @Transactional
-    @CacheEvict(value = "products", key = "#productId.value")
+    @CacheEvict(value = "products", key = "#productId.id")
     public Product updateTags(ProductId productId, List<String> tags) {
         String tenantId = tenantContext.getTenantId();
         log.info("Updating tags for product: {} for tenant: {}", productId, tenantId);

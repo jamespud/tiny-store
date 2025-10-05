@@ -1,5 +1,6 @@
 package com.github.spud.tinystore.product.domain.model.aggregate;
 
+import com.github.spud.tinystore.product.domain.event.ContentApprovedEvent;
 import com.github.spud.tinystore.product.domain.model.valueobject.AfterSalePolicy;
 import com.github.spud.tinystore.product.domain.model.valueobject.ContentStatus;
 import com.github.spud.tinystore.product.domain.model.valueobject.RichText;
@@ -18,7 +19,7 @@ public class ProductContent {
     // 领域行为：更新详情页（自动升级版本）
     public void updateDetail(RichText newDetail) {
         this.detail = newDetail;
-        this.version = this.version.next(); // 版本自增（如V1→V2）
+        this.version = this.version + 1; // 版本自增（如V1→V2）
         this.status = ContentStatus.PENDING_REVIEW; // 需重新审核
     }
 
