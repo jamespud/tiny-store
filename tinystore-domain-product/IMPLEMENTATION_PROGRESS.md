@@ -142,9 +142,51 @@
 - SkuService.createSku: TODO for product existence validation
 - PricingService: Category-based rule loading commented out (needs Product category access)
 
-## Remaining Items (Phase 4 - Controller Wiring)
+## Phase 4 Progress - Controller Wiring & DTO Mappers
+
+### Completed Items ✅
+1. **DTO Mapper Layer**
+   - ✅ ProductDTOMapper: Skeleton with toResponseDTO() implemented
+     - Converts Product aggregate to ProductResponseDTO
+     - toDomain() placeholder (needs domain factory method)
+   
+   - ✅ SkuDTOMapper: Skeleton with toResponseDTO() implemented
+     - Converts Sku aggregate to SkuResponseDTO
+     - toDomain() placeholder (needs Sku factory with proper types)
+     - applyUpdate() method for SKU updates
+   
+   - ✅ PricingDTOMapper: Skeleton with basic conversion
+     - toDomain() converts PricingContextDTO to PricingContext
+     - toResponseDTO() converts PricingResult to DTO
+     - TODO: Fix Money type conversions (getAmount/getCurrency)
+
+2. **Mapper Features**
+   - ✅ @Component annotations for Spring DI
+   - ✅ Null safety checks
+   - ✅ Optional support for nullable fields
+   - ✅ Comprehensive TODOs for incomplete mappings
+
+### Known Issues & TODOs
+- ProductDTOMapper.toDomain(): Needs Product.create() factory method implementation
+  - ProductId generation strategy
+  - ProductCategory constructor mismatch
+  - Brand constructor missing
+  - ProductAttribute creation from DTO
+- SkuDTOMapper.toDomain(): Needs proper SpecificationCombination and SkuAttributePack constructors
+- PricingDTOMapper: Money type methods (getAmount(), getCurrency()) not available
+- Controllers not yet wired to services (ProductController, SkuController, PricingController remain with placeholders)
+
+## Remaining Items (Phase 5 - Complete Controller Wiring)
 
 ### Implementation TODOs
+
+1. **Fix Domain Factory Methods**
+   - Resolve ProductId type inconsistency (id vs valueobject packages)
+   - Implement or fix Product.create() factory method
+   - Implement or fix Sku.create() factory method
+   - Add proper value object constructors
+
+2. **Complete Controller Wiring**
 
 3. **Service Layer**
    - Implement ProductService business logic
