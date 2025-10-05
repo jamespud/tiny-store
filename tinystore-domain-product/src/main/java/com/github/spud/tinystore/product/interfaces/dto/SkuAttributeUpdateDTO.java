@@ -1,11 +1,12 @@
 package com.github.spud.tinystore.product.interfaces.dto;
 
 import jakarta.validation.constraints.NotNull;
-import lombok.Data;
 import java.util.Map;
+import lombok.Data;
 
 @Data
 public class SkuAttributeUpdateDTO {
-    @NotNull
-    private Map<String, Object> attributes;
+
+	@NotNull
+	private Map<String, Object> attributes;
 }

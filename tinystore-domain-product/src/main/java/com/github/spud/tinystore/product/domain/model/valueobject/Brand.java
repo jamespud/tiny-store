@@ -9,12 +9,12 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class Brand {
 
-    private String brandId;
+	private String brandId;
 
-    private String brandName;
-    
-    // Convenience constructor for name only
-    public Brand(String brandName) {
-        this.brandName = brandName;
-    }
+	private String brandName;
+
+	// Convenience constructor for name only
+	public Brand(String brandName) {
+		this.brandName = brandName;
+	}
 }
