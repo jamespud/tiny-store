@@ -1,0 +1,56 @@
+package com.github.spud.tinystore.product.infrastructure.persistence.jpa.repository;
+
+import com.github.spud.tinystore.product.infrastructure.persistence.jpa.entity.SkuEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * JpaSkuRepository - Spring Data JPA repository for SkuEntity
+ * 
+ * Query methods must always include tenant_id condition for multi-tenancy isolation
+ * 
+ * Derived query methods:
+ * - findByTenantIdAndId: Find SKU by tenant and ID
+ * - findByTenantIdAndProductId: Find all SKUs for a product
+ * - findByTenantIdAndProductIdAndSpecCombination: Find SKU by unique spec combination
+ * 
+ * Note: spec_combination must be normalized before query to ensure uniqueness
+ */
+@Repository
+public interface JpaSkuRepository extends JpaRepository<SkuEntity, Long>, 
+                                           JpaSpecificationExecutor<SkuEntity> {
+    
+    /**
+     * Find SKU by tenant ID and entity ID
+     * 
+     * @param tenantId Tenant identifier
+     * @param id Entity primary key
+     * @return Optional SKU entity
+     */
+    Optional<SkuEntity> findByTenantIdAndId(String tenantId, Long id);
+    
+    /**
+     * Find all SKUs for a product within tenant
+     * 
+     * @param tenantId Tenant identifier
+     * @param productId Product identifier
+     * @return List of SKU entities
+     */
+    List<SkuEntity> findByTenantIdAndProductId(String tenantId, String productId);
+    
+    /**
+     * Find SKU by unique product and spec combination
+     * Enforces uniqueness constraint uk_product_spec
+     * 
+     * @param tenantId Tenant identifier
+     * @param productId Product identifier
+     * @param specCombination Normalized specification combination string
+     * @return Optional SKU entity
+     */
+    Optional<SkuEntity> findByTenantIdAndProductIdAndSpecCombination(
+        String tenantId, String productId, String specCombination);
+}

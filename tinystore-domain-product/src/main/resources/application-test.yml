@@ -1,0 +1,32 @@
+spring:
+  # Test profile - use Testcontainers
+  profiles:
+    active: test
+    
+  # Testcontainers will provide actual PostgreSQL
+  datasource:
+    url: jdbc:tc:postgresql:15:///testdb
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+    
+  jpa:
+    hibernate:
+      ddl-auto: validate  # Flyway migrations in tests
+      
+  # Testcontainers Redis
+  data:
+    redis:
+      host: ${REDIS_TEST_HOST:localhost}
+      port: ${REDIS_TEST_PORT:6379}
+
+# Feature toggles for testing
+tinystore:
+  feature:
+    outbox:
+      enabled: true  # Test outbox functionality
+    pricing-rule:
+      enabled: true
+      
+logging:
+  level:
+    com.github.spud.tinystore: DEBUG
+    org.testcontainers: INFO

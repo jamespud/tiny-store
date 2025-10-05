@@ -1,11 +1,103 @@
 spring:
+  application:
+    name: tinystore-product-service
+    
+  # Database configuration (PostgreSQL)
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/tinystore_product}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    
+  # JPA configuration
+  jpa:
+    hibernate:
+      ddl-auto: validate  # Flyway handles schema, not Hibernate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        
+  # Flyway configuration
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    
+  # Kafka configuration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      
+  # Redis configuration (for caching)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      
+  # Security configuration
   security:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:9000
+          issuer-uri: ${JWT_ISSUER:http://localhost:9000}
 
+# Product service configuration
 tinystore:
+  # Security
   security:
     resource-server:
       enabled: true
+      
+  # Feature toggles
+  feature:
+    outbox:
+      enabled: ${FEATURE_OUTBOX_ENABLED:false}
+    pricing-rule:
+      enabled: ${FEATURE_PRICING_RULE_ENABLED:true}
+      
+  # Cache TTL configuration (in seconds)
+  product:
+    cache:
+      ttl:
+        product: ${CACHE_TTL_PRODUCT:3600}      # 1 hour
+        sku: ${CACHE_TTL_SKU:3600}              # 1 hour
+        pricing: ${CACHE_TTL_PRICING:1800}      # 30 minutes
+        channel: ${CACHE_TTL_CHANNEL:600}       # 10 minutes
+        
+  # Kafka topics
+  kafka:
+    topics:
+      product-events: ${KAFKA_TOPIC_PRODUCT:tinystore.product.events}
+      sku-events: ${KAFKA_TOPIC_SKU:tinystore.sku.events}
+      pricing-events: ${KAFKA_TOPIC_PRICING:tinystore.pricing.events}
+      category-events: ${KAFKA_TOPIC_CATEGORY:tinystore.category.events}
+      
+# OpenTelemetry configuration
+management:
+  tracing:
+    enabled: ${OTEL_ENABLED:true}
+    sampling:
+      probability: ${OTEL_SAMPLING_RATE:1.0}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+        
+# Logging configuration
+logging:
+  level:
+    root: INFO
+    com.github.spud.tinystore: DEBUG
+    org.springframework.data.jpa: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
