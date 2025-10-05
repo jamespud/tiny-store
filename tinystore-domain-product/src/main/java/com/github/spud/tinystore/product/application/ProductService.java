@@ -1,14 +1,16 @@
 package com.github.spud.tinystore.product.application;
 
+import com.github.spud.tinystore.product.application.factory.ProductAggregateFactory;
+import com.github.spud.tinystore.product.application.factory.SkuAggregateFactory;
 import com.github.spud.tinystore.product.domain.common.DomainEventPublisher;
-import com.github.spud.tinystore.product.domain.event.ProductCreated;
+import com.github.spud.tinystore.product.domain.event.ProductCreatedEvent;
 import com.github.spud.tinystore.product.domain.model.aggregate.Product;
 import com.github.spud.tinystore.product.domain.model.aggregate.Sku;
 import com.github.spud.tinystore.product.domain.model.id.ProductId;
 import com.github.spud.tinystore.product.domain.model.id.SkuId;
 import com.github.spud.tinystore.product.domain.model.value.Money;
-import com.github.spud.tinystore.product.domain.repo.ProductRepository;
-import com.github.spud.tinystore.product.domain.repo.SkuRepository;
+import com.github.spud.tinystore.product.domain.repository.ProductRepository;
+import com.github.spud.tinystore.product.domain.repository.SkuRepository;
 
 public class ProductService {
     private final ProductRepository productRepo;
@@ -20,14 +22,14 @@ public class ProductService {
     }
 
     public Product createProduct(ProductId id, String name) {
-        var p = Product.create(id, name);
+        var p = ProductAggregateFactory.createMinimal(id, name);
         productRepo.save(p);
-        publisher.publish(new ProductCreated(id, name));
+        publisher.publish(new ProductCreatedEvent(id, name));
         return p;
     }
 
     public Sku createSku(SkuId id, ProductId productId, Money basePrice) {
-        var s = Sku.create(id, productId, basePrice);
-        return skuRepo.save(s);
+        var sku = SkuAggregateFactory.createWithBasePrice(id, productId, basePrice);
+        return skuRepo.save(sku);
     }
 }
