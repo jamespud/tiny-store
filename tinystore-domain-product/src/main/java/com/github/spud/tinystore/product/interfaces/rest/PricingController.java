@@ -3,7 +3,7 @@ package com.github.spud.tinystore.product.interfaces.rest;
 import com.github.spud.tinystore.product.application.service.PricingService;
 import com.github.spud.tinystore.product.application.service.SkuService;
 import com.github.spud.tinystore.product.domain.model.aggregate.Sku;
-import com.github.spud.tinystore.product.domain.model.id.SkuId;
+import com.github.spud.tinystore.product.domain.model.valueobject.SkuId;
 import com.github.spud.tinystore.product.domain.pricing.PricingContext;
 import com.github.spud.tinystore.product.domain.pricing.PricingResult;
 import com.github.spud.tinystore.product.interfaces.dto.*;
@@ -57,7 +57,8 @@ public class PricingController {
         
         log.info("Calculating price for SKU: {} for tenant: {}", request.getSkuId(), tenantId);
         
-        SkuId skuId = new SkuId(request.getSkuId());
+        // Calculate price
+        SkuId skuId = SkuId.of(request.getSkuId());
         
         // Load SKU
         Optional<Sku> skuOpt = skuService.getSku(skuId);

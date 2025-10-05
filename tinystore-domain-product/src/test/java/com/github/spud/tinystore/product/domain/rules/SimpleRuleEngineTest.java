@@ -1,8 +1,8 @@
 package com.github.spud.tinystore.product.domain.rules;
 
 import com.github.spud.tinystore.product.domain.model.aggregate.Sku;
-import com.github.spud.tinystore.product.domain.model.id.ProductId;
-import com.github.spud.tinystore.product.domain.model.id.SkuId;
+import com.github.spud.tinystore.product.domain.model.valueobject.ProductId;
+import com.github.spud.tinystore.product.domain.model.valueobject.SkuId;
 import com.github.spud.tinystore.product.domain.model.value.Money;
 import com.github.spud.tinystore.product.domain.pricing.PricingContext;
 import com.github.spud.tinystore.product.domain.pricing.PricingResult;
@@ -16,7 +16,7 @@ import java.util.Map;
 public class SimpleRuleEngineTest {
     @Test
     void percent_and_flat_rules_apply_with_priority_and_group() {
-        var sku = Sku.create(new SkuId("sku-1"), new ProductId("p-1"), Money.of(new BigDecimal("100.00")));
+        var sku = Sku.create(SkuId.of("sku-1"), ProductId.of("p-1"), Money.of(new BigDecimal("100.00")));
         var ctx = new PricingContext(sku, Map.of("brand", "nike"), Instant.now());
 
         var percent10 = new TimeWindowPercentOffRule("TW10", 100, "promo", Instant.now().minusSeconds(60), Instant.now().plusSeconds(60), new BigDecimal("0.10"));

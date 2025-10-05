@@ -2,7 +2,7 @@ package com.github.spud.tinystore.product.interfaces.rest;
 
 import com.github.spud.tinystore.product.application.service.SkuService;
 import com.github.spud.tinystore.product.domain.model.aggregate.Sku;
-import com.github.spud.tinystore.product.domain.model.id.SkuId;
+import com.github.spud.tinystore.product.domain.model.valueobject.SkuId;
 import com.github.spud.tinystore.product.domain.model.valueobject.SkuAttributePack;
 import com.github.spud.tinystore.product.interfaces.dto.*;
 import com.github.spud.tinystore.product.interfaces.mapper.SkuDTOMapper;
@@ -96,7 +96,7 @@ public class SkuController {
         
         log.info("Updating SKU: {} for tenant: {}", id, tenantId);
         
-        SkuId skuId = new SkuId(id);
+        SkuId skuId = SkuId.of(id);
         
         // Get existing SKU
         Optional<Sku> existingSkuOpt = skuService.getSku(skuId);
@@ -132,7 +132,7 @@ public class SkuController {
         
         log.debug("Getting SKU: {} for tenant: {}", id, tenantId);
         
-        SkuId skuId = new SkuId(id);
+        SkuId skuId = SkuId.of(id);
         
         // Get SKU via service (cached)
         Optional<Sku> skuOpt = skuService.getSku(skuId);
@@ -164,7 +164,7 @@ public class SkuController {
         
         log.info("Updating attributes for SKU: {} for tenant: {}", id, tenantId);
         
-        SkuId skuId = new SkuId(id);
+        SkuId skuId = SkuId.of(id);
         
         // Get existing SKU
         Optional<Sku> existingSkuOpt = skuService.getSku(skuId);

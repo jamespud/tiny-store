@@ -4,8 +4,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 import com.github.spud.tinystore.product.domain.common.DomainEvent;
-import com.github.spud.tinystore.product.domain.model.id.ProductId;
-import com.github.spud.tinystore.product.domain.model.id.SkuId;
+import com.github.spud.tinystore.product.domain.model.valueobject.ProductId;
+import com.github.spud.tinystore.product.domain.model.valueobject.SkuId;
 import com.github.spud.tinystore.product.domain.model.value.Money;
 
 public record PriceChangedEvent(String id,
