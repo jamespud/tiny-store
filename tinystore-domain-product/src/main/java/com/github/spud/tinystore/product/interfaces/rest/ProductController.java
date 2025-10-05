@@ -1,10 +1,19 @@
 package com.github.spud.tinystore.product.interfaces.rest;
 
+import com.github.spud.tinystore.product.application.service.ProductService;
+import com.github.spud.tinystore.product.domain.model.aggregate.Product;
+import com.github.spud.tinystore.product.domain.model.id.ProductId;
 import com.github.spud.tinystore.product.interfaces.dto.*;
+import com.github.spud.tinystore.product.interfaces.mapper.ProductDTOMapper;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.net.URI;
+import java.util.Optional;
 
 /**
  * ProductController - REST API for product management
@@ -26,9 +35,14 @@ import org.springframework.web.bind.annotation.*;
  * - TenantId extracted from header and validated
  * - All operations scoped to tenant
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/products")
+@RequiredArgsConstructor
 public class ProductController {
+    
+    private final ProductService productService;
+    private final ProductDTOMapper productDTOMapper;
     
     /**
      * Create a new product
@@ -44,11 +58,23 @@ public class ProductController {
             @Valid @RequestBody ProductCreateDTO request,
             @RequestHeader("X-Tenant-Id") String tenantId,
             @RequestHeader("Idempotency-Key") String idempotencyKey) {
-        // TODO: Implement product creation
-        // 1. Validate tenant access
-        // 2. Call ProductService.createProduct
-        // 3. Return created product
-        throw new UnsupportedOperationException("ProductController.createProduct not yet implemented");
+        
+        log.info("Creating product: {} for tenant: {} with idempotency key: {}", 
+                request.getName(), tenantId, idempotencyKey);
+        
+        // Convert DTO to domain object
+        Product product = productDTOMapper.toDomain(request);
+        
+        // Create product via service
+        Product createdProduct = productService.createProduct(product);
+        
+        // Convert back to response DTO
+        ProductResponseDTO response = productDTOMapper.toResponseDTO(createdProduct);
+        
+        // Return 201 Created with Location header
+        return ResponseEntity
+                .created(URI.create("/api/products/" + createdProduct.getProductId().getId()))
+                .body(response);
     }
     
     /**
@@ -67,8 +93,20 @@ public class ProductController {
             @Valid @RequestBody ProductUpdateDTO request,
             @RequestHeader("X-Tenant-Id") String tenantId,
             @RequestHeader("Idempotency-Key") String idempotencyKey) {
-        // TODO: Implement product update
-        throw new UnsupportedOperationException("ProductController.updateProduct not yet implemented");
+        
+        log.info("Updating product: {} for tenant: {}", id, tenantId);
+        
+        // Convert DTO to domain object
+        Product updatedProduct = productDTOMapper.toDomain(request);
+        ProductId productId = new ProductId(id);
+        
+        // Update via service
+        Product product = productService.updateProduct(productId, updatedProduct);
+        
+        // Convert to response DTO
+        ProductResponseDTO response = productDTOMapper.toResponseDTO(product);
+        
+        return ResponseEntity.ok(response);
     }
     
     /**
@@ -83,8 +121,18 @@ public class ProductController {
     public ResponseEntity<ProductResponseDTO> publishProduct(
             @PathVariable String id,
             @RequestHeader("X-Tenant-Id") String tenantId) {
-        // TODO: Implement product publishing
-        throw new UnsupportedOperationException("ProductController.publishProduct not yet implemented");
+        
+        log.info("Publishing product: {} for tenant: {}", id, tenantId);
+        
+        ProductId productId = new ProductId(id);
+        
+        // Publish via service
+        Product product = productService.publishProduct(productId);
+        
+        // Convert to response DTO
+        ProductResponseDTO response = productDTOMapper.toResponseDTO(product);
+        
+        return ResponseEntity.ok(response);
     }
     
     /**
@@ -99,8 +147,15 @@ public class ProductController {
     public ResponseEntity<Void> archiveProduct(
             @PathVariable String id,
             @RequestHeader("X-Tenant-Id") String tenantId) {
-        // TODO: Implement product archiving
-        throw new UnsupportedOperationException("ProductController.archiveProduct not yet implemented");
+        
+        log.info("Archiving product: {} for tenant: {}", id, tenantId);
+        
+        ProductId productId = new ProductId(id);
+        
+        // Archive via service
+        productService.archiveProduct(productId);
+        
+        return ResponseEntity.noContent().build();
     }
     
     /**
@@ -114,8 +169,22 @@ public class ProductController {
     public ResponseEntity<ProductResponseDTO> getProduct(
             @PathVariable String id,
             @RequestHeader("X-Tenant-Id") String tenantId) {
-        // TODO: Implement product retrieval with caching
-        throw new UnsupportedOperationException("ProductController.getProduct not yet implemented");
+        
+        log.debug("Getting product: {} for tenant: {}", id, tenantId);
+        
+        ProductId productId = new ProductId(id);
+        
+        // Get product via service (cached)
+        Optional<Product> productOpt = productService.getProduct(productId);
+        
+        if (productOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        
+        // Convert to response DTO
+        ProductResponseDTO response = productDTOMapper.toResponseDTO(productOpt.get());
+        
+        return ResponseEntity.ok(response);
     }
     
     /**
@@ -132,7 +201,17 @@ public class ProductController {
             @PathVariable String id,
             @Valid @RequestBody ProductTagUpdateDTO request,
             @RequestHeader("X-Tenant-Id") String tenantId) {
-        // TODO: Implement tag update
-        throw new UnsupportedOperationException("ProductController.updateTags not yet implemented");
+        
+        log.info("Updating tags for product: {} for tenant: {}", id, tenantId);
+        
+        ProductId productId = new ProductId(id);
+        
+        // Update tags via service
+        Product product = productService.updateTags(productId, request.getTags());
+        
+        // Convert to response DTO
+        ProductResponseDTO response = productDTOMapper.toResponseDTO(product);
+        
+        return ResponseEntity.ok(response);
     }
 }
