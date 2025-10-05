@@ -97,7 +97,52 @@
 - PricingRuleRepositoryAdapter.findByRuleCode: Implementation needed
 - PricingRuleRepositoryAdapter.findActiveRulesByTags: Tag-based filtering
 
-## Remaining Items (Phase 3 - Service Layer)
+## Phase 3 Progress - Service Layer
+
+### Completed Items ✅
+1. **ID Conversion Utilities**
+   - ✅ IdConverter: Utility for ProductId/SkuId to Long conversion for JPA queries
+   - Uses hashCode for stable mapping between domain IDs and database Long IDs
+
+2. **Application Services**
+   - ✅ ProductService: Full CRUD operations with caching
+     - createProduct(): Creates new product in DRAFT status
+     - updateProduct(): Updates product attributes (DRAFT/OFFLINE only)
+     - publishProduct(): Transitions product to PUBLISHED status
+     - archiveProduct(): Soft delete functionality
+     - getProduct(): Cached retrieval by ProductId
+     - updateTags(): Tag management (TODO: add domain method)
+   
+   - ✅ SkuService: SKU management with tenant isolation
+     - createSku(): Creates new SKU with validation
+     - updateSku(): Updates SKU attributes
+     - getSku(): Cached retrieval by SkuId
+     - getSkusByProduct(): Batch retrieval for a product
+     - disableSku(): Calls domain disable() behavior
+     - deleteSku(): Hard delete functionality
+   
+   - ✅ PricingService: Dynamic pricing with rule engine
+     - calculatePrice(): Evaluates rules and returns PricingResult
+     - Supports product/category/tag/global rule loading
+     - calculatePrices(): Batch pricing calculation
+     - previewPrice(): Non-cached pricing for testing
+
+3. **Service Layer Features**
+   - ✅ Spring @Transactional support for consistency
+   - ✅ Spring Cache annotations (@Cacheable, @CacheEvict)
+   - ✅ TenantContext injection for multi-tenant isolation
+   - ✅ Comprehensive logging with tenant/ID context
+
+### Known Issues & TODOs
+- ProductService/SkuService: ID type inconsistency between `domain.model.id` and `domain.model.valueobject` packages
+  - ProductRepository uses `valueobject.ProductId`
+  - SkuRepository uses `id.SkuId`
+  - Need to standardize on one approach
+- ProductService.updateTags: Needs corresponding domain method in Product aggregate
+- SkuService.createSku: TODO for product existence validation
+- PricingService: Category-based rule loading commented out (needs Product category access)
+
+## Remaining Items (Phase 4 - Controller Wiring)
 
 ### Implementation TODOs
 
