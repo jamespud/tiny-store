@@ -1,8 +1,11 @@
 package com.github.spud.tinystore.product.domain.model.aggregate;
 
+import com.github.spud.tinystore.product.domain.event.SkuDisabledEvent;
+import com.github.spud.tinystore.product.domain.model.value.Money;
 import com.github.spud.tinystore.product.domain.model.valueobject.*;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -13,6 +16,7 @@ public class Sku {
     private String barCode;                // 条形码
     private SkuAttributePack attributes;   // SKU专属属性（如重量、体积）
     private SkuStatus status;              // 状态（在售/下架）
+    private Money basePrice;               // 基础价格
     private LocalDateTime createTime;
 
     // 领域行为：创建SKU（依赖商品存在且规格组合唯一）
@@ -27,8 +31,16 @@ public class Sku {
         sku.specs = specs;
         sku.barCode = barCode;
         sku.status = SkuStatus.AVAILABLE; // 初始状态为可用
+        sku.basePrice = Money.of(BigDecimal.ZERO); // 默认价格
         sku.createTime = LocalDateTime.now();
         return sku;
+    }
+    
+    /**
+     * 获取基础价格（用于定价引擎）
+     */
+    public Money getBasePrice() {
+        return basePrice != null ? basePrice : Money.of(BigDecimal.ZERO);
     }
 
     // 领域行为：禁用SKU（触发事件，通知库存/搜索服务）
