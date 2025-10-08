@@ -17,7 +17,7 @@ public class DeliveredCommand {
 	/**
 	 * 订单ID
 	 */
-	private UUID orderId;
+	private String orderId;
 
 	/**
 	 * 运单号
@@ -38,4 +38,9 @@ public class DeliveredCommand {
 	 * 事件ID（幂等键）
 	 */
 	private String eventId;
+
+	/**
+	 * 幂等键
+	 */
+	public String idempotencyKey;
 }

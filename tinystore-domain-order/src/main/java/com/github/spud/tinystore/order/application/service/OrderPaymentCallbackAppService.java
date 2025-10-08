@@ -1,23 +1,20 @@
 package com.github.spud.tinystore.order.application.service;
 
-import java.math.BigDecimal;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
-import org.slf4j.MDC;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import com.github.spud.tinystore.order.domain.event.DomainEvent;
-import com.github.spud.tinystore.order.domain.model.OrderAggregateEnhanced;
+import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
+import com.github.spud.tinystore.order.domain.model.OrderAggregate;
 import com.github.spud.tinystore.order.domain.statemachine.OrderStateMachineService;
 import com.github.spud.tinystore.order.infrastructure.audit.OrderStatusAuditService;
 import com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService;
 import com.github.spud.tinystore.order.infrastructure.idempotency.OrderIdempotencyService;
-
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 订单支付回调应用服务
@@ -73,7 +70,7 @@ public class OrderPaymentCallbackAppService {
 			}
 
 			// Step 2: 加载订单聚合
-			OrderAggregateEnhanced orderAggregate = loadOrderAggregate(request.getOrderNo());
+			OrderAggregate orderAggregate = loadOrderAggregate(request.getOrderNo());
 			if (orderAggregate == null) {
 				String errorMsg = "订单不存在: " + request.getOrderNo();
 				idempotencyService.failIdempotency(request.getRequestId());
@@ -91,7 +88,7 @@ public class OrderPaymentCallbackAppService {
 			saveOrderAggregate(orderAggregate);
 
 			// Step 5: 处理领域事件 - 保存到 Outbox
-			List<DomainEvent> domainEvents = orderAggregate.pullDomainEvents();
+			List<OrderDomainEvent> domainEvents = orderAggregate.pullDomainEvents();
 			if (!domainEvents.isEmpty()) {
 				outboxEventService.saveEvents(domainEvents);
 				log.info("保存领域事件到 Outbox: orderNo={}, eventCount={}",
@@ -147,12 +144,12 @@ public class OrderPaymentCallbackAppService {
 	/**
 	 * 加载订单聚合 (需要从仓储层加载)
 	 */
-	private OrderAggregateEnhanced loadOrderAggregate(String orderNo) {
+	private OrderAggregate loadOrderAggregate(String orderNo) {
 		// 这里需要注入 OrderRepository 来加载聚合
 		// 暂时返回一个模拟对象用于演示
 		log.warn("模拟加载订单聚合: orderNo={}", orderNo);
 
-		return new OrderAggregateEnhanced(
+		return new OrderAggregate(
 			orderNo,
 			"user123",
 			"merchant456",
@@ -163,7 +160,7 @@ public class OrderPaymentCallbackAppService {
 	/**
 	 * 保存订单聚合 (需要持久化到数据库)
 	 */
-	private void saveOrderAggregate(OrderAggregateEnhanced orderAggregate) {
+	private void saveOrderAggregate(OrderAggregate orderAggregate) {
 		// 这里需要注入 OrderRepository 来保存聚合
 		log.info("保存订单聚合: {}", orderAggregate.getOrderSummary());
 	}

@@ -1,8 +1,7 @@
-package com.github.spud.tinystore.order.domain.event;
+package com.github.spud.tinystore.domain.event;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * 领域事件基础接口
@@ -18,28 +17,21 @@ public interface DomainEvent {
 	 *
 	 * @return 事件ID
 	 */
-	UUID getEventId();
-
+	String getEventId();
+	
 	/**
-	 * 订单号
+	 * 事件类型
 	 *
-	 * @return 订单号
+	 * @return 事件类型标识
 	 */
-	String getOrderNo();
-
+	Object getType();
+	
 	/**
 	 * 事件发生时间
 	 *
 	 * @return 发生时间
 	 */
 	OffsetDateTime getOccurredAt();
-
-	/**
-	 * 事件类型
-	 *
-	 * @return 事件类型标识
-	 */
-	String getType();
 
 	/**
 	 * 事件载荷数据
@@ -54,4 +46,10 @@ public interface DomainEvent {
 	 * @return traceId
 	 */
 	String getTraceId();
+
+	/**
+	 * 事件版本
+	 * @return 版本号
+	 */
+	Integer getVersion();;
 }

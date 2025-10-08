@@ -32,7 +32,7 @@ public class PriceLoadingStep implements PricingStep {
 			long unit = p.getUnitPrice();
 			long raw = Math.multiplyExact(unit, item.getAmount());
 			lines.add(PricingLine.builder()
-				.shopId(String.valueOf(p.getSpuId()))
+				.tenantId(String.valueOf(p.getSpuId()))
 				.skuId(String.valueOf(p.getSkuId()))
 				.quantity(item.getAmount())
 				.unitPriceCents(unit)

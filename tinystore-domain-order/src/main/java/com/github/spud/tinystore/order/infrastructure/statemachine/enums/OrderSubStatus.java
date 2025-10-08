@@ -101,6 +101,6 @@ public enum OrderSubStatus {
 				return status;
 			}
 		}
-		throw new IllegalArgumentException("Unknown OrderSubStatus code: " + code);
+		throw new IllegalArgumentException("Unknown SubOrderStatus code: " + code);
 	}
 }

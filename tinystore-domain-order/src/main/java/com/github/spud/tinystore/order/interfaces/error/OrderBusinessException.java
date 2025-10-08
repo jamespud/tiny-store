@@ -1,7 +1,9 @@
 package com.github.spud.tinystore.order.interfaces.error;
 
+import jakarta.validation.constraints.NotNull;
 import java.util.HashMap;
 import java.util.Map;
+import org.springframework.http.HttpStatus;
 
 /**
  * 订单业务异常
@@ -37,6 +39,22 @@ public class OrderBusinessException extends RuntimeException {
 		super(message);
 		this.errorCode = errorCode;
 		this.contextMap = contextMap;
+	}
+
+	public OrderBusinessException(String s, String message, HttpStatus httpStatus) {
+		
+	}
+
+	public static Exception riskBlocked(Object reason) {
+		return null;
+	}
+
+	public static Exception skuUnavailable(@NotNull(message = "SKU ID不能为空") String skuId) {
+		return null;
+	}
+
+	public static Exception stockInsufficient(Object lackSkuId) {
+		return null;
 	}
 
 

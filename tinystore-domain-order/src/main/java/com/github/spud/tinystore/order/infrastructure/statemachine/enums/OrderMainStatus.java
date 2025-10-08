@@ -61,6 +61,6 @@ public enum OrderMainStatus {
 				return status;
 			}
 		}
-		throw new IllegalArgumentException("Unknown OrderMainStatus code: " + code);
+		throw new IllegalArgumentException("Unknown MainOrderStatus code: " + code);
 	}
 }

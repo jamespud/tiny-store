@@ -10,6 +10,6 @@ import com.github.spud.tinystore.order.domain.enums.CouponType;
  * @param amount      优惠金额
  */
 public record Coupon(String couponId, CouponType type, String description, Money threshold, Money amount,
-                     String startTime, String endTime) {
+                     String startTime, String endTime, Boolean available) {
 
 }

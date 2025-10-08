@@ -2,7 +2,8 @@ package com.github.spud.tinystore.order.infrastructure.event.outbox;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.spud.tinystore.order.domain.event.DomainEvent;
+import com.github.spud.tinystore.domain.event.DomainEvent;
+import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
 import com.github.spud.tinystore.order.infrastructure.persistence.po.OrderOutboxEventPO;
 import com.github.spud.tinystore.order.infrastructure.persistence.repository.OrderOutboxEventRepository;
 import lombok.RequiredArgsConstructor;
@@ -32,14 +33,14 @@ public class OutboxEventService {
 	 * @param event 领域事件
 	 */
 	@Transactional
-	public void saveEvent(DomainEvent event) {
+	public void saveEvent(OrderDomainEvent event) {
 		try {
 			String eventPayload = objectMapper.writeValueAsString(event.getPayload());
 
 			OrderOutboxEventPO outboxEvent = new OrderOutboxEventPO()
 				.setId(event.getEventId())
-				.setOrderNo(event.getOrderNo())
-				.setEventType(event.getType())
+				.setOrderId(event.getOrderId())
+				.setEventType(event.getType().toString())
 				.setEventPayload(eventPayload)
 				.setTraceId(event.getTraceId())
 				.setStatus(OrderOutboxEventPO.OutboxEventStatus.PENDING)
@@ -47,12 +48,12 @@ public class OutboxEventService {
 
 			outboxEventRepository.save(outboxEvent);
 
-			log.info("Saved domain event to outbox: eventId={}, orderNo={}, type={}",
-				event.getEventId(), event.getOrderNo(), event.getType());
+			log.info("Saved domain event to outbox: eventId={}, orderId={}, type={}",
+				event.getEventId(), event.getEventId(), event.getType());
 
 		} catch (JsonProcessingException e) {
-			log.error("Failed to serialize event payload: eventId={}, orderNo={}",
-				event.getEventId(), event.getOrderNo(), e);
+			log.error("Failed to serialize event payload: eventId={}, orderId={}",
+				event.getEventId(), event.getOrderId(), e);
 			throw new RuntimeException("Failed to save domain event", e);
 		}
 	}
@@ -63,7 +64,7 @@ public class OutboxEventService {
 	 * @param events 领域事件列表
 	 */
 	@Transactional
-	public void saveEvents(List<DomainEvent> events) {
+	public void saveEvents(List<OrderDomainEvent> events) {
 		if (events == null || events.isEmpty()) {
 			return;
 		}
@@ -157,22 +158,22 @@ public class OutboxEventService {
 	/**
 	 * 将领域事件转换为 Outbox 事件
 	 */
-	private OrderOutboxEventPO convertToOutboxEvent(DomainEvent event) {
+	private OrderOutboxEventPO convertToOutboxEvent(OrderDomainEvent event) {
 		try {
 			String eventPayload = objectMapper.writeValueAsString(event.getPayload());
 
 			return new OrderOutboxEventPO()
 				.setId(event.getEventId())
-				.setOrderNo(event.getOrderNo())
-				.setEventType(event.getType())
+				.setOrderId(event.getOrderId())
+				.setEventType(event.getType().toString())
 				.setEventPayload(eventPayload)
 				.setTraceId(event.getTraceId())
 				.setStatus(OrderOutboxEventPO.OutboxEventStatus.PENDING)
 				.setRetryCount(0);
 
 		} catch (JsonProcessingException e) {
-			log.error("Failed to serialize event payload: eventId={}, orderNo={}",
-				event.getEventId(), event.getOrderNo(), e);
+			log.error("Failed to serialize event payload: eventId={}, orderId={}",
+				event.getEventId(), event.getEventId(), e);
 			throw new RuntimeException("Failed to convert domain event", e);
 		}
 	}

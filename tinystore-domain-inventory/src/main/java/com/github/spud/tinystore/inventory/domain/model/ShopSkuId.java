@@ -12,10 +12,10 @@ public final class ShopSkuId {
 
 	public ShopSkuId(String shopId, String skuId) {
 		if (shopId == null || skuId == null || shopId.isBlank() || skuId.isBlank()) {
-			throw new IllegalArgumentException("shopId/skuId 不能为空");
+			throw new IllegalArgumentException("tenantId/skuId 不能为空");
 		}
 		if (shopId.length() > 64 || skuId.length() > 64) {
-			throw new IllegalArgumentException("shopId/skuId 长度超限");
+			throw new IllegalArgumentException("tenantId/skuId 长度超限");
 		}
 		this.shopId = shopId;
 		this.skuId = skuId;

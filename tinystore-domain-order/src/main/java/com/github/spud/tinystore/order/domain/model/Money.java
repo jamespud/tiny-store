@@ -43,6 +43,10 @@ public record Money(long amount, String currency) {
 		return new Money(0, m.currency);
 	}
 
+	public static Money of(long i) {
+		return zero().add(new Money(i, "CNY"));
+	}
+
 	/**
 	 * 金额相加
 	 *
@@ -119,6 +123,10 @@ public record Money(long amount, String currency) {
 	 */
 	public Money subtract(Money money) {
 		return this.minus(money);
+	}
+	
+	public String currency() {
+		return currency;
 	}
 }
 

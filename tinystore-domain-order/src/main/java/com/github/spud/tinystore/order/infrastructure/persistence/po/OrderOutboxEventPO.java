@@ -26,13 +26,13 @@ public class OrderOutboxEventPO {
 	@Id
 	@UuidGenerator
 	@Column(name = "id")
-	private UUID id;
+	private String id;
 
 	/**
 	 * 订单号
 	 */
 	@Column(name = "order_no", nullable = false, length = 64)
-	private String orderNo;
+	private String orderId;
 
 	/**
 	 * 事件类型

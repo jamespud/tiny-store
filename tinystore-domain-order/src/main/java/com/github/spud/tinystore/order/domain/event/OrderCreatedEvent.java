@@ -1,11 +1,10 @@
 package com.github.spud.tinystore.order.domain.event;
 
 import com.github.spud.tinystore.order.domain.model.Money;
+import java.time.OffsetDateTime;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-
-import java.time.LocalDateTime;
 
 /**
  * Order Created Domain Event
@@ -15,23 +14,23 @@ import java.time.LocalDateTime;
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class OrderCreatedEvent extends OrderDomainEvent {
+public class OrderCreatedEvent extends OrderDomainBaseEvent {
 
 	private String orderId;
 	private String buyerId;
 	private Money totalAmount;
-	private LocalDateTime createdAt;
+	private OffsetDateTime createdAt;
 
 	@Builder
-	public OrderCreatedEvent(String orderId, String buyerId, Money totalAmount, LocalDateTime createdAt) {
+	public OrderCreatedEvent(String orderId, String buyerId, Money totalAmount, OffsetDateTime createdAt) {
 		this.orderId = orderId;
 		this.buyerId = buyerId;
 		this.totalAmount = totalAmount;
 		this.createdAt = createdAt;
 
 		// Set base event properties
-		setEventType(EventType.ORDER_CREATED);
+		setType(OrderEventType.ORDER_CREATED);
 		setAggregateId(orderId);
-		setOccurredAt(createdAt != null ? createdAt : LocalDateTime.now());
+		setOccurredAt(createdAt != null ? createdAt : OffsetDateTime.now());
 	}
 }

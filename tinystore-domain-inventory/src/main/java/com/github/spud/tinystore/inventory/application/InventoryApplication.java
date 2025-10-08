@@ -92,7 +92,7 @@ public class InventoryApplication {
 	}
 
 //	/**
-//	 * 旧批量查询接口：List<String> 形式 shopId:skuId
+//	 * 旧批量查询接口：List<String> 形式 tenantId:skuId
 //	 *
 //	 * @deprecated 使用 {@link #batchQueryAvailable(List)} with AvailableQuery
 //	 */
@@ -105,13 +105,13 @@ public class InventoryApplication {
 //		for (String pair : shopSkuPairs) {
 //			if (pair == null || !pair.contains(":")) {
 //				throw new BusinessException(InventoryErrorCode.INVALID_PARAM,
-//					"format shopId:skuId required");
+//					"format tenantId:skuId required");
 //			}
 //			int idx = pair.indexOf(':');
-//			String shopId = pair.substring(0, idx);
+//			String tenantId = pair.substring(0, idx);
 //			String skuId = pair.substring(idx + 1);
 //			AvailableQuery q = new AvailableQuery();
-//			q.setShopId(shopId);
+//			q.setShopId(tenantId);
 //			q.setSkuId(skuId);
 //			parsed.add(q);
 //		}
