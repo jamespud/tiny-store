@@ -1,12 +1,12 @@
 package com.github.spud.tinystore.order.domain.event;
 
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
-import java.util.Map;
 
 /**
  * Outbox Event Envelope for transactional event publishing
@@ -28,7 +28,7 @@ public class OutboxEventEnvelope {
 
 	// Event metadata
 	private String eventType;
-	private LocalDateTime occurredAt;
+	private OffsetDateTime occurredAt;
 	private String idempotencyKey;
 	private String topic;
 
@@ -54,13 +54,14 @@ public class OutboxEventEnvelope {
 	/**
 	 * Create envelope from domain event
 	 */
-	public static OutboxEventEnvelope fromDomainEvent(OrderDomainEvent domainEvent, String topic, String payload) {
+	public static OutboxEventEnvelope fromDomainEvent(OrderDomainEvent domainEvent, String topic,
+		String payload) {
 		return OutboxEventEnvelope.builder()
 			.eventId(domainEvent.getEventId())
 			.aggregateType("Order")
-			.aggregateId(domainEvent.getAggregateId())
+			.aggregateId(domainEvent.getOrderId())
 			.version(domainEvent.getVersion())
-			.eventType(domainEvent.getEventType().name())
+			.eventType(domainEvent.getType().toString())
 			.occurredAt(domainEvent.getOccurredAt())
 			.idempotencyKey(generateIdempotencyKey(domainEvent))
 			.topic(topic)
@@ -73,9 +74,10 @@ public class OutboxEventEnvelope {
 
 	private static String generateIdempotencyKey(OrderDomainEvent domainEvent) {
 		return String.format("%s#%s#%s",
-			domainEvent.getAggregateId(),
+			domainEvent.getEventId(),
 			domainEvent.getVersion(),
-			domainEvent.getEventType().name());
+			domainEvent.getType().toString()
+		);
 	}
 
 	public void markPublished() {

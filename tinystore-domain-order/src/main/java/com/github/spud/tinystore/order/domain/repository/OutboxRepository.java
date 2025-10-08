@@ -85,7 +85,7 @@ public interface OutboxRepository {
 
 	int deletePublishedEventsBefore(Instant sevenDaysAgo);
 
-	void markAsPublished(UUID eventId);
+	void markAsPublished(String eventId);
 
-	void updateStatus(UUID eventId, Outbox.PublishStatus publishStatus, int newRetryCount, Instant nextRetryAt, String errorMessage);
+	void updateStatus(String eventId, Outbox.PublishStatus publishStatus, int newRetryCount, Instant nextRetryAt, String errorMessage);
 }

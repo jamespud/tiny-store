@@ -5,7 +5,7 @@ package com.github.spud.tinystore.order.domain.enums;
  * @date 2025/9/6
  */
 public enum ChargeType {
-	SHIPPING,
+	FREIGHT,
 	TAX,
 	SERVICE,
 	PACKAGING

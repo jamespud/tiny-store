@@ -40,7 +40,7 @@ public class PreviewOrderResult {
 	public record ShopProductSnapshot(String shopId, List<ProductSnapshot> products,
 	                                  Money total) {
 
-		public static ShopProductSnapshot fromSuborder(SubOrder subOrder) {
+		public static ShopProductSnapshot fromSuborder(OrderItem orderItem) {
 			return null;
 		}
 

@@ -4,6 +4,7 @@ import com.github.spud.tinystore.order.domain.model.OrderAggregate;
 import com.github.spud.tinystore.order.infrastructure.statemachine.enums.OrderEvent;
 
 import java.util.Map;
+import lombok.Getter;
 
 /**
  * 订单状态机服务接口
@@ -37,6 +38,7 @@ public interface OrderStateMachineService {
 	/**
 	 * 非法状态转换异常
 	 */
+	@Getter
 	class IllegalStateTransitionException extends RuntimeException {
 		private final String currentMainStatus;
 		private final String currentSubStatus;
@@ -48,18 +50,6 @@ public interface OrderStateMachineService {
 			this.currentMainStatus = currentMainStatus;
 			this.currentSubStatus = currentSubStatus;
 			this.event = event;
-		}
-
-		public String getCurrentMainStatus() {
-			return currentMainStatus;
-		}
-
-		public String getCurrentSubStatus() {
-			return currentSubStatus;
-		}
-
-		public String getEvent() {
-			return event;
 		}
 	}
 }

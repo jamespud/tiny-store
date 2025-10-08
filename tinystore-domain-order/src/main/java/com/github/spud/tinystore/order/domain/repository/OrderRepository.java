@@ -1,7 +1,9 @@
 package com.github.spud.tinystore.order.domain.repository;
 
 import com.github.spud.tinystore.order.domain.event.OutboxEventEnvelope;
-import com.github.spud.tinystore.order.domain.model.Order;
+import com.github.spud.tinystore.order.domain.model.OrderAggregate;
+import com.github.spud.tinystore.order.domain.model.OrderItem;
+import com.github.spud.tinystore.order.domain.model.MainOrder;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -22,7 +24,7 @@ public interface OrderRepository {
 	 * @param orderId Order ID
 	 * @return Optional order, empty if not found
 	 */
-	Optional<Order> findById(String orderId);
+	Optional<OrderItem> findById(String orderId);
 
 	/**
 	 * Save order (create or update)
@@ -32,7 +34,7 @@ public interface OrderRepository {
 	 * @return Saved order with updated version
 	 * @throws OptimisticLockException if version conflict occurs
 	 */
-	Order save(Order order);
+	OrderItem save(OrderItem order);
 
 	/**
 	 * Save order with outbox events in single transaction
@@ -43,7 +45,7 @@ public interface OrderRepository {
 	 * @return Saved order with updated version
 	 * @throws OptimisticLockException if version conflict occurs
 	 */
-	Order saveWithOutbox(Order order, List<OutboxEventEnvelope> envelopes);
+	OrderAggregate saveWithOutbox(OrderAggregate order, List<OutboxEventEnvelope> envelopes);
 
 	/**
 	 * Check if order exists
@@ -60,7 +62,7 @@ public interface OrderRepository {
 	 * @param limit   Maximum number of orders to return
 	 * @return List of orders
 	 */
-	List<Order> findByBuyerId(String buyerId, int limit);
+	List<OrderItem> findByBuyerId(String buyerId, int limit);
 
 	/**
 	 * Find orders by status (for operational queries)
@@ -69,7 +71,9 @@ public interface OrderRepository {
 	 * @param limit  Maximum number of orders to return
 	 * @return List of orders
 	 */
-	List<Order> findByStatus(String status, int limit);
+	List<OrderItem> findByStatus(String status, int limit);
+
+	void save(MainOrder mainOrder);
 
 	/**
 	 * Exception thrown when optimistic locking fails

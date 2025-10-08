@@ -4,7 +4,7 @@ package com.github.spud.tinystore.order.domain.event;
  * @author Spud
  * @date 2025/9/3
  */
-public enum EventType {
+public enum OrderEventType {
 
 	ORDER_CREATED,
 

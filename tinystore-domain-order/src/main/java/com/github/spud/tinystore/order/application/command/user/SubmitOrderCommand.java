@@ -1,10 +1,10 @@
 package com.github.spud.tinystore.order.application.command.user;
 
+import com.github.spud.tinystore.order.application.command.user.PreviewOrderCommand.MerchantSkuDTO.SkuItemDTO;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.Builder;
 import lombok.Getter;
-
-import java.util.List;
-import java.util.Set;
 
 /**
  * @author Spud
@@ -12,25 +12,7 @@ import java.util.Set;
  */
 @Getter
 @Builder
-public class SubmitOrderCommand {
-
-	private final String userId;
-
-	private List<PreviewOrderCommand.ProductItem> productItems;
-
-	private Set<String> couponsIds;
-
-	private final String addressId;
-
-	private final String deviceId;
+public class SubmitOrderCommand extends PreviewOrderCommand {
 
 	private final String idempotentKey;
-
-	public List<String> getSkuIds() {
-		return productItems.stream()
-			.map(PreviewOrderCommand.ProductItem::skuId)
-			.toList();
-	}
-
-
 }

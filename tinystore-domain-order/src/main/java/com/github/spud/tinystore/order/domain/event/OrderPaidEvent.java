@@ -19,33 +19,23 @@ import java.util.UUID;
  */
 @Data
 @AllArgsConstructor
-public class OrderPaidEvent implements DomainEvent {
-
-	private final UUID eventId;
-	private final String orderNo;
-	private final OffsetDateTime occurredAt;
+public class OrderPaidEvent extends OrderDomainBaseEvent {
 	private final String paymentId;
 	private final BigDecimal amount;
 	private final boolean isDeposit;
 	private final boolean isFinalPayment;
-	private final String traceId;
-
+	
 	public OrderPaidEvent(String orderNo, String paymentId, BigDecimal amount, boolean isDeposit, boolean isFinalPayment) {
-		this.eventId = UUID.randomUUID();
-		this.orderNo = orderNo;
-		this.occurredAt = OffsetDateTime.now();
+		this.setEventId(UUID.randomUUID().toString().replace("-", ""));
+		this.setOrderId(orderNo);
+		this.setOccurredAt(OffsetDateTime.now());
 		this.paymentId = paymentId;
 		this.amount = amount;
 		this.isDeposit = isDeposit;
 		this.isFinalPayment = isFinalPayment;
-		this.traceId = MDC.get("traceId");
+		this.setTraceId(MDC.get("traceId"));
 	}
-
-	@Override
-	public String getType() {
-		return "ORDER_PAID";
-	}
-
+	
 	@Override
 	public Map<String, Object> getPayload() {
 		Map<String, Object> payload = new HashMap<>();

@@ -97,7 +97,7 @@ public class OutboxEventPublisher {
 	private CompletableFuture<Void> publishEventAsync(OrderOutboxEventPO event) {
 		try {
 			String topic = getTopicName(event.getEventType());
-			String key = event.getOrderNo(); // 使用订单号作为分区键
+			String key = event.getOrderId(); // 使用订单号作为分区键
 
 			// 构造 Kafka 消息
 			KafkaEventMessage kafkaMessage = new KafkaEventMessage(
