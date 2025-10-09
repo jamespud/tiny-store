@@ -1,8 +1,7 @@
 package com.github.spud.tinystore.auth.config;
 
-import java.util.Arrays;
-import java.util.List;
-
+import com.github.spud.tinystore.auth.interfaces.security.otp.OtpAuthenticationFilter;
+import com.github.spud.tinystore.auth.interfaces.security.otp.OtpAuthenticationProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,8 +21,8 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import com.tinystore.auth.interfaces.security.otp.OtpAuthenticationFilter;
-import com.tinystore.auth.interfaces.security.otp.OtpAuthenticationProvider;
+import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 @EnableMethodSecurity

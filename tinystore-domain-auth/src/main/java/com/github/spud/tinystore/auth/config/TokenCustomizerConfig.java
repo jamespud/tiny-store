@@ -1,12 +1,7 @@
 package com.github.spud.tinystore.auth.config;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Collection;
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
-
+import com.github.spud.tinystore.auth.application.dto.MallUserView;
+import com.github.spud.tinystore.auth.interfaces.security.MallUserPrincipal;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,8 +12,12 @@ import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 
-import com.tinystore.auth.application.dto.MallUserView;
-import com.tinystore.auth.interfaces.security.MallUserPrincipal;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Configuration
 public class TokenCustomizerConfig {
