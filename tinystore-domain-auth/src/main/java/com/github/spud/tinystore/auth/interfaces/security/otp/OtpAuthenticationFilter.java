@@ -9,7 +9,11 @@ import org.springframework.security.web.authentication.AbstractAuthenticationPro
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.util.matcher.RequestMatcher;
+import org.springframework.util.StringUtils;
 
+/**
+ * 手机验证码登录过滤器
+ */
 public class OtpAuthenticationFilter extends AbstractAuthenticationProcessingFilter {
 
 	private static final RequestMatcher OTP_MATCHER = request ->
@@ -27,7 +31,7 @@ public class OtpAuthenticationFilter extends AbstractAuthenticationProcessingFil
 		throws AuthenticationException {
 		String phone = request.getParameter("phone");
 		String code = request.getParameter("code");
-		if (phone == null || code == null) {
+		if (!StringUtils.hasText(phone) || !StringUtils.hasText(code)) {
 			throw new IllegalArgumentException("phone and code must be provided");
 		}
 		phone = phone.trim();

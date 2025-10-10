@@ -1,7 +1,10 @@
 package com.github.spud.tinystore.auth.application.service;
 
 import com.github.spud.tinystore.auth.application.config.OtpProperties;
-import com.github.spud.tinystore.auth.application.dto.*;
+import com.github.spud.tinystore.auth.application.dto.AuthResult;
+import com.github.spud.tinystore.auth.application.dto.SendOtpCommand;
+import com.github.spud.tinystore.auth.application.dto.SendOtpResult;
+import com.github.spud.tinystore.auth.application.dto.VerifyOtpCommand;
 import com.github.spud.tinystore.auth.application.port.in.OtpUseCase;
 import com.github.spud.tinystore.auth.application.port.out.*;
 import com.github.spud.tinystore.auth.domain.audit.AuditEvent;
@@ -64,7 +67,7 @@ public class OtpApplicationService implements OtpUseCase {
 			return lockAndRateLimitPort.withLock(lockKey(phone), otpProperties.getRequestLockTtl(),
 				() -> sendOtpWithThrottle(command, phone));
 		} catch (OtpRateLimitExceededException ex) {
-			auditLogPort.append(AuditEvent.failure(null, phone.getValue(), null, ACTION_OTP_SEND, Set.of(), command.ip(), command.userAgent(), ex.getMessage()));
+			auditLogPort.append(AuditEvent.failure(null, phone.value(), null, ACTION_OTP_SEND, Set.of(), command.ip(), command.userAgent(), ex.getMessage()));
 			throw ex;
 		}
 	}
@@ -76,7 +79,7 @@ public class OtpApplicationService implements OtpUseCase {
 		OtpCode code = OtpCode.of(command.code());
 		Otp otp = otpRepository.findLatest(phone)
 			.orElseThrow(() -> {
-				auditLogPort.append(AuditEvent.failure(null, phone.getValue(), null, ACTION_OTP_VERIFY, Set.of(), null, null, "otp_not_found"));
+				auditLogPort.append(AuditEvent.failure(null, phone.value(), null, ACTION_OTP_VERIFY, Set.of(), null, null, "otp_not_found"));
 				return new OtpInvalidException("验证码不存在或已失效");
 			});
 		otpGenerationService.verify(otp, code);
@@ -84,35 +87,35 @@ public class OtpApplicationService implements OtpUseCase {
 		Optional<MallUser> existing = userRepository.findByPhone(phone);
 		MallUser user = existing.orElseGet(() -> {
 			MallUser created = userRepository.save(createUser(phone));
-			auditLogPort.append(AuditEvent.success(created.getId().getValue(), created.getPhone().getValue(), null, ACTION_USER_REGISTER, Set.of(), null, null, "auto_register"));
+			auditLogPort.append(AuditEvent.success(created.getId().value(), created.getPhone().value(), null, ACTION_USER_REGISTER, Set.of(), null, null, "auto_register"));
 			return created;
 		});
 		try {
 			user.ensureActive();
 		} catch (RuntimeException ex) {
-			auditLogPort.append(AuditEvent.failure(user.getId().getValue(), user.getPhone().getValue(), null, ACTION_OTP_VERIFY, Set.of(), null, null, ex.getMessage()));
+			auditLogPort.append(AuditEvent.failure(user.getId().value(), user.getPhone().value(), null, ACTION_OTP_VERIFY, Set.of(), null, null, ex.getMessage()));
 			throw ex;
 		}
 
-		auditLogPort.append(AuditEvent.success(user.getId().getValue(), user.getPhone().getValue(), null, ACTION_OTP_VERIFY, Set.of(), null, null, existing.isPresent() ? "existing_user" : "new_user"));
-		return new AuthResult(mapToView(user));
+		auditLogPort.append(AuditEvent.success(user.getId().value(), user.getPhone().value(), null, ACTION_OTP_VERIFY, Set.of(), null, null, existing.isPresent() ? "existing_user" : "new_user"));
+		return new AuthResult(user);
 	}
 
 	private MallUser createUser(PhoneNumber phone) {
-		String phoneValue = phone.getValue();
+		String phoneValue = phone.value();
 		String nickname = "用户" + phoneValue.substring(Math.max(phoneValue.length() - 4, 0));
-		return MallUser.register(UserId.random(), phone, nickname, null, OffsetDateTime.now());
+		return MallUser.register(UserId.random(), phone, nickname, null);
 	}
 
 	private SendOtpResult sendOtpWithThrottle(SendOtpCommand command, PhoneNumber phone) {
-		String phoneValue = phone.getValue();
+		String phoneValue = phone.value();
 		if (isBlocked(phoneValue)) {
 			throw new OtpRateLimitExceededException("otp_blocked");
 		}
 		if (command.requestId() != null) {
 			String requestKey = requestKey(command.requestId());
 			if (lockAndRateLimitPort.get(requestKey) != null) {
-				auditLogPort.append(AuditEvent.success(null, phone.getValue(), null, ACTION_OTP_SEND, Set.of(), command.ip(), command.userAgent(),
+				auditLogPort.append(AuditEvent.success(null, phone.value(), null, ACTION_OTP_SEND, Set.of(), command.ip(), command.userAgent(),
 					"idempotent_hit"));
 				return new SendOtpResult(phone.masked());
 			}
@@ -131,7 +134,7 @@ public class OtpApplicationService implements OtpUseCase {
 		if (command.requestId() != null) {
 			lockAndRateLimitPort.setIfAbsent(requestKey(command.requestId()), phone.masked(), otpProperties.getRequestCacheTtl());
 		}
-		auditLogPort.append(AuditEvent.success(null, phone.getValue(), null, ACTION_OTP_SEND, Set.of(), command.ip(), command.userAgent(),
+		auditLogPort.append(AuditEvent.success(null, phone.value(), null, ACTION_OTP_SEND, Set.of(), command.ip(), command.userAgent(),
 			command.requestId() != null ? "requestId=" + command.requestId() : null));
 		return new SendOtpResult(phone.masked());
 	}
@@ -141,7 +144,7 @@ public class OtpApplicationService implements OtpUseCase {
 	}
 
 	private String lockKey(PhoneNumber phone) {
-		return OTP_LOCK_KEY_PREFIX + phone.getValue();
+		return OTP_LOCK_KEY_PREFIX + phone.value();
 	}
 
 	private String requestKey(String requestId) {
@@ -158,15 +161,4 @@ public class OtpApplicationService implements OtpUseCase {
 		return OTP_COUNTER_KEY_PREFIX + phoneValue + ":" + bucket;
 	}
 
-	private MallUserView mapToView(MallUser user) {
-		return new MallUserView(
-			user.getId().getValue(),
-			user.getPhone().getValue(),
-			user.getNickname(),
-			user.getAvatar(),
-			user.getStatus(),
-			user.getRtVersion().getValue(),
-			user.getCreatedAt(),
-			user.getUpdatedAt());
-	}
 }

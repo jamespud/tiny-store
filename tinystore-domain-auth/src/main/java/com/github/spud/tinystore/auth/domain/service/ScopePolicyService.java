@@ -11,14 +11,14 @@ public class ScopePolicyService {
 	private static final Set<String> DEFAULT_GRANTED = Set.of("user.profile");
 
 	public boolean isUserVisible(ScopeName scope) {
-		return scope.getValue().startsWith(USER_PREFIX);
+		return scope.value().startsWith(USER_PREFIX);
 	}
 
 	public boolean requiresConsent(ScopeName scope) {
-		return isUserVisible(scope) && !DEFAULT_GRANTED.contains(scope.getValue());
+		return isUserVisible(scope) && !DEFAULT_GRANTED.contains(scope.value());
 	}
 
 	public boolean isDefaultGranted(ScopeName scope) {
-		return DEFAULT_GRANTED.contains(scope.getValue());
+		return DEFAULT_GRANTED.contains(scope.value());
 	}
 }

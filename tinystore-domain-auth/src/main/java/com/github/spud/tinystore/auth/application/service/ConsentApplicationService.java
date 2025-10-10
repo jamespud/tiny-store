@@ -50,7 +50,7 @@ public class ConsentApplicationService implements ConsentUseCase {
 			? authorizationStorePort.loadConsent(userId, ClientId.of(command.clientId()))
 			: Set.of();
 		Set<String> approvedUserScopes = consentedScopes.stream()
-			.map(ScopeName::getValue)
+			.map(ScopeName::value)
 			.filter(scope -> scopePolicyService.isUserVisible(ScopeName.of(scope)))
 			.collect(Collectors.toCollection(LinkedHashSet::new));
 

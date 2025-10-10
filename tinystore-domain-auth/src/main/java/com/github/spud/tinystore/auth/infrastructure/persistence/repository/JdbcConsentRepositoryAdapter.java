@@ -1,4 +1,4 @@
-package com.github.spud.tinystore.auth.infrastructure.persistence.jdbc;
+package com.github.spud.tinystore.auth.infrastructure.persistence.repository;
 
 import com.github.spud.tinystore.auth.application.port.out.AuthorizationStorePort;
 import com.github.spud.tinystore.auth.application.port.out.ConsentRepositoryPort;

@@ -21,6 +21,6 @@ public class LoggingEventPublisherAdapter implements EventPublisherPort {
 			return;
 		}
 		events.forEach(event -> log.info("RefreshTokenRevokedEvent published userId={} rtVersion={} reason={}",
-			event.userId().getValue(), event.rtVersion().getValue(), event.reason()));
+			event.userId().value(), event.rtVersion().value(), event.reason()));
 	}
 }

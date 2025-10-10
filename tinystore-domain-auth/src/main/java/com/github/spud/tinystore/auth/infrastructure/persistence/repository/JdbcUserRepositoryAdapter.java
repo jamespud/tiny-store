@@ -1,4 +1,4 @@
-package com.github.spud.tinystore.auth.infrastructure.persistence.jdbc;
+package com.github.spud.tinystore.auth.infrastructure.persistence.repository;
 
 import com.github.spud.tinystore.auth.application.port.out.UserRepository;
 import com.github.spud.tinystore.auth.domain.model.user.MallUser;
@@ -22,10 +22,9 @@ public class JdbcUserRepositoryAdapter implements UserRepository {
 		PhoneNumber.of(rs.getString("phone")),
 		rs.getString("nickname"),
 		rs.getString("avatar"),
+		rs.getString("password"),
 		mapStatus(rs.getString("status")),
-		RtVersion.of(rs.getInt("rt_version")),
-		rs.getObject("created_at", OffsetDateTime.class),
-		rs.getObject("updated_at", OffsetDateTime.class)
+		RtVersion.of(rs.getInt("rt_version"))
 	);
 
 	private final JdbcTemplate jdbcTemplate;
@@ -36,14 +35,14 @@ public class JdbcUserRepositoryAdapter implements UserRepository {
 
 	@Override
 	public Optional<MallUser> findByPhone(PhoneNumber phone) {
-		return jdbcTemplate.query("select * from mall_user where phone = ?", ROW_MAPPER, phone.getValue())
+		return jdbcTemplate.query("select * from mall_user where phone = ?", ROW_MAPPER, phone.value())
 			.stream()
 			.findFirst();
 	}
 
 	@Override
 	public Optional<MallUser> findById(UserId id) {
-		return jdbcTemplate.query("select * from mall_user where id = ?", ROW_MAPPER, id.getValue())
+		return jdbcTemplate.query("select * from mall_user where id = ?", ROW_MAPPER, id.value())
 			.stream()
 			.findFirst();
 	}
@@ -55,12 +54,12 @@ public class JdbcUserRepositoryAdapter implements UserRepository {
 			PreparedStatement ps = con.prepareStatement(
 				"insert into mall_user (id, phone, nickname, avatar, status, rt_version, created_at, updated_at) " +
 					"values (?, ?, ?, ?, ?, ?, ?, ?)");
-			ps.setObject(1, user.getId().getValue());
-			ps.setString(2, user.getPhone().getValue());
-			ps.setString(3, user.getNickname());
+			ps.setObject(1, user.getId().value());
+			ps.setString(2, user.getPhone().value());
+			ps.setString(3, user.getUsername());
 			ps.setString(4, user.getAvatar());
 			ps.setString(5, toColumnStatus(user.getStatus()));
-			ps.setInt(6, (int) user.getRtVersion().getValue());
+			ps.setInt(6, (int) user.getRtVersion().value());
 			ps.setObject(7, now);
 			ps.setObject(8, now);
 			return ps;
@@ -72,12 +71,12 @@ public class JdbcUserRepositoryAdapter implements UserRepository {
 	public MallUser update(MallUser user) {
 		jdbcTemplate.update(
 			"update mall_user set phone = ?, nickname = ?, avatar = ?, status = ?, rt_version = ?, updated_at = now() where id = ?",
-			user.getPhone().getValue(),
-			user.getNickname(),
+			user.getPhone().value(),
+			user.getUsername(),
 			user.getAvatar(),
 			toColumnStatus(user.getStatus()),
-			user.getRtVersion().getValue(),
-			user.getId().getValue()
+			user.getRtVersion().value(),
+			user.getId().value()
 		);
 		return findById(user.getId()).orElseThrow();
 	}
@@ -86,9 +85,9 @@ public class JdbcUserRepositoryAdapter implements UserRepository {
 	public void updateRtVersion(String id, RtVersion nextVersion, RtVersion expectedVersion) {
 		jdbcTemplate.update(
 			"update mall_user set rt_version = ? where id = ? and  rt_version = ?",
-			nextVersion.getValue(),
+			nextVersion.value(),
 			id,
-			expectedVersion.getValue()
+			expectedVersion.value()
 		);
 	}
 

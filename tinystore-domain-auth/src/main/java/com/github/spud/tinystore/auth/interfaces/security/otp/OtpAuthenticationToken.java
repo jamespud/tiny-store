@@ -1,8 +1,9 @@
 package com.github.spud.tinystore.auth.interfaces.security.otp;
 
-import com.github.spud.tinystore.auth.interfaces.security.MallUserPrincipal;
+import com.github.spud.tinystore.auth.domain.model.MallUserPrincipal;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
 
@@ -25,6 +26,13 @@ public class OtpAuthenticationToken extends AbstractAuthenticationToken {
 		setAuthenticated(true);
 	}
 
+	public OtpAuthenticationToken(UserDetails userDetails, String code, Collection<? extends GrantedAuthority> authorities) {
+		super(authorities);
+		this.principal = userDetails;
+		this.credentials = code;
+		setAuthenticated(true);
+	}
+
 	@Override
 	public Object getCredentials() {
 		return credentials;
@@ -37,7 +45,7 @@ public class OtpAuthenticationToken extends AbstractAuthenticationToken {
 
 	public String getPhone() {
 		if (principal instanceof MallUserPrincipal mallUserPrincipal) {
-			return mallUserPrincipal.getUser().phone();
+			return mallUserPrincipal.user().getPhone().value();
 		}
 		return (String) principal;
 	}

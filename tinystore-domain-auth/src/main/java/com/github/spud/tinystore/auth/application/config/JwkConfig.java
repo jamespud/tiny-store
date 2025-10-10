@@ -1,4 +1,4 @@
-package com.github.spud.tinystore.auth.config;
+package com.github.spud.tinystore.auth.application.config;
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;

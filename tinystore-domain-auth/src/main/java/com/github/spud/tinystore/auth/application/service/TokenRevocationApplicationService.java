@@ -45,7 +45,7 @@ public class TokenRevocationApplicationService implements TokenRevocationUseCase
 		userRepository.update(user);
 		outboxPort.save(event);
 		authorizationStorePort.clearAuthorizationsOf(event.userId());
-		auditLogPort.append(AuditEvent.success(user.getId().getValue(), user.getPhone().getValue(), null,
+		auditLogPort.append(AuditEvent.success(user.getId().value(), user.getPhone().value(), null,
 			"TOKEN_REVOKE", Set.of(), null, null, command.reason()));
 	}
 }

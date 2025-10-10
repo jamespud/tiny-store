@@ -27,7 +27,7 @@ public class JdbcOutboxAdapter implements OutboxPort {
 			PreparedStatement ps = con.prepareStatement("insert into auth_outbox (event_type, aggregate_id, rt_version, reason, occurred_at, published) values (?, ?, ?, ?, ?, false)");
 			ps.setString(1, "RefreshTokenRevokedEvent");
 			ps.setString(2, event.userId().toString());
-			ps.setLong(3, event.rtVersion().getValue());
+			ps.setLong(3, event.rtVersion().value());
 			ps.setString(4, event.reason());
 			ps.setObject(5, event.occurredAt());
 			return ps;
@@ -56,8 +56,8 @@ public class JdbcOutboxAdapter implements OutboxPort {
 			events,
 			events.size(),
 			(ps, event) -> {
-				ps.setObject(1, event.userId().getValue());
-				ps.setLong(2, event.rtVersion().getValue());
+				ps.setObject(1, event.userId().value());
+				ps.setLong(2, event.rtVersion().value());
 			});
 	}
 }

@@ -4,50 +4,54 @@ import com.github.spud.tinystore.auth.domain.exception.UserFrozenException;
 import com.github.spud.tinystore.auth.domain.primitives.PhoneNumber;
 import com.github.spud.tinystore.auth.domain.primitives.RtVersion;
 import com.github.spud.tinystore.auth.domain.primitives.UserId;
+import lombok.Getter;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 
-import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.Objects;
 
 /**
  * Mall 用户聚合根。
  */
-public class MallUser {
+@Getter
+public class MallUser implements UserDetails, Authentication {
 
 	private final UserId id;
-	private final PhoneNumber phone;
-	private String nickname;
+	private PhoneNumber phone;
+	private String username;
+	private String password;
 	private String avatar;
+	private Collection<SimpleGrantedAuthority> authorities;
 	private MallUserStatus status;
 	private RtVersion rtVersion;
-	private OffsetDateTime createdAt;
-	private OffsetDateTime updatedAt;
 
 	private MallUser(UserId id,
 	                 PhoneNumber phone,
-	                 String nickname,
+	                 String username,
 	                 String avatar,
+	                 String password,
 	                 MallUserStatus status,
-	                 RtVersion rtVersion,
-	                 OffsetDateTime createdAt,
-	                 OffsetDateTime updatedAt) {
+	                 RtVersion rtVersion) {
 		this.id = Objects.requireNonNull(id, "id");
 		this.phone = Objects.requireNonNull(phone, "phone");
-		this.nickname = nickname;
+		this.username = username;
+		this.password = password;
 		this.avatar = avatar;
 		this.status = Objects.requireNonNullElse(status, MallUserStatus.ACTIVE);
 		this.rtVersion = Objects.requireNonNullElse(rtVersion, RtVersion.of(1));
-		this.createdAt = Objects.requireNonNullElse(createdAt, OffsetDateTime.now());
-		this.updatedAt = Objects.requireNonNullElse(updatedAt, this.createdAt);
 	}
 
-	public static MallUser register(UserId id, PhoneNumber phone, String nickname, String avatar, OffsetDateTime now) {
-		return new MallUser(id, phone, nickname, avatar, MallUserStatus.ACTIVE, RtVersion.of(1), now, now);
+	public static MallUser register(UserId id, PhoneNumber phone, String nickname, String avatar) {
+		// 注册时不设置密码，密码应通过独立的凭证管理系统设置
+		return new MallUser(id, phone, nickname, avatar, null, MallUserStatus.ACTIVE, RtVersion.of(1));
 	}
 
-	public static MallUser restore(UserId id, PhoneNumber phone, String nickname, String avatar,
-	                               MallUserStatus status, RtVersion version,
-	                               OffsetDateTime createdAt, OffsetDateTime updatedAt) {
-		return new MallUser(id, phone, nickname, avatar, status, version, createdAt, updatedAt);
+	public static MallUser restore(UserId id, PhoneNumber phone, String nickname, String avatar, String password,
+	                               MallUserStatus status, RtVersion version) {
+		return new MallUser(id, phone, nickname, avatar, password, status, version);
 	}
 
 	public void freeze() {
@@ -65,50 +69,82 @@ public class MallUser {
 	}
 
 	public void updateProfile(String nickname, String avatar) {
-		this.nickname = nickname;
+		this.username = nickname;
 		this.avatar = avatar;
-		this.updatedAt = OffsetDateTime.now();
 	}
 
 	public RtVersion bumpRtVersion() {
 		this.rtVersion = this.rtVersion.next();
-		this.updatedAt = OffsetDateTime.now();
 		return this.rtVersion;
-	}
-
-	public UserId getId() {
-		return id;
-	}
-
-	public PhoneNumber getPhone() {
-		return phone;
-	}
-
-	public String getNickname() {
-		return nickname;
-	}
-
-	public String getAvatar() {
-		return avatar;
-	}
-
-	public MallUserStatus getStatus() {
-		return status;
-	}
-
-	public RtVersion getRtVersion() {
-		return rtVersion;
-	}
-
-	public OffsetDateTime getCreatedAt() {
-		return createdAt;
-	}
-
-	public OffsetDateTime getUpdatedAt() {
-		return updatedAt;
 	}
 
 	public boolean isFrozen() {
 		return status == MallUserStatus.FROZEN;
+	}
+
+	@Override
+	public Collection<? extends GrantedAuthority> getAuthorities() {
+		return authorities;
+	}
+
+	@Override
+	public Object getCredentials() {
+		return getPassword();
+	}
+
+	@Override
+	public Object getDetails() {
+		return null;
+	}
+
+	@Override
+	public Object getPrincipal() {
+		return getPhone();
+	}
+
+	@Override
+	public boolean isAuthenticated() {
+		return false;
+	}
+
+	@Override
+	public void setAuthenticated(boolean isAuthenticated) throws IllegalArgumentException {
+
+	}
+
+	@Override
+	public String getPassword() {
+		return password;
+	}
+
+	@Override
+	public String getUsername() {
+		return username;
+	}
+
+	@Override
+	public boolean isAccountNonExpired() {
+		return UserDetails.super.isAccountNonExpired();
+	}
+
+	@Override
+	public boolean isAccountNonLocked() {
+		return UserDetails.super.isAccountNonLocked();
+	}
+
+	@Override
+	public boolean isCredentialsNonExpired() {
+		return UserDetails.super.isCredentialsNonExpired();
+	}
+
+	@Override
+	public boolean isEnabled() {
+		// 冻结用户应被视为不可用
+		return !isFrozen();
+	}
+
+	@Override
+	public String getName() {
+		return username;
 	}
 }

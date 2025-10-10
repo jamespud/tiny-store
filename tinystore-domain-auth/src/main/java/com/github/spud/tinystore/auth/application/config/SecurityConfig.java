@@ -1,22 +1,26 @@
-package com.github.spud.tinystore.auth.config;
+package com.github.spud.tinystore.auth.application.config;
 
 import com.github.spud.tinystore.auth.interfaces.security.otp.OtpAuthenticationFilter;
 import com.github.spud.tinystore.auth.interfaces.security.otp.OtpAuthenticationProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.core.userdetails.User;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -26,12 +30,14 @@ import java.util.List;
 
 @Configuration
 @EnableMethodSecurity
+@EnableWebSecurity
 public class SecurityConfig {
 
 	private final OtpAuthenticationProvider otpAuthenticationProvider;
 
 	public SecurityConfig(OtpAuthenticationProvider otpAuthenticationProvider) {
 		this.otpAuthenticationProvider = otpAuthenticationProvider;
+
 	}
 
 	@Bean
@@ -39,21 +45,26 @@ public class SecurityConfig {
 	SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http, OtpAuthenticationFilter otpAuthenticationFilter) throws Exception {
 		http
 			.authorizeHttpRequests(auth -> auth
-				.requestMatchers("/assets/**", "/css/**", "/js/**", "/images/**",
+				.requestMatchers(
+					"/assets/**", "/css/**", "/js/**", "/images/**",
 					"/.well-known/**", "/actuator/health", "/error",
-					"/api/auth/otp/**", "/login/otp").permitAll()
+					"/api/auth/otp/**", "/login/otp", "/api/auth/login/password"
+				).permitAll()
 				.anyRequest().authenticated()
 			)
 			.cors(Customizer.withDefaults())
 			.headers(h -> h
 				.contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'"))
-				.referrerPolicy(r -> r.policy(org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
-				.frameOptions(f -> f.deny())
+				.referrerPolicy(r -> r.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
+				.frameOptions(HeadersConfigurer.FrameOptionsConfig::deny)
 			)
-			.formLogin(form -> form.loginPage("/login").permitAll())
+			.formLogin(form ->
+				form.loginPage("/login").permitAll()
+					.loginProcessingUrl("/login")
+			)
 			.logout(Customizer.withDefaults())
 			.csrf(csrf -> csrf
-				.ignoringRequestMatchers("/oauth2/**", "/api/auth/otp/**", "/login/otp")
+				.ignoringRequestMatchers("/oauth2/**", "/api/auth/otp/**", "/login/otp", "/api/auth/login/password")
 			)
 			.authenticationProvider(otpAuthenticationProvider)
 			.addFilterBefore(otpAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
@@ -61,8 +72,13 @@ public class SecurityConfig {
 	}
 
 	@Bean
-	public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
-		return configuration.getAuthenticationManager();
+	public AuthenticationManager authenticationManager(
+		@Qualifier("sysUserDetailsService") UserDetailsService userDetailsService,
+		PasswordEncoder passwordEncoder) {
+
+		DaoAuthenticationProvider authenticationProvider = new DaoAuthenticationProvider(userDetailsService);
+		authenticationProvider.setPasswordEncoder(passwordEncoder);
+		return new ProviderManager(otpAuthenticationProvider, authenticationProvider);
 	}
 
 	@Bean
@@ -70,13 +86,9 @@ public class SecurityConfig {
 		return new OtpAuthenticationFilter(authenticationManager);
 	}
 
-	// 开发态内存用户；生产请切换为JDBC/外部身份源
 	@Bean
-	UserDetailsService userDetailsService() {
-		var encoder = PasswordEncoderFactories.createDelegatingPasswordEncoder();
-		var user = User.withUsername("user").password(encoder.encode("changeit")).roles("USER").build();
-		var admin = User.withUsername("admin").password(encoder.encode("changeit")).roles("ADMIN").build();
-		return new InMemoryUserDetailsManager(user, admin);
+	public PasswordEncoder passwordEncoder() {
+		return PasswordEncoderFactories.createDelegatingPasswordEncoder();
 	}
 
 	@Value("${tinystore.auth.cors.allowed-origins:http://localhost:3000,http://localhost:8080}")

@@ -1,10 +1,14 @@
 package com.github.spud.tinystore.auth.application.config;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
 import java.time.Duration;
 
+@Setter
+@Getter
 @ConfigurationProperties(prefix = "tinystore.auth.outbox")
 @Validated
 public class OutboxProperties {
@@ -15,27 +19,4 @@ public class OutboxProperties {
 
 	private int batchSize = 100;
 
-	public boolean isEnabled() {
-		return enabled;
-	}
-
-	public void setEnabled(boolean enabled) {
-		this.enabled = enabled;
-	}
-
-	public Duration getPublishInterval() {
-		return publishInterval;
-	}
-
-	public void setPublishInterval(Duration publishInterval) {
-		this.publishInterval = publishInterval;
-	}
-
-	public int getBatchSize() {
-		return batchSize;
-	}
-
-	public void setBatchSize(int batchSize) {
-		this.batchSize = batchSize;
-	}
 }
