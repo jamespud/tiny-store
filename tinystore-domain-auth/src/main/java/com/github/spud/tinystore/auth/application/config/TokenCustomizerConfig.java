@@ -1,7 +1,6 @@
-package com.github.spud.tinystore.auth.config;
+package com.github.spud.tinystore.auth.application.config;
 
-import com.github.spud.tinystore.auth.application.dto.MallUserView;
-import com.github.spud.tinystore.auth.interfaces.security.MallUserPrincipal;
+import com.github.spud.tinystore.auth.domain.model.user.MallUser;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -48,18 +47,21 @@ public class TokenCustomizerConfig {
 			}
 
 			if (new OAuth2TokenType(OidcParameterNames.ID_TOKEN).equals(context.getTokenType())) {
-				if (principal instanceof MallUserPrincipal mallUserPrincipal) {
-					MallUserView user = mallUserPrincipal.getUser();
-					context.getClaims().subject(user.id().toString());
-					if (user.nickname() != null) {
-						context.getClaims().claim("nickname", user.nickname());
+				if (principal instanceof MallUser user) {
+					context.getClaims().subject(user.getId().value());
+					context.getClaims().claim("user_id", user.getId().value());
+					context.getClaims().claim("rt_version", user.getRtVersion().value());
+					context.getClaims().claim("status", user.getStatus().name());
+
+					if (user.getUsername() != null) {
+						context.getClaims().claim("nickname", user.getUsername());
 					}
-					if (user.avatar() != null) {
-						context.getClaims().claim("avatar", user.avatar());
+					if (user.getAvatar() != null) {
+						context.getClaims().claim("avatar", user.getAvatar());
 					}
 					Set<String> scopes = context.getAuthorizedScopes();
 					if (scopes.contains("user.phone")) {
-						context.getClaims().claim("phone_number", user.phone());
+						context.getClaims().claim("phone_number", user.getPhone());
 					}
 					if (scopes.contains("user.address")) {
 						context.getClaims().claim("address_scope_granted", true);

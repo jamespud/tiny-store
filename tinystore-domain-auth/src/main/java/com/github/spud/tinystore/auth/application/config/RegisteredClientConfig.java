@@ -1,4 +1,4 @@
-package com.github.spud.tinystore.auth.config;
+package com.github.spud.tinystore.auth.application.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
@@ -54,7 +54,7 @@ public class RegisteredClientConfig {
 	CommandLineRunner initClients(RegisteredClientRepository repo, PasswordEncoder encoder) {
 		return args -> {
 			// web client (PKCE)
-			if (((JdbcRegisteredClientRepository) repo).findByClientId("tinystore-web") == null) {
+			if (repo.findByClientId("tinystore-web") == null) {
 				RegisteredClient web = RegisteredClient.withId(UUID.randomUUID().toString())
 					.clientId("tinystore-web")
 					.clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
@@ -78,11 +78,11 @@ public class RegisteredClientConfig {
 						.reuseRefreshTokens(false)
 						.build())
 					.build();
-				((JdbcRegisteredClientRepository) repo).save(web);
+				repo.save(web);
 			}
 
 			// internal m2m client
-			if (((JdbcRegisteredClientRepository) repo).findByClientId("tinystore-internal") == null) {
+			if (repo.findByClientId("tinystore-internal") == null) {
 				String secret = System.getenv().getOrDefault("TINYSTORE_INTERNAL_CLIENT_SECRET", "changeit");
 				RegisteredClient m2m = RegisteredClient.withId(UUID.randomUUID().toString())
 					.clientId("tinystore-internal")
@@ -96,11 +96,11 @@ public class RegisteredClientConfig {
 						.build())
 					.clientSettings(ClientSettings.builder().build())
 					.build();
-				((JdbcRegisteredClientRepository) repo).save(m2m);
+				repo.save(m2m);
 			}
 
 			// tool client
-			if (((JdbcRegisteredClientRepository) repo).findByClientId("tinystore-tool") == null) {
+			if (repo.findByClientId("tinystore-tool") == null) {
 				RegisteredClient tool = RegisteredClient.withId(UUID.randomUUID().toString())
 					.clientId("tinystore-tool")
 					.clientSecret(encoder.encode("changeit"))
@@ -125,7 +125,7 @@ public class RegisteredClientConfig {
 						.reuseRefreshTokens(false)
 						.build())
 					.build();
-				((JdbcRegisteredClientRepository) repo).save(tool);
+				repo.save(tool);
 			}
 		};
 	}

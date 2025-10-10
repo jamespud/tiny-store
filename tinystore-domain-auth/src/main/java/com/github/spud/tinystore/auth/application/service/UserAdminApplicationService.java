@@ -31,7 +31,7 @@ public class UserAdminApplicationService implements UserAdminUseCase {
 		var user = loadUser(userId);
 		user.freeze();
 		userRepository.update(user);
-		auditLogPort.append(AuditEvent.success(user.getId().getValue(), user.getPhone().getValue(), null,
+		auditLogPort.append(AuditEvent.success(user.getId().value(), user.getPhone().value(), null,
 			"USER_FREEZE", Set.of(), null, null, null));
 	}
 
@@ -41,7 +41,7 @@ public class UserAdminApplicationService implements UserAdminUseCase {
 		var user = loadUser(userId);
 		user.unfreeze();
 		userRepository.update(user);
-		auditLogPort.append(AuditEvent.success(user.getId().getValue(), user.getPhone().getValue(), null,
+		auditLogPort.append(AuditEvent.success(user.getId().value(), user.getPhone().value(), null,
 			"USER_UNFREEZE", Set.of(), null, null, null));
 	}
 
@@ -62,11 +62,11 @@ public class UserAdminApplicationService implements UserAdminUseCase {
 
 	private UserStatusView toView(MallUser user) {
 		return new UserStatusView(
-			user.getId().getValue(),
-			user.getPhone().getValue(),
+			user.getId().value(),
+			user.getPhone().value(),
 			user.getStatus(),
-			user.getRtVersion().getValue(),
-			user.getUpdatedAt()
+			user.getRtVersion().value(),
+			null
 		);
 	}
 }

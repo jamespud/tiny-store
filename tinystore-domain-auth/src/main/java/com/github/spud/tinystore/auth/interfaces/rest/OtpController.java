@@ -40,16 +40,36 @@ public class OtpController {
 	}
 
 	@PostMapping("/verify")
-	public ResponseEntity<Void> verify(@Valid @RequestBody VerifyRequest request) {
-		Authentication authentication = authenticationManager.authenticate(
-			new OtpAuthenticationToken(request.phone(), request.code()));
-		SecurityContextHolder.getContext().setAuthentication(authentication);
-		return ResponseEntity.ok().build();
+	public ResponseEntity<?> verify(@Valid @RequestBody VerifyRequest request) {
+		try {
+			Authentication authentication = authenticationManager.authenticate(
+				new OtpAuthenticationToken(request.phone(), request.code()));
+			SecurityContextHolder.getContext().setAuthentication(authentication);
+
+			// 返回统一的成功响应格式
+			return ResponseEntity.ok(new VerifyResponse(
+				"success",
+				"验证码验证成功",
+				authentication.getName(),
+				null // TODO: 根据需要添加 token 信息
+			));
+		} catch (Exception e) {
+			return ResponseEntity.badRequest().body(new VerifyResponse(
+				"error",
+				"验证码验证失败: " + e.getMessage(),
+				null,
+				null
+			));
+		}
 	}
 
-	public record SendRequest(@NotBlank String phone, String requestId) {
+	public record SendRequest(@NotBlank String phone, String requestId, @NotBlank String ipAddress,
+	                          @NotBlank String userAgent) {
 	}
 
 	public record VerifyRequest(@NotBlank String phone, @NotBlank String code) {
+	}
+
+	public record VerifyResponse(String status, String message, String userId, String token) {
 	}
 }

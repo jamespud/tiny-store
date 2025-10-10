@@ -32,7 +32,7 @@ public class SasAuthorizationStoreAdapter implements AuthorizationStorePort {
 
 	@Override
 	public Set<ScopeName> loadConsent(UserId userId, ClientId clientId) {
-		OAuth2AuthorizationConsent consent = consentService.findById(clientId.getValue(), userId.toString());
+		OAuth2AuthorizationConsent consent = consentService.findById(clientId.value(), userId.toString());
 		if (consent == null) {
 			return Set.of();
 		}
@@ -44,14 +44,14 @@ public class SasAuthorizationStoreAdapter implements AuthorizationStorePort {
 	@Override
 	public void persistConsent(UserId userId, ClientId clientId, Set<ScopeName> scopes) {
 		if (scopes.isEmpty()) {
-			OAuth2AuthorizationConsent consent = consentService.findById(clientId.getValue(), userId.toString());
+			OAuth2AuthorizationConsent consent = consentService.findById(clientId.value(), userId.toString());
 			if (consent != null) {
 				consentService.remove(consent);
 			}
 			return;
 		}
-		OAuth2AuthorizationConsent.Builder builder = OAuth2AuthorizationConsent.withId(clientId.getValue(), userId.toString());
-		scopes.stream().map(ScopeName::getValue).forEach(builder::scope);
+		OAuth2AuthorizationConsent.Builder builder = OAuth2AuthorizationConsent.withId(clientId.value(), userId.toString());
+		scopes.stream().map(ScopeName::value).forEach(builder::scope);
 		consentService.save(builder.build());
 	}
 }

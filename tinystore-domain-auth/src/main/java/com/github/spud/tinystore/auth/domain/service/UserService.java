@@ -6,13 +6,15 @@ import com.github.spud.tinystore.auth.domain.model.user.MallUser;
 import com.github.spud.tinystore.auth.domain.primitives.PhoneNumber;
 import com.github.spud.tinystore.auth.domain.primitives.RtVersion;
 import com.github.spud.tinystore.auth.domain.primitives.UserId;
-import org.springframework.stereotype.Service;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
-@Service
-public class UserService {
+//@Service
+public class UserService implements UserDetailsService {
 
 	private final UserRepository repository;
 
@@ -24,17 +26,8 @@ public class UserService {
 	public MallUser getOrCreateByPhone(String phone) {
 		return repository.findByPhone(PhoneNumber.of(phone))
 			.map(this::ensureNotFrozen)
-			.orElseGet(() -> {
-//				MallUser user = new MallUser();
-//				user.setPhone(phone);
-//				user.setNickname("用户" + phone.substring(Math.max(phone.length() - 4, 0)));
-//				user.setStatus("normal");
-//				user.setRtVersion(1);
-//				user.setCreatedAt(OffsetDateTime.now());
-//				user.setUpdatedAt(OffsetDateTime.now());
-//				return ensureNotFrozen(repository.save(user));
-				return null;
-			}
+			.orElseGet(() -> MallUser.register(UserId.random(), PhoneNumber.of(phone),
+				"用户" + phone.substring(Math.max(phone.length() - 4, 0)), "default")
 			);
 	}
 
@@ -48,7 +41,7 @@ public class UserService {
 		RtVersion rtVersion = user.getRtVersion();
 		RtVersion nextVersion = rtVersion.next();
 		repository.updateRtVersion(id, nextVersion, rtVersion);
-		return nextVersion.getValue();
+		return nextVersion.value();
 	}
 
 	private MallUser ensureNotFrozen(MallUser user) {
@@ -57,4 +50,10 @@ public class UserService {
 		}
 		return user;
 	}
+
+	@Override
+	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+		return null;
+	}
+
 }

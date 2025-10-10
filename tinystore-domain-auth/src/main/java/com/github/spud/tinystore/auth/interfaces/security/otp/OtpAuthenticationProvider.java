@@ -2,43 +2,33 @@ package com.github.spud.tinystore.auth.interfaces.security.otp;
 
 import com.github.spud.tinystore.auth.application.dto.AuthResult;
 import com.github.spud.tinystore.auth.application.dto.VerifyOtpCommand;
-import com.github.spud.tinystore.auth.application.port.in.OtpUseCase;
-import com.github.spud.tinystore.auth.interfaces.security.MallUserPrincipal;
+import com.github.spud.tinystore.auth.application.service.OtpApplicationService;
 import org.springframework.security.authentication.AuthenticationProvider;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
-
+// 手机号+验证码认证提供者
 @Component
 public class OtpAuthenticationProvider implements AuthenticationProvider {
 
-	private final OtpUseCase otpUseCase;
+	private final OtpApplicationService otpApplicationService;
 
-	public OtpAuthenticationProvider(OtpUseCase otpUseCase) {
-		this.otpUseCase = otpUseCase;
+	public OtpAuthenticationProvider(OtpApplicationService otpApplicationService) {
+		this.otpApplicationService = otpApplicationService;
 	}
 
 	@Override
 	public Authentication authenticate(Authentication authentication) throws AuthenticationException {
-		if (!(authentication instanceof OtpAuthenticationToken token)) {
-			return null;
+
+		if (authentication instanceof OtpAuthenticationToken token) {
+			String phone = (String) token.getPrincipal();
+			String otp = (String) token.getCredentials();
+			AuthResult authResult = otpApplicationService.verifyOtp(new VerifyOtpCommand(phone, otp));
+			// TODO: 返回userDetails
+			return authResult.user();
 		}
-		String phone = token.getPhone();
-		String code = token.getCode();
-		try {
-			AuthResult result = otpUseCase.verifyOtp(new VerifyOtpCommand(phone, code));
-			MallUserPrincipal principal = new MallUserPrincipal(result.user(), List.of(
-				new SimpleGrantedAuthority("ROLE_USER"),
-				new SimpleGrantedAuthority("SCOPE_user.profile")
-			));
-			return new OtpAuthenticationToken(principal, principal.getAuthorities());
-		} catch (RuntimeException ex) {
-			throw new BadCredentialsException("OTP 验证失败", ex);
-		}
+		return null;
 	}
 
 	@Override

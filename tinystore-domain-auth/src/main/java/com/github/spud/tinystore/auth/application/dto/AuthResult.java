@@ -1,4 +1,6 @@
 package com.github.spud.tinystore.auth.application.dto;
 
-public record AuthResult(MallUserView user) {
+import com.github.spud.tinystore.auth.domain.model.user.MallUser;
+
+public record AuthResult(MallUser user) {
 }

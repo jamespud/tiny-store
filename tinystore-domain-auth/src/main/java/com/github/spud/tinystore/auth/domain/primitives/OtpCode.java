@@ -7,14 +7,12 @@ import java.util.Objects;
 /**
  * OTP 验证码值对象。
  */
-public final class OtpCode implements Serializable {
+public record OtpCode(String value) implements Serializable {
 
 	@Serial
 	private static final long serialVersionUID = 1L;
 
-	private final String value;
-
-	private OtpCode(String value) {
+	public OtpCode(String value) {
 		String normalized = Objects.requireNonNull(value, "otp must not be null").trim();
 		if (normalized.isEmpty()) {
 			throw new IllegalArgumentException("otp must not be blank");
@@ -26,9 +24,6 @@ public final class OtpCode implements Serializable {
 		return new OtpCode(value);
 	}
 
-	public String getValue() {
-		return value;
-	}
 
 	@Override
 	public boolean equals(Object o) {
@@ -39,11 +34,6 @@ public final class OtpCode implements Serializable {
 			return false;
 		}
 		return value.equals(otpCode.value);
-	}
-
-	@Override
-	public int hashCode() {
-		return value.hashCode();
 	}
 
 	@Override

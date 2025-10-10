@@ -8,7 +8,7 @@
 ## 一、包结构重构（package-by-component）
 在 tinystore-domain-auth 下新建四层包，逐步迁移现有类至对应位置，并新增 ACL/端口：
 
-- `com.tinystore.auth.domain`
+- `com.github.spud.tinystore.auth.domain`
   - `model.user`：MallUser 聚合与实体/值对象
   - `model.otp`：OTP 实体（用户聚合内子实体）
   - `model.consent`：Consent 领域对象（聚合根为 UserConsent）
@@ -16,7 +16,7 @@
   - `service`：领域服务（OtpGenerationService、RefreshTokenVersionService、ScopePolicyService）
   - `exception`：领域异常（UserFrozenException、OtpRateLimitExceeded、OtpInvalid/Expired 等）
   - `primitives`：值对象（UserId、PhoneNumber、OtpCode、RtVersion、ClientId、Scopes 等）
-- `com.tinystore.auth.application`
+- `com.github.spud.tinystore.auth.application`
   - `port.in`（用例输入端口）：接口由接口层驱动
     - `OtpUseCase`、`AuthUseCase`、`ConsentUseCase`、`TokenRevocationUseCase`、`UserAdminUseCase`、`AuditQueryUseCase`
   - `port.out`（输出端口/依赖）：由基础设施实现
@@ -28,14 +28,14 @@
     - `AuditLogPort`（审计写入/查询）
   - `service`（应用服务/用例编排）：实现 port.in，组合领域服务/port.out
   - `dto`：输入输出 DTO（对接口层友好）
-- `com.tinystore.auth.infrastructure`
+- `com.github.spud.tinystore.auth.infrastructure`
   - `persistence.jpa` 或 `persistence.jdbc`：MallUser/OTP/Consent 仓储实现与映射
   - `sso.sas`：SAS 适配器（AuthorizationServer ACL、TokenCustomizer、ConsentService 适配）
   - `cache.redis`：Redisson/Redis 限流与分布式锁适配
   - `outbox`：Outbox 仓储与发布器（定时/事务外触发）
   - `audit`：审计存储实现
   - `config`：Spring Bean 装配、属性绑定、事务、调度器
-- `com.tinystore.auth.interfaces`
+- `com.github.spud.tinystore.auth.interfaces`
   - `rest`：OTP、撤销、用户管理/查询、审计查询等 REST 控制器（保留现有路径）
   - `web`：登录/同意模板控制器（保持 UI/表单契约）
   - `security`：HTTP 安全配置、过滤器；OTP Authentication Filter/Provider 的接入点
@@ -240,10 +240,10 @@
 ```sql
 IMPLEMENTATION CHECKLIST:
 1. 在 tinystore-domain-auth 新建包结构：
-   - com.tinystore.auth.domain.{model.user,model.otp,model.consent,service,event,exception,primitives}
-   - com.tinystore.auth.application.{port.in,port.out,service,dto}
-   - com.tinystore.auth.infrastructure.{persistence.jdbc,sso.sas,cache.redis,outbox,audit,config}
-   - com.tinystore.auth.interfaces.{rest,web,security,mapper}
+   - com.github.spud.tinystore.auth.domain.{model.user,model.otp,model.consent,service,event,exception,primitives}
+   - com.github.spud.tinystore.auth.application.{port.in,port.out,service,dto}
+   - com.github.spud.tinystore.auth.infrastructure.{persistence.jdbc,sso.sas,cache.redis,outbox,audit,config}
+   - com.github.spud.tinystore.auth.interfaces.{rest,web,security,mapper}
 2. 定义领域值对象与异常：
    - UserId、PhoneNumber、OtpCode、RtVersion、ClientId、ScopeName
    - UserFrozenException、OtpRateLimitExceeded、OtpInvalid、OtpExpired

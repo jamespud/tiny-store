@@ -8,16 +8,14 @@ import java.util.regex.Pattern;
 /**
  * 手机号值对象，统一校验格式。
  */
-public final class PhoneNumber implements Serializable {
+public record PhoneNumber(String value) implements Serializable {
 
 	@Serial
 	private static final long serialVersionUID = 1L;
 
 	private static final Pattern PATTERN = Pattern.compile("^\\+?[0-9]{6,20}$");
 
-	private final String value;
-
-	private PhoneNumber(String value) {
+	public PhoneNumber(String value) {
 		String normalized = Objects.requireNonNull(value, "phone must not be null").trim();
 		if (normalized.isEmpty()) {
 			throw new IllegalArgumentException("phone must not be blank");
@@ -32,9 +30,6 @@ public final class PhoneNumber implements Serializable {
 		return new PhoneNumber(value);
 	}
 
-	public String getValue() {
-		return value;
-	}
 
 	public String masked() {
 		if (value.length() <= 4) {
@@ -53,11 +48,6 @@ public final class PhoneNumber implements Serializable {
 			return false;
 		}
 		return value.equals(that.value);
-	}
-
-	@Override
-	public int hashCode() {
-		return value.hashCode();
 	}
 
 	@Override

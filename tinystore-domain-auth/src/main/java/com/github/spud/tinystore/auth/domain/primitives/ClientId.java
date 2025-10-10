@@ -4,14 +4,12 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
-public final class ClientId implements Serializable {
+public record ClientId(String value) implements Serializable {
 
 	@Serial
 	private static final long serialVersionUID = 1L;
 
-	private final String value;
-
-	private ClientId(String value) {
+	public ClientId(String value) {
 		String normalized = Objects.requireNonNull(value, "clientId must not be null").trim();
 		if (normalized.isEmpty()) {
 			throw new IllegalArgumentException("clientId must not be blank");
@@ -23,9 +21,6 @@ public final class ClientId implements Serializable {
 		return new ClientId(value);
 	}
 
-	public String getValue() {
-		return value;
-	}
 
 	@Override
 	public boolean equals(Object o) {
@@ -36,11 +31,6 @@ public final class ClientId implements Serializable {
 			return false;
 		}
 		return value.equals(clientId.value);
-	}
-
-	@Override
-	public int hashCode() {
-		return value.hashCode();
 	}
 
 	@Override
