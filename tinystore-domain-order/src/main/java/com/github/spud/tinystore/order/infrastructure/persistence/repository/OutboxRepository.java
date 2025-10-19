@@ -1,11 +1,10 @@
 package com.github.spud.tinystore.order.infrastructure.persistence.repository;
 
 import jakarta.persistence.LockModeType;
-import org.springframework.data.jpa.repository.Lock;
-import org.springframework.stereotype.Repository;
-
 import java.time.LocalDateTime;
 import java.util.List;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.stereotype.Repository;
 
 /**
  * @author Spud

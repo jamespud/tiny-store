@@ -1,14 +1,13 @@
 package com.github.spud.tinystore.order.interfaces.error;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 /**
  * 订单异常处理器
@@ -45,7 +44,8 @@ public class OrderExceptionHandler {
 	private HttpStatus mapToHttpStatus(OrderErrorCode errorCode) {
 		return switch (errorCode) {
 			case PRICE_CHANGED, STOCK_INSUFFICIENT, ALREADY_PROCESSING -> HttpStatus.CONFLICT;
-			case TOKEN_EXPIRED, TOKEN_INVALID, DIGEST_MISMATCH, IDEMPOTENT_REPLAY -> HttpStatus.BAD_REQUEST;
+			case TOKEN_EXPIRED, TOKEN_INVALID, DIGEST_MISMATCH, IDEMPOTENT_REPLAY ->
+				HttpStatus.BAD_REQUEST;
 			case COUPON_INVALID -> HttpStatus.BAD_REQUEST;
 			case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
 			case ORDER_NOT_FOUND -> HttpStatus.NOT_FOUND;

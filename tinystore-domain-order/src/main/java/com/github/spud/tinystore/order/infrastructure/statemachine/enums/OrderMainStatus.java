@@ -1,8 +1,7 @@
 package com.github.spud.tinystore.order.infrastructure.statemachine.enums;
 
 /**
- * 订单主状态枚举
- * 定义订单的主要流转状态
+ * 订单主状态枚举 定义订单的主要流转状态
  *
  * @author Spud
  * @date 2025/9/29

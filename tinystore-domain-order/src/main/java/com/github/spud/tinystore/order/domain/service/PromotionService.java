@@ -3,15 +3,15 @@ package com.github.spud.tinystore.order.domain.service;
 import com.github.spud.tinystore.order.domain.model.Coupon;
 import com.github.spud.tinystore.order.domain.model.Discount;
 import com.github.spud.tinystore.order.domain.model.Money;
-import com.github.spud.tinystore.order.domain.model.SubOrder;
 import com.github.spud.tinystore.order.domain.model.Product;
+import com.github.spud.tinystore.order.domain.model.SubOrder;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CalculateFreightResponse;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CalculateMerchantFreightRequest;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.MerchantInfo;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.PreUseCouponResponse;
+import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.PreUseMerchantCouponRequest;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.PreUsePlatformCouponRequest;
-import com.github.spud.tinystore.order.infrastructure.acl.PromotionFeignClient.PreUseMerchantCouponRequest;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -67,8 +67,10 @@ public class PromotionService {
 		Money platformDiscountTotal) {
 		return null;
 	}
-	
-	public CalculateFreightResponse calculateMerchantFreight(CalculateMerchantFreightRequest request) {;
+
+	public CalculateFreightResponse calculateMerchantFreight(
+		CalculateMerchantFreightRequest request) {
+		;
 		return null;
 	}
 }

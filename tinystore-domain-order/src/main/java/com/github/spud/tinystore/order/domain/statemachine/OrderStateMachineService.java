@@ -2,13 +2,11 @@ package com.github.spud.tinystore.order.domain.statemachine;
 
 import com.github.spud.tinystore.order.domain.model.OrderAggregate;
 import com.github.spud.tinystore.order.infrastructure.statemachine.enums.OrderEvent;
-
 import java.util.Map;
 import lombok.Getter;
 
 /**
- * 订单状态机服务接口
- * 负责管理订单状态的合法性转换
+ * 订单状态机服务接口 负责管理订单状态的合法性转换
  *
  * @author Spud
  * @date 2025/9/29
@@ -40,11 +38,13 @@ public interface OrderStateMachineService {
 	 */
 	@Getter
 	class IllegalStateTransitionException extends RuntimeException {
+
 		private final String currentMainStatus;
 		private final String currentSubStatus;
 		private final String event;
 
-		public IllegalStateTransitionException(String currentMainStatus, String currentSubStatus, String event) {
+		public IllegalStateTransitionException(String currentMainStatus, String currentSubStatus,
+			String event) {
 			super(String.format("Illegal state transition from %s:%s with event %s",
 				currentMainStatus, currentSubStatus, event));
 			this.currentMainStatus = currentMainStatus;

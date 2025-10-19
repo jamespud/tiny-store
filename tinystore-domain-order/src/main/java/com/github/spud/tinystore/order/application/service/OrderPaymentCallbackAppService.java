@@ -17,8 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 订单支付回调应用服务
- * 实现"支付成功回调→状态机→Outbox→Kafka事件→读侧同步"垂直切片
+ * 订单支付回调应用服务 实现"支付成功回调→状态机→Outbox→Kafka事件→读侧同步"垂直切片
  */
 @Slf4j
 @Service
@@ -33,8 +32,7 @@ public class OrderPaymentCallbackAppService {
 	// private final OrderRepository orderRepository; // 需要注入订单仓储
 
 	/**
-	 * 处理支付成功回调
-	 * 这是整个垂直切片的入口点
+	 * 处理支付成功回调 这是整个垂直切片的入口点
 	 *
 	 * @param request 支付回调请求
 	 * @return 处理结果
@@ -78,11 +76,8 @@ public class OrderPaymentCallbackAppService {
 			}
 
 			// Step 3: 业务处理 - 订单支付成功
-			orderAggregate.onPaymentSuccess(
-				request.getPaymentTransactionId(),
-				request.getPaymentMethod(),
-				request.getAmount()
-			);
+			// TODO: 
+			orderAggregate.onPaymentSuccess(null);
 
 			// Step 4: 持久化订单聚合 (更新数据库)
 			saveOrderAggregate(orderAggregate);
@@ -149,12 +144,7 @@ public class OrderPaymentCallbackAppService {
 		// 暂时返回一个模拟对象用于演示
 		log.warn("模拟加载订单聚合: orderNo={}", orderNo);
 
-		return new OrderAggregate(
-			orderNo,
-			"user123",
-			"merchant456",
-			new BigDecimal("99.99")
-		);
+		return null; // TODO: 实现实际加载逻辑
 	}
 
 	/**
@@ -162,7 +152,7 @@ public class OrderPaymentCallbackAppService {
 	 */
 	private void saveOrderAggregate(OrderAggregate orderAggregate) {
 		// 这里需要注入 OrderRepository 来保存聚合
-		log.info("保存订单聚合: {}", orderAggregate.getOrderSummary());
+		log.info("保存订单聚合: {}", orderAggregate);
 	}
 
 	// ============= 内部类 =============
@@ -171,6 +161,7 @@ public class OrderPaymentCallbackAppService {
 	 * 支付成功回调请求
 	 */
 	public static class PaymentSuccessCallbackRequest {
+
 		private String requestId;           // 请求唯一标识（幂等键）
 		private String orderNo;             // 订单号
 		private String paymentTransactionId; // 支付流水号
@@ -241,6 +232,7 @@ public class OrderPaymentCallbackAppService {
 	 * 支付回调处理结果
 	 */
 	public static class PaymentCallbackResult {
+
 		private String status;      // SUCCESS, PROCESSING, DUPLICATE, FAILURE
 		private String orderNo;
 		private String message;
@@ -254,7 +246,8 @@ public class OrderPaymentCallbackAppService {
 			this.message = message;
 		}
 
-		public static PaymentCallbackResult success(String orderNo, String mainStatus, String subStatus) {
+		public static PaymentCallbackResult success(String orderNo, String mainStatus,
+			String subStatus) {
 			PaymentCallbackResult result = new PaymentCallbackResult("SUCCESS", orderNo, "处理成功");
 			result.mainStatus = mainStatus;
 			result.subStatus = subStatus;

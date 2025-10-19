@@ -12,11 +12,11 @@ import org.springframework.stereotype.Service;
 @Service
 public class InventoryService {
 
-	public StockPreOccupyResponse preOccupyStock(List<StockPreOccupyRequest> request){
+	public StockPreOccupyResponse preOccupyStock(List<StockPreOccupyRequest> request) {
 		return null;
 	}
 
 	public void rollbackPreOccupy(List<String> preOccupyIds) {
-		
+
 	}
 }

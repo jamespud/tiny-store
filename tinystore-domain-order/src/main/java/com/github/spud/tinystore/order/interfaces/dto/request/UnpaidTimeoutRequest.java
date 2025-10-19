@@ -4,11 +4,10 @@ import com.github.spud.tinystore.order.application.command.UnpaidTimeoutCancelCo
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.UUID;
 
 /**
  * 支付超时取消请求DTO
@@ -20,6 +19,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UnpaidTimeoutRequest {
+
 	/**
 	 * 订单ID
 	 */

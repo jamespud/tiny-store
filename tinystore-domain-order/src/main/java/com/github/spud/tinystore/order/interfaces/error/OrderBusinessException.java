@@ -35,14 +35,14 @@ public class OrderBusinessException extends RuntimeException {
 	}
 
 	public OrderBusinessException(OrderErrorCode errorCode, String message,
-	                              Map<String, Object> contextMap) {
+		Map<String, Object> contextMap) {
 		super(message);
 		this.errorCode = errorCode;
 		this.contextMap = contextMap;
 	}
 
 	public OrderBusinessException(String s, String message, HttpStatus httpStatus) {
-		
+
 	}
 
 	public static Exception riskBlocked(Object reason) {

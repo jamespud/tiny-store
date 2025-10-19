@@ -1,5 +1,6 @@
 package com.github.spud.tinystore.order.interfaces.dto.request;
 
+import com.github.spud.tinystore.order.application.command.user.SubmitOrderCommand;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -22,9 +23,13 @@ public class CreateOrderRequest {
 
 	// 平台优惠券ID（可选）
 	private String platformCouponId;
-	
+
 	@NotNull(message = "收货地址ID不能为空")
 	private String addressId;
+
+	public SubmitOrderCommand toCommand(String currentUserId) {
+		throw new UnsupportedOperationException("Not implemented yet");
+	}
 
 	// -------------------------- 商家-SKU分组DTO（1个商家对应1个） --------------------------
 	@Data

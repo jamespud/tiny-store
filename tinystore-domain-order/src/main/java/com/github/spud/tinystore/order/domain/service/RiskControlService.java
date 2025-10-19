@@ -1,7 +1,9 @@
 package com.github.spud.tinystore.order.domain.service;
 
+import com.github.spud.tinystore.order.domain.service.RiskControlService.MerchantRiskDto.OrderRiskCheckResponse;
 import com.github.spud.tinystore.order.infrastructure.acl.RiskControlFeignClient;
 import java.util.List;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import org.springframework.stereotype.Service;
@@ -23,20 +25,8 @@ public class RiskControlService {
 	public static class OrderRiskCheckRequest {
 
 		private String userId;
-		private String address;
-		private List<ShopRiskDto> shopList;
-	}
-
-	public static class ShopRiskDto {
-
-		private String shopId;
-		private List<SkuRiskDTO> skuList;
-	}
-
-	public class SkuRiskDTO {
-
-		private String skuId;
-		private Integer quantity;
+		private String addressId;
+		private List<MerchantRiskDto> merchantList;
 	}
 
 	@Getter
@@ -44,5 +34,19 @@ public class RiskControlService {
 
 		private boolean pass;
 		private String reason;
+	}
+
+	@AllArgsConstructor
+	public static class MerchantRiskDto {
+		private String merchantId;
+		private List<SkuRiskDTO> skuList;
+
+	}
+
+	@AllArgsConstructor
+	public static class SkuRiskDTO {
+		private String skuId;
+		private Integer quantity;
+
 	}
 }

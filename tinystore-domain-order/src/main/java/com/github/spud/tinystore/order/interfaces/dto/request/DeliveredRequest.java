@@ -8,8 +8,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.UUID;
-
 /**
  * 物流妥投/签收请求DTO
  *
@@ -20,11 +18,12 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DeliveredRequest {
+
 	/**
 	 * 订单ID
 	 */
 	@NotNull(message = "订单ID不能为空")
-	private UUID orderId;
+	private String orderId;
 
 	/**
 	 * 运单号
@@ -50,7 +49,7 @@ public class DeliveredRequest {
 	private String source = "LOGISTICS";
 
 	public DeliveredCommand toCommand() {
-		return new DeliveredCommand(orderId, trackingNo, deliveredAt, source, eventId);
+		return new DeliveredCommand(orderId, trackingNo, deliveredAt, source, eventId, "");
 	}
 
 	public String getEventId() {

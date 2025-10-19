@@ -4,11 +4,10 @@ import com.github.spud.tinystore.order.application.command.MoveToAwaitFulfillmen
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.UUID;
 
 /**
  * 转待履约请求DTO
@@ -20,6 +19,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class MoveToAwaitFulfillmentRequest {
+
 	/**
 	 * 订单ID
 	 */

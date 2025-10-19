@@ -22,7 +22,8 @@ public class OrderCreatedEvent extends OrderDomainBaseEvent {
 	private OffsetDateTime createdAt;
 
 	@Builder
-	public OrderCreatedEvent(String orderId, String buyerId, Money totalAmount, OffsetDateTime createdAt) {
+	public OrderCreatedEvent(String orderId, String buyerId, Money totalAmount,
+		OffsetDateTime createdAt) {
 		this.orderId = orderId;
 		this.buyerId = buyerId;
 		this.totalAmount = totalAmount;

@@ -1,17 +1,20 @@
 package com.github.spud.tinystore.order.infrastructure.persistence.po;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
+import java.time.OffsetDateTime;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;
 import org.hibernate.annotations.UuidGenerator;
 
-import java.time.OffsetDateTime;
-import java.util.UUID;
-
 /**
- * Outbox 事件持久化对象
- * 实现 Outbox Pattern 确保事件的最终一致性
+ * Outbox 事件持久化对象 实现 Outbox Pattern 确保事件的最终一致性
  */
 @Data
 @EqualsAndHashCode(callSuper = false)

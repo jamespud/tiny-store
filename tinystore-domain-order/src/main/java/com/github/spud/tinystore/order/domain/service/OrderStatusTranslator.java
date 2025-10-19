@@ -2,26 +2,22 @@ package com.github.spud.tinystore.order.domain.service;
 
 import com.github.spud.tinystore.order.domain.event.OrderStatus;
 import com.github.spud.tinystore.order.domain.status.CoreFlowStatus;
-import org.springframework.stereotype.Component;
-
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.stereotype.Component;
 
 /**
  * 订单状态翻译器
  * <p>
- * 提供 CoreFlowStatus 和遗留 OrderStatus 之间的双向映射，
- * 确保在状态系统迁移过程中的向后兼容性。
+ * 提供 CoreFlowStatus 和遗留 OrderStatus 之间的双向映射， 确保在状态系统迁移过程中的向后兼容性。
  * <p>
- * 主要功能：
- * 1. 新状态到遗留状态的映射 (toLegacy)
- * 2. 遗留状态到新状态的映射 (toCore)
- * 3. 可选映射处理未知状态 (toCoreOptional)
+ * 主要功能： 1. 新状态到遗留状态的映射 (toLegacy) 2. 遗留状态到新状态的映射 (toCore) 3. 可选映射处理未知状态 (toCoreOptional)
  *
  * @author Spud
  * @date 2025/9/22
  */
 @Component
+@Deprecated
 public class OrderStatusTranslator {
 
 	// Mapping from legacy OrderStatus to CoreFlowStatus
@@ -65,7 +61,8 @@ public class OrderStatusTranslator {
 		CoreFlowStatus coreStatus = LEGACY_TO_CORE_MAP.get(legacyStatus);
 		if (coreStatus == null) {
 			// Log warning for unknown mappings
-			System.err.printf("WARNING: Unknown OrderStatus->CoreFlowStatus mapping for %s, defaulting to PENDING_PAYMENT%n",
+			System.err.printf(
+				"WARNING: Unknown OrderStatus->CoreFlowStatus mapping for %s, defaulting to PENDING_PAYMENT%n",
 				legacyStatus);
 			return CoreFlowStatus.PENDING_PAYMENT;
 		}
@@ -84,7 +81,8 @@ public class OrderStatusTranslator {
 		OrderStatus legacyStatus = CORE_TO_LEGACY.get(coreStatus);
 		if (legacyStatus == null) {
 			// Log warning for unknown mappings
-			System.err.printf("WARNING: Unknown CoreFlowStatus->OrderStatus mapping for %s, defaulting to CREATED%n",
+			System.err.printf(
+				"WARNING: Unknown CoreFlowStatus->OrderStatus mapping for %s, defaulting to CREATED%n",
 				coreStatus);
 			return OrderStatus.CREATED;
 		}

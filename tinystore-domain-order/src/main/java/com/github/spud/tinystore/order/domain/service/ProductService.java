@@ -1,20 +1,12 @@
 package com.github.spud.tinystore.order.domain.service;
 
-import com.github.spud.tinystore.order.application.command.user.PreviewOrderCommand;
-import com.github.spud.tinystore.order.domain.model.Address;
-import com.github.spud.tinystore.order.domain.model.Coupon;
 import com.github.spud.tinystore.order.domain.model.Product;
 import com.github.spud.tinystore.order.infrastructure.acl.ProductClient;
-import com.github.spud.tinystore.order.infrastructure.acl.ProductFeignClient;
-import com.github.spud.tinystore.order.infrastructure.acl.ProductFeignClient.SkuDTO;
-import com.github.spud.tinystore.order.interfaces.dto.ProductDto;
-import lombok.Data;
-import org.apache.kafka.common.protocol.types.Field.Str;
-import org.springframework.stereotype.Service;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import lombok.Data;
+import org.springframework.stereotype.Service;
 
 /**
  * @author Spud
@@ -35,7 +27,7 @@ public class ProductService {
 	}
 
 	@Data
-	
+
 	public static class SkuDTO {
 
 		private String skuId;
@@ -53,13 +45,16 @@ public class ProductService {
 		private double weight;
 
 		public SkuDTO(String s, Integer quantity, long unitPrice) {
-			
+
 		}
 	}
-	
-	@Data
-	public class SkuBatchQueryResponse {
 
+	@Data
+	public static class SkuBatchQueryResponse {
+
+		/**
+		 * SKU信息映射，key为skuId
+		 */
 		private Map<String, SkuDTO> skuMap;
 	}
 }

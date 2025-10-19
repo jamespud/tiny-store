@@ -5,8 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
- * 事件发布服务的简单实现
- * 目前仅记录日志，实际生产环境中应该发送到消息队列
+ * 事件发布服务的简单实现 目前仅记录日志，实际生产环境中应该发送到消息队列
  *
  * @author Spud
  * @date 2025/9/22
@@ -19,7 +18,8 @@ public class SimpleEventPublishingService implements EventPublishingService {
 	public void publish(Outbox event) throws Exception {
 		// 简单实现：仅记录日志
 		// 生产环境中应该发送到 RabbitMQ、Kafka 等消息队列
-		log.info("Publishing event to external system: eventId={}, eventType={}, aggregateId={}, payload={}",
+		log.info(
+			"Publishing event to external system: eventId={}, eventType={}, aggregateId={}, payload={}",
 			event.getEventId(), event.getEventType(), event.getAggregateId(), event.getPayload());
 
 		// 模拟网络延迟

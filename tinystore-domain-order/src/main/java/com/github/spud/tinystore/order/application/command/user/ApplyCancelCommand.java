@@ -9,6 +9,7 @@ import lombok.Data;
 @Data
 @Builder
 public class ApplyCancelCommand {
+
 	private String orderId;
 	private String buyerId;
 	private String reason;

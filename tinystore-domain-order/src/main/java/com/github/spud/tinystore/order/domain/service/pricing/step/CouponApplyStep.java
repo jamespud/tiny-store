@@ -1,10 +1,9 @@
 package com.github.spud.tinystore.order.domain.service.pricing.step;
 
-import org.springframework.stereotype.Component;
-
 import com.github.spud.tinystore.order.domain.service.pricing.spi.PricingContext;
 import com.github.spud.tinystore.order.domain.service.pricing.spi.PricingStep;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient;
+import org.springframework.stereotype.Component;
 
 @Component
 public class CouponApplyStep implements PricingStep {

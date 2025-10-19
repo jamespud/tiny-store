@@ -14,13 +14,15 @@ public interface InventoryClient {
 
 	@Builder
 	@AllArgsConstructor
-	class StockPreOccupyRequest{
+	class StockPreOccupyRequest {
+
 		private String skuId;
 		private Integer quantity;
 	}
-	
+
 	@Data
 	class StockPreOccupyResponse {
+
 		private boolean success;
 		private Object lackSkuId;
 		private List<String> preOccupyIds;

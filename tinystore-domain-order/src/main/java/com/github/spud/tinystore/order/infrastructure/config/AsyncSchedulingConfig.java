@@ -5,8 +5,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * 异步和调度配置
- * 启用异步处理和定时任务功能
+ * 异步和调度配置 启用异步处理和定时任务功能
  */
 @Configuration
 @EnableAsync

@@ -12,18 +12,20 @@ import org.springframework.statemachine.config.builders.StateMachineStateConfigu
 import org.springframework.statemachine.config.builders.StateMachineTransitionConfigurer;
 import org.springframework.statemachine.listener.StateMachineListener;
 import org.springframework.statemachine.listener.StateMachineListenerAdapter;
+import org.springframework.statemachine.state.State;
 
 /**
- * 订单状态机配置
- * 基于 Spring State Machine 实现订单状态流转控制
+ * 订单状态机配置 基于 Spring State Machine 实现订单状态流转控制
  */
 @Slf4j
 @Configuration
 @EnableStateMachine
-public class OrderStateMachineConfig extends StateMachineConfigurerAdapter<OrderMainStatus, OrderEvent> {
+public class OrderStateMachineConfig extends
+	StateMachineConfigurerAdapter<OrderMainStatus, OrderEvent> {
 
 	@Override
-	public void configure(StateMachineStateConfigurer<OrderMainStatus, OrderEvent> states) throws Exception {
+	public void configure(StateMachineStateConfigurer<OrderMainStatus, OrderEvent> states)
+		throws Exception {
 		states
 			.withStates()
 			// 初始状态
@@ -38,7 +40,8 @@ public class OrderStateMachineConfig extends StateMachineConfigurerAdapter<Order
 	}
 
 	@Override
-	public void configure(StateMachineTransitionConfigurer<OrderMainStatus, OrderEvent> transitions) throws Exception {
+	public void configure(StateMachineTransitionConfigurer<OrderMainStatus, OrderEvent> transitions)
+		throws Exception {
 		transitions
 			// 支付成功：待支付 -> 已支付
 			.withExternal()
@@ -47,7 +50,7 @@ public class OrderStateMachineConfig extends StateMachineConfigurerAdapter<Order
 			.event(OrderEvent.PAYMENT_SUCCEEDED)
 			.action(context -> {
 				log.info("Order payment succeeded: orderNo={}",
-					context.getExtendedState().get("orderNo"));
+					context.getExtendedState().get("orderNo", Object.class));
 			})
 
 			// 支付失败：待支付 -> 已取消
@@ -165,7 +168,7 @@ public class OrderStateMachineConfig extends StateMachineConfigurerAdapter<Order
 
 			@Override
 			public void stateChanged(State<OrderMainStatus, OrderEvent> from,
-			                         State<OrderMainStatus, OrderEvent> to) {
+				State<OrderMainStatus, OrderEvent> to) {
 				if (from != null && to != null) {
 					log.info("State machine transition: {} -> {}",
 						from.getId(), to.getId());

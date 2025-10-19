@@ -15,16 +15,18 @@ public interface PaymentFeignClient {
 	CreateMergePayResponse createMergePayment(CreateMergePayRequest build);
 
 	@Builder
-	class CreateMergePayRequest{
+	class CreateMergePayRequest {
+
 		private String mainOrderNo;
 		private List<String> subOrderNos;
 		private String userId;
 		private long totalPayAmount;
-		private String subject;	
+		private String subject;
 	}
-	
+
 	@Data
-	class CreateMergePayResponse{
+	class CreateMergePayResponse {
+
 		private String mergePayUrl;
 	}
 

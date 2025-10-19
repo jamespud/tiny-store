@@ -1,8 +1,7 @@
 package com.github.spud.tinystore.order.infrastructure.statemachine.enums;
 
 /**
- * 订单子状态枚举
- * 定义订单在各个主状态下的详细子状态
+ * 订单子状态枚举 定义订单在各个主状态下的详细子状态
  *
  * @author Spud
  * @date 2025/9/29

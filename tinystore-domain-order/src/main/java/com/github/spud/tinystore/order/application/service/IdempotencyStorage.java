@@ -1,5 +1,6 @@
 package com.github.spud.tinystore.order.application.service;
 
+import com.github.spud.tinystore.order.application.result.SubmitOrderResult;
 import com.github.spud.tinystore.order.interfaces.dto.response.CreateOrderResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 
@@ -14,12 +15,12 @@ public class IdempotencyStorage {
 		return false;
 	}
 
-	public CreateOrderResponse getResponse(String idempotencyKey,
+	public SubmitOrderResult getResponse(String idempotencyKey,
 		Class<CreateOrderResponse> createOrderResponseClass) {
 		return null;
 	}
 
 	public void save(String idempotencyKey, CreateOrderResponse response, int i) {
-		
+
 	}
 }

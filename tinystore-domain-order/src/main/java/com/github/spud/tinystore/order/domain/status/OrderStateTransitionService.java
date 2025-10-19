@@ -3,8 +3,7 @@ package com.github.spud.tinystore.order.domain.status;
 import org.springframework.stereotype.Component;
 
 /**
- * 核心订单状态转换服务（精简版，仅用于当前重构测试）
- * 说明：未引入订单实体，纯函数式状态机。
+ * 核心订单状态转换服务（精简版，仅用于当前重构测试） 说明：未引入订单实体，纯函数式状态机。
  *
  * <h2>接口与状态机方法映射关系</h2>
  *
@@ -66,7 +65,8 @@ public class OrderStateTransitionService {
 	 * @param isFinalPayment 是否为尾款支付
 	 * @return 新状态
 	 */
-	public CoreFlowStatus paymentSuccess(CoreFlowStatus current, boolean isDeposit, boolean isFinalPayment) {
+	public CoreFlowStatus paymentSuccess(CoreFlowStatus current, boolean isDeposit,
+		boolean isFinalPayment) {
 		if (current == CoreFlowStatus.PENDING_PAYMENT) {
 			if (isDeposit) {
 				return CoreFlowStatus.PENDING_FINAL_PAYMENT;
@@ -82,9 +82,8 @@ public class OrderStateTransitionService {
 	/**
 	 * 转为待履约状态
 	 * <p>
-	 * 触发接口：
-	 * - POST /order/merchant/order/receive (商家接单)
-	 * - POST /order/internal/auto/await-fulfillment (自动转换)
+	 * 触发接口： - POST /order/merchant/order/receive (商家接单) - POST /order/internal/auto/await-fulfillment
+	 * (自动转换)
 	 *
 	 * @param current 当前状态
 	 * @return 新状态
@@ -114,9 +113,8 @@ public class OrderStateTransitionService {
 	/**
 	 * 妥投/签收处理
 	 * <p>
-	 * 触发接口：
-	 * - POST /order/internal/logistics/delivered (物流回调)
-	 * - POST /order/user/confirm-receipt (用户确认收货)
+	 * 触发接口： - POST /order/internal/logistics/delivered (物流回调) - POST /order/user/confirm-receipt
+	 * (用户确认收货)
 	 *
 	 * @param current             当前状态
 	 * @param afterSaleWindowOpen 是否开启售后观察期
@@ -133,9 +131,7 @@ public class OrderStateTransitionService {
 	/**
 	 * 无售后自动完成
 	 * <p>
-	 * 触发接口：
-	 * - POST /order/internal/auto/complete (定时任务)
-	 * - POST /order/user/confirm-receipt (用户确认收货后)
+	 * 触发接口： - POST /order/internal/auto/complete (定时任务) - POST /order/user/confirm-receipt (用户确认收货后)
 	 *
 	 * @param current 当前状态
 	 * @return 新状态
@@ -180,9 +176,8 @@ public class OrderStateTransitionService {
 	/**
 	 * 申请取消
 	 * <p>
-	 * 触发接口：
-	 * - POST /order/user/cancel/apply (用户申请)
-	 * - POST /order/internal/timeout/unpaid-cancel (超时取消)
+	 * 触发接口： - POST /order/user/cancel/apply (用户申请) - POST /order/internal/timeout/unpaid-cancel
+	 * (超时取消)
 	 *
 	 * @param current 当前状态
 	 * @return 新状态
@@ -197,9 +192,8 @@ public class OrderStateTransitionService {
 	/**
 	 * 取消审批通过
 	 * <p>
-	 * 触发接口：
-	 * - POST /order/merchant/cancel/approve (商家同意)
-	 * - POST /order/internal/timeout/unpaid-cancel (超时自动取消)
+	 * 触发接口： - POST /order/merchant/cancel/approve (商家同意) - POST /order/internal/timeout/unpaid-cancel
+	 * (超时自动取消)
 	 *
 	 * @param current 当前状态
 	 * @return 新状态
