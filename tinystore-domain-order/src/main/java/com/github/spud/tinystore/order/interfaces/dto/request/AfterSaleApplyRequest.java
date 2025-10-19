@@ -4,13 +4,12 @@ import com.github.spud.tinystore.order.application.command.user.AfterSaleApplyCo
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * 售后申请请求DTO
@@ -22,6 +21,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AfterSaleApplyRequest {
+
 	/**
 	 * 订单ID
 	 */
@@ -64,7 +64,8 @@ public class AfterSaleApplyRequest {
 	private String remark;
 
 	public AfterSaleApplyCommand toCommand(String userId) {
-		return new AfterSaleApplyCommand(orderId, userId, type, reasonCode, amount, items, idempotencyKey, remark);
+		return new AfterSaleApplyCommand(orderId, userId, type, reasonCode, amount, items,
+			idempotencyKey, remark);
 	}
 
 	/**
@@ -83,6 +84,7 @@ public class AfterSaleApplyRequest {
 	@NoArgsConstructor
 	@AllArgsConstructor
 	public static class AfterSaleItem {
+
 		private String skuId;
 		private Integer quantity;
 		private BigDecimal amount;

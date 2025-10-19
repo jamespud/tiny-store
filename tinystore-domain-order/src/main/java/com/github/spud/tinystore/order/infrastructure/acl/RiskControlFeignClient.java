@@ -15,10 +15,17 @@ public interface RiskControlFeignClient {
 
 	RiskCheckResponse checkOrderRisk(RiskCheckRequest request);
 
+	/**
+	 * 多商户订单风控检查
+	 *
+	 * @param build
+	 * @return
+	 */
 	MultiShopRiskCheckResponse checkMultiShopOrderRisk(MultiShopRiskCheckRequest build);
 
 	@Data
 	class MultiShopRiskCheckResponse {
+
 		private boolean pass;
 		private Object reason;
 	}
@@ -26,8 +33,10 @@ public interface RiskControlFeignClient {
 	@Builder
 	class MultiShopRiskCheckRequest {
 
+		// TODO: 
 		private String userId;
 		private Integer merchantCount;
+		private List<String> merchantIds;
 		private List<SkuRiskDTO> skuList;
 		private String addressId;
 	}
@@ -35,6 +44,7 @@ public interface RiskControlFeignClient {
 	@Data
 	@AllArgsConstructor
 	class SkuRiskDTO {
+
 		private String skuId;
 		private Integer quantity;
 	}
@@ -49,6 +59,7 @@ public interface RiskControlFeignClient {
 
 	@Data
 	class RiskCheckResponse {
+
 		private boolean pass;
 		private Object reason;
 	}

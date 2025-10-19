@@ -5,7 +5,6 @@ import com.github.spud.tinystore.order.domain.event.OrderPaidEvent;
 import com.github.spud.tinystore.order.domain.event.OrderStatusChangedEvent;
 import com.github.spud.tinystore.order.infrastructure.statemachine.enums.OrderMainStatus;
 import com.github.spud.tinystore.order.infrastructure.statemachine.enums.OrderSubStatus;
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,7 +50,7 @@ public class OrderAggregate {
 	private List<OrderItem> orderItems;
 	private List<Coupon> coupons;
 	private List<Discount> discounts;
-	
+
 	private List<CouponAllocation> couponAllocations;
 	private List<DiscountAllocation> discountAllocations;
 	private PricingSummary pricingSummary;
@@ -232,7 +231,7 @@ public class OrderAggregate {
 	public static class PaymentSuccessArgs {
 
 		private String paymentId;
-		private BigDecimal amount;
+		private Money amount;
 		private boolean isDeposit;
 		private boolean isFinalPayment;
 	}
@@ -249,6 +248,7 @@ public class OrderAggregate {
 	@Builder
 	public static class DeliveredArgs {
 
+		// TODO: 
 		private String shipmentInfo;
 		private boolean afterSaleWindowOpen;
 	}

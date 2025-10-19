@@ -1,8 +1,7 @@
 package com.github.spud.tinystore.order.infrastructure.statemachine.enums;
 
 /**
- * 订单状态机事件枚举
- * 定义触发状态变迁的各种事件
+ * 订单状态机事件枚举 定义触发状态变迁的各种事件
  *
  * @author Spud
  * @date 2025/9/29

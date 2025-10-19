@@ -6,7 +6,8 @@ package com.github.spud.tinystore.order.interfaces.dto;
  * @author Spud
  * @date 2025/9/19
  */
-public record Product(String shopId, String skuId, String title, String specJson, long unitPriceCents,
-                      String currency) {
+public record Product(String shopId, String skuId, String title, String specJson,
+											long unitPriceCents,
+											String currency) {
 
 }

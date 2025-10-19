@@ -1,8 +1,8 @@
 package com.github.spud.tinystore.order.domain.status;
 
 /**
- * Derived status views for different user interfaces
- * Provides simplified, user-friendly status representation
+ * Derived status views for different user interfaces Provides simplified, user-friendly status
+ * representation
  *
  * @author Spud
  * @date 2025/9/6
@@ -65,6 +65,7 @@ public enum DerivedStatusView {
 	 * Context for deriving status
 	 */
 	public static class DeriveContext {
+
 		private final CoreFlowStatus coreFlowStatus;
 		private final PaymentStatus paymentStatus;
 		private final CancellationStatus cancellationStatus;
@@ -73,11 +74,11 @@ public enum DerivedStatusView {
 		private final boolean hasException;
 
 		public DeriveContext(CoreFlowStatus coreFlowStatus,
-		                     PaymentStatus paymentStatus,
-		                     CancellationStatus cancellationStatus,
-		                     AfterSaleStatus afterSaleStatus,
-		                     ViewType viewType,
-		                     boolean hasException) {
+			PaymentStatus paymentStatus,
+			CancellationStatus cancellationStatus,
+			AfterSaleStatus afterSaleStatus,
+			ViewType viewType,
+			boolean hasException) {
 			this.coreFlowStatus = coreFlowStatus;
 			this.paymentStatus = paymentStatus;
 			this.cancellationStatus = cancellationStatus;

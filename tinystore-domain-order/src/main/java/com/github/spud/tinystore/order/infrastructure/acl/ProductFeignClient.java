@@ -3,7 +3,6 @@ package com.github.spud.tinystore.order.infrastructure.acl;
 import java.util.List;
 import java.util.Map;
 import lombok.Data;
-import lombok.Getter;
 import org.springframework.cloud.openfeign.FeignClient;
 
 /**

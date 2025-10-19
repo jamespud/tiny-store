@@ -9,6 +9,7 @@ import lombok.Data;
 @Data
 @Builder
 public class RefundSucceededCommand {
+
 	private String orderId;
 	private String refundId;
 	private String idempotencyKey;

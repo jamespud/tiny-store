@@ -4,8 +4,8 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Status Priority Matrix for deriving single status from multiple status dimensions
- * Implements priority-based rules to resolve conflicts between different status domains
+ * Status Priority Matrix for deriving single status from multiple status dimensions Implements
+ * priority-based rules to resolve conflicts between different status domains
  *
  * @author Spud
  * @date 2025/9/6
@@ -72,7 +72,8 @@ public class StatusPriorityMatrix {
 	/**
 	 * Derive status primarily from payment status
 	 */
-	private static DerivedStatusView deriveFromPaymentStatus(DerivedStatusView.DeriveContext context) {
+	private static DerivedStatusView deriveFromPaymentStatus(
+		DerivedStatusView.DeriveContext context) {
 		return switch (context.getPaymentStatus()) {
 			case PAYMENT_PENDING -> DerivedStatusView.WAITING_FOR_PAYMENT;
 			case PAYMENT_PROCESSING -> DerivedStatusView.PAYMENT_PROCESSING;
@@ -116,7 +117,7 @@ public class StatusPriorityMatrix {
 	 * Get all possible status transitions for a given current status and view
 	 */
 	public static List<DerivedStatusView> getPossibleTransitions(DerivedStatusView current,
-	                                                             DerivedStatusView.ViewType viewType) {
+		DerivedStatusView.ViewType viewType) {
 		return switch (current) {
 			case WAITING_FOR_PAYMENT -> Arrays.asList(
 				DerivedStatusView.PAYMENT_PROCESSING,
@@ -163,7 +164,7 @@ public class StatusPriorityMatrix {
 	 * Check if a status transition is valid
 	 */
 	public static boolean isValidTransition(DerivedStatusView from, DerivedStatusView to,
-	                                        DerivedStatusView.ViewType viewType) {
+		DerivedStatusView.ViewType viewType) {
 		List<DerivedStatusView> validTransitions = getPossibleTransitions(from, viewType);
 		return validTransitions.contains(to);
 	}
@@ -172,7 +173,7 @@ public class StatusPriorityMatrix {
 	 * Get status description with context
 	 */
 	public static String getStatusDescription(DerivedStatusView status,
-	                                          DerivedStatusView.ViewType viewType) {
+		DerivedStatusView.ViewType viewType) {
 		return switch (viewType) {
 			case USER_VIEW -> getUserFriendlyDescription(status);
 			case MERCHANT_VIEW -> getMerchantDescription(status);

@@ -1,11 +1,10 @@
 package com.github.spud.tinystore.order.domain.event;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-
-import java.math.BigDecimal;
 
 /**
  * Order Payment Succeeded Domain Event
@@ -25,7 +24,7 @@ public class OrderPaymentSucceededEvent extends OrderDomainBaseEvent {
 
 	@Builder
 	public OrderPaymentSucceededEvent(String orderId, String paymentId, BigDecimal amount,
-	                                  boolean isDeposit, boolean isFinalPayment) {
+		boolean isDeposit, boolean isFinalPayment) {
 		this.orderId = orderId;
 		this.paymentId = paymentId;
 		this.amount = amount;

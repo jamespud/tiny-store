@@ -4,18 +4,16 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.spud.tinystore.order.infrastructure.persistence.po.OrderIdempotencyPO;
 import com.github.spud.tinystore.order.infrastructure.persistence.repository.OrderIdempotencyRepository;
+import java.time.OffsetDateTime;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
-import java.util.Optional;
-
 /**
- * 订单幂等性服务
- * 基于 requestId 确保接口调用的幂等性
+ * 订单幂等性服务 基于 requestId 确保接口调用的幂等性
  */
 @Slf4j
 @Service
@@ -35,8 +33,8 @@ public class OrderIdempotencyService {
 	 */
 	@Transactional
 	public Optional<IdempotencyResult> checkAndCreateIdempotency(String requestId,
-	                                                             String orderNo,
-	                                                             String operation) {
+		String orderNo,
+		String operation) {
 		// 查找有效的幂等性记录
 		Optional<OrderIdempotencyPO> existingRecord =
 			idempotencyRepository.findValidIdempotencyRecord(requestId, OffsetDateTime.now());
@@ -160,6 +158,7 @@ public class OrderIdempotencyService {
 	 * 幂等性检查结果
 	 */
 	public static class IdempotencyResult {
+
 		private final boolean isDuplicate;
 		private final String orderNo;
 		private final String responseData;

@@ -1,19 +1,22 @@
 package com.github.spud.tinystore.order.interfaces.filter;
 
 import com.github.spud.tinystore.order.interfaces.util.IdempotencyHelper;
-import jakarta.servlet.*;
+import jakarta.servlet.Filter;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.FilterConfig;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-import java.io.IOException;
-
 /**
- * 幂等性和关联ID处理过滤器
- * 自动提取请求头并设置到 MDC 中，用于日志追踪
+ * 幂等性和关联ID处理过滤器 自动提取请求头并设置到 MDC 中，用于日志追踪
  *
  * @author Spud
  * @date 2025/9/22

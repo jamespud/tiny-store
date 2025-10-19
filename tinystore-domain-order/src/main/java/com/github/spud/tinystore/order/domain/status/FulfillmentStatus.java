@@ -3,8 +3,7 @@ package com.github.spud.tinystore.order.domain.status;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
- * 履约细分状态域（FULFILLMENT）
- * 仅在核心状态 AWAITING_FULFILLMENT / FULFILLING / AFTER_SALE(换货再发货阶段) 相关
+ * 履约细分状态域（FULFILLMENT） 仅在核心状态 AWAITING_FULFILLMENT / FULFILLING / AFTER_SALE(换货再发货阶段) 相关
  */
 public enum FulfillmentStatus {
 	NONE("NONE", "无"),

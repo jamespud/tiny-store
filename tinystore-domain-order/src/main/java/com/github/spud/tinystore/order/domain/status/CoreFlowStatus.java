@@ -3,8 +3,7 @@ package com.github.spud.tinystore.order.domain.status;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
- * 核心订单主生命周期状态（CORE_FLOW）
- * 终态集合: COMPLETED, CANCELLED, CLOSED, REFUNDED
+ * 核心订单主生命周期状态（CORE_FLOW） 终态集合: COMPLETED, CANCELLED, CLOSED, REFUNDED
  */
 public enum CoreFlowStatus {
 	CREATED("CREATED", "已创建", false, "CORE_FLOW"),

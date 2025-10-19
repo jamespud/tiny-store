@@ -1,11 +1,9 @@
 package com.github.spud.tinystore.order.application.command;
 
 import com.github.spud.tinystore.order.interfaces.dto.request.PaymentSuccessRequest;
+import java.math.BigDecimal;
 import lombok.AllArgsConstructor;
 import lombok.Data;
-
-import java.math.BigDecimal;
-import java.util.UUID;
 
 /**
  * 支付成功命令
@@ -16,10 +14,11 @@ import java.util.UUID;
 @Data
 @AllArgsConstructor
 public class PaymentSuccessCommand {
+
 	/**
 	 * 订单ID
 	 */
-	private UUID orderId;
+	private String orderId;
 
 	/**
 	 * 支付类型

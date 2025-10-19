@@ -3,7 +3,6 @@ package com.github.spud.tinystore.order.domain.service;
 import com.github.spud.tinystore.order.domain.model.Money;
 import com.github.spud.tinystore.order.domain.model.SubOrder;
 import com.github.spud.tinystore.order.domain.model.SubOrderItem;
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -65,7 +64,7 @@ public class MultiShopAmountCalculateService {
 				);
 
 				// 3.5 更新子订单信息
-				return sub.toBuilder()
+				return SubOrder.builder()
 					.subPlatformDiscount(subPlatformDiscount)
 					.subPayAmount(subPayAmount)
 					.subItems(itemsWithDiscount)
@@ -91,10 +90,11 @@ public class MultiShopAmountCalculateService {
 				adjustedPayAmount = Money.of(0);
 			}
 			// 更新最后一个子订单
-			subOrdersWithAllocated.set(subOrdersWithAllocated.size() - 1, lastSub.toBuilder()
-				.subPlatformDiscount(adjustedDiscount)
-				.subPayAmount(adjustedPayAmount)
-				.build());
+			subOrdersWithAllocated.set(subOrdersWithAllocated.size() - 1,
+				SubOrder.builder()
+					.subPlatformDiscount(adjustedDiscount)
+					.subPayAmount(adjustedPayAmount)
+					.build());
 		}
 
 		return subOrdersWithAllocated;
@@ -121,7 +121,7 @@ public class MultiShopAmountCalculateService {
 				Money itemDiscount = Money.of(
 					(long) (itemRatio * subPlatformDiscount.amount())
 				);
-				return item.toBuilder()
+				return SubOrderItem.builder()
 					.itemPlatformDiscount(itemDiscount)
 					.build();
 			})
@@ -131,12 +131,12 @@ public class MultiShopAmountCalculateService {
 		Money itemDiscountTotal = itemsWithDiscount.stream()
 			.map(SubOrderItem::getItemPlatformDiscount)
 			.reduce(Money.of(0), Money::add);
-		long itemDiff = subPlatformDiscount.amount() -itemDiscountTotal.amount();
+		long itemDiff = subPlatformDiscount.amount() - itemDiscountTotal.amount();
 		if (itemDiff != 0) {
 			SubOrderItem lastItem = itemsWithDiscount.get(itemsWithDiscount.size() - 1);
 			Money adjustedItemDiscount = Money.of(
 				lastItem.getItemPlatformDiscount().amount() + itemDiff);
-			itemsWithDiscount.set(itemsWithDiscount.size() - 1, lastItem.toBuilder()
+			itemsWithDiscount.set(itemsWithDiscount.size() - 1, SubOrderItem.builder()
 				.itemPlatformDiscount(adjustedItemDiscount)
 				.build());
 		}

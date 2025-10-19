@@ -13,15 +13,16 @@ public interface LogisticsFeignClient {
 	CalculateFreightResponse calculateMerchantFreight(CalculateMerchantFreightRequest request);
 
 	@Builder
-	class CalculateMerchantFreightRequest{
+	class CalculateMerchantFreightRequest {
+
 		private String merchantId;
 		private String addressId;
 		private double totalWeight;
 		private double freeFreightThreshold;
 		private double baseFreight;
 	}
-	
-	class CalculateFreightResponse{
+
+	class CalculateFreightResponse {
 
 		private int freightAmount;
 

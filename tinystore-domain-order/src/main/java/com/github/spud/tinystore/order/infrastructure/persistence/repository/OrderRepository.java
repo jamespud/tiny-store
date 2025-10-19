@@ -1,20 +1,19 @@
 package com.github.spud.tinystore.order.infrastructure.persistence.repository;
 
-import com.github.spud.tinystore.order.domain.model.Order;
+import com.github.spud.tinystore.order.domain.model.OrderItem;
+import java.time.OffsetDateTime;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.query.Param;
 
-import java.time.OffsetDateTime;
-import java.util.Optional;
-import java.util.UUID;
-
 /**
  * @author Spud
  * @date 2025/8/13
  */
-public interface OrderRepository extends CrudRepository<Order, UUID> {
+public interface OrderRepository extends CrudRepository<OrderItem, UUID> {
 
 	/**
 	 * 根据ID和用户ID查询订单
@@ -23,7 +22,7 @@ public interface OrderRepository extends CrudRepository<Order, UUID> {
 	 * @param userId 用户ID
 	 * @return 订单对象
 	 */
-	Optional<Order> findByIdAndUserId(UUID id, UUID userId);
+	Optional<OrderItem> findByIdAndUserId(String id, UUID userId);
 
 	/**
 	 * 使用乐观锁更新订单状态
@@ -37,9 +36,9 @@ public interface OrderRepository extends CrudRepository<Order, UUID> {
 	@Modifying
 	@Query("UPDATE Order o SET o.paymentStatus = :newStatus, o.version = o.version + 1, o.updatedAt = :updatedAt WHERE o.id = :id AND o.version = :expectedVersion")
 	int updateStatusWithVersion(@Param("id") UUID id,
-	                            @Param("expectedVersion") Integer expectedVersion,
-	                            @Param("newStatus") String newStatus,
-	                            @Param("updatedAt") OffsetDateTime updatedAt);
+		@Param("expectedVersion") Integer expectedVersion,
+		@Param("newStatus") String newStatus,
+		@Param("updatedAt") OffsetDateTime updatedAt);
 
 	/**
 	 * 取消订单：基于版本与当前状态（主状态字段）
@@ -50,11 +49,11 @@ public interface OrderRepository extends CrudRepository<Order, UUID> {
 			+
 			"WHERE o.id = :id AND o.version = :expectedVersion AND o.orderStatus = :expectedStatus")
 	int cancelWithVersion(@Param("id") UUID id,
-	                      @Param("expectedVersion") Integer expectedVersion,
-	                      @Param("expectedStatus") String expectedStatus,
-	                      @Param("targetStatus") String targetStatus,
-	                      @Param("reason") String reason,
-	                      @Param("cancelTime") OffsetDateTime cancelTime,
-	                      @Param("updatedAt") OffsetDateTime updatedAt);
+		@Param("expectedVersion") Integer expectedVersion,
+		@Param("expectedStatus") String expectedStatus,
+		@Param("targetStatus") String targetStatus,
+		@Param("reason") String reason,
+		@Param("cancelTime") OffsetDateTime cancelTime,
+		@Param("updatedAt") OffsetDateTime updatedAt);
 
 }

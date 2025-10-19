@@ -1,10 +1,9 @@
 package com.github.spud.tinystore.order.interfaces.vo;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-
 import java.time.LocalDateTime;
 import java.util.List;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 
 /**
  * @author Spud
@@ -30,7 +29,7 @@ public class SettlementPreviewVO {
 	 */
 	// TODO: 优惠券
 	public record Snapshot(long productId, long skuId, String title, String spec, long unitPrice,
-	                       int quantity, long lineTotal) {
+												 int quantity, long lineTotal) {
 
 	}
 

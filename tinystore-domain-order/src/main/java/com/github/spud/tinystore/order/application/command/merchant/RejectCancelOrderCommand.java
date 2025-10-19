@@ -12,6 +12,7 @@ import lombok.Data;
 @Data
 @AllArgsConstructor
 public class RejectCancelOrderCommand {
+
 	/**
 	 * 订单ID
 	 */

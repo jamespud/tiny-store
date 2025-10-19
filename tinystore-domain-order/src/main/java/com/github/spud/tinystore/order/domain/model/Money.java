@@ -5,8 +5,7 @@ import com.github.spud.tinystore.order.domain.exception.OrderDomainException;
 /**
  * 金额值对象
  * <p>
- * 表示货币金额，默认币种为 CNY（人民币）
- * 金额单位为分（cents），避免浮点精度问题
+ * 表示货币金额，默认币种为 CNY（人民币） 金额单位为分（cents），避免浮点精度问题
  *
  * @param amount   金额，单位分
  * @param currency 币种，ISO 4217 标准，默认 CNY
@@ -124,7 +123,7 @@ public record Money(long amount, String currency) {
 	public Money subtract(Money money) {
 		return this.minus(money);
 	}
-	
+
 	public String currency() {
 		return currency;
 	}

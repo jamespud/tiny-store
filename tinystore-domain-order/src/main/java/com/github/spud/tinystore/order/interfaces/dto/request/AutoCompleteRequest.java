@@ -8,8 +8,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.UUID;
-
 /**
  * 自动完成订单请求DTO
  *
@@ -20,11 +18,12 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AutoCompleteRequest {
+
 	/**
 	 * 订单ID
 	 */
 	@NotNull(message = "订单ID不能为空")
-	private UUID orderId;
+	private String orderId;
 
 	/**
 	 * 宽限天数

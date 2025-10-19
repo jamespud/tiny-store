@@ -10,6 +10,6 @@ import org.springframework.stereotype.Service;
 public class NotifyService {
 
 	public void sendOrderCreateNotice(String userId, String mainOrderNo, long amount, int size) {
-		
+
 	}
 }

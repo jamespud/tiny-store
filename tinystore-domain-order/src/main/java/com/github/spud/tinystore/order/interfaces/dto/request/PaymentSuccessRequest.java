@@ -4,12 +4,10 @@ import com.github.spud.tinystore.order.application.command.PaymentSuccessCommand
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.math.BigDecimal;
-import java.util.UUID;
 
 /**
  * 支付成功回调请求DTO
@@ -21,11 +19,12 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class PaymentSuccessRequest {
+
 	/**
 	 * 订单ID
 	 */
 	@NotNull(message = "订单ID不能为空")
-	private UUID orderId;
+	private String orderId;
 
 	/**
 	 * 支付类型: DEPOSIT-定金, FINAL-尾款, FULL-全款

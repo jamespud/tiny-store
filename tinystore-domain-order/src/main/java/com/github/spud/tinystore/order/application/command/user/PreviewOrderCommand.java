@@ -30,7 +30,8 @@ public class PreviewOrderCommand {
 			.collect(Collectors.toSet());
 	}
 
-	public record MerchantSkuDTO(String merchantId, List<SkuItemDTO> skuItems, String merchantCouponId) {
+	public record MerchantSkuDTO(String merchantId, List<SkuItemDTO> skuItems,
+															 String merchantCouponId) {
 
 		public record SkuItemDTO(String skuId, Integer quantity) {
 

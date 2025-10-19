@@ -4,10 +4,9 @@ import com.github.spud.tinystore.order.domain.model.Address;
 import com.github.spud.tinystore.order.domain.model.Money;
 import com.github.spud.tinystore.order.domain.status.AfterSaleCaseType;
 import com.github.spud.tinystore.order.domain.status.AfterSaleScope;
+import java.util.List;
 import lombok.Builder;
 import lombok.Data;
-
-import java.util.List;
 
 /**
  * 申请售后命令
@@ -59,8 +58,7 @@ public class ApplyAfterSaleCommand {
 	private String reasonText;
 
 	/**
-	 * @deprecated 保留字段，向后兼容
-	 * 使用 reasonCode 和 reasonText 替代
+	 * @deprecated 保留字段，向后兼容 使用 reasonCode 和 reasonText 替代
 	 */
 	@Deprecated(since = "2025-09-22", forRemoval = true)
 	private String reason;
@@ -86,6 +84,7 @@ public class ApplyAfterSaleCommand {
 	@Data
 	@Builder
 	public static class Item {
+
 		/**
 		 * 订单行ID（必填）
 		 */
@@ -103,6 +102,7 @@ public class ApplyAfterSaleCommand {
 	@Data
 	@Builder
 	public static class ReturnLogisticsInfo {
+
 		/**
 		 * 承运商
 		 */

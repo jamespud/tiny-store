@@ -1,13 +1,12 @@
 package com.github.spud.tinystore.order.domain.service.pricing.spi;
 
 import com.github.spud.tinystore.order.domain.model.Product;
-import lombok.Data;
-import org.hibernate.cache.spi.support.AbstractReadWriteAccess.Item;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import lombok.Data;
+import org.hibernate.cache.spi.support.AbstractReadWriteAccess.Item;
 
 @Data
 public class PricingContext {

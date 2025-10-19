@@ -1,8 +1,5 @@
 package com.github.spud.tinystore.order.application.command.user;
 
-import com.github.spud.tinystore.order.application.command.user.PreviewOrderCommand.MerchantSkuDTO.SkuItemDTO;
-import java.util.Set;
-import java.util.stream.Collectors;
 import lombok.Builder;
 import lombok.Getter;
 

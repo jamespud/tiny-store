@@ -4,13 +4,15 @@ import com.github.spud.tinystore.order.domain.enums.MainOrderStatus;
 import com.github.spud.tinystore.order.domain.enums.SubOrderStatus;
 import com.github.spud.tinystore.order.domain.event.DomainEventPublisher;
 import com.github.spud.tinystore.order.domain.event.MultiShopOrderCreatedEvent;
-import com.github.spud.tinystore.order.domain.model.Money;
 import com.github.spud.tinystore.order.domain.model.MainOrder;
+import com.github.spud.tinystore.order.domain.model.Money;
 import com.github.spud.tinystore.order.domain.model.SubOrder;
 import com.github.spud.tinystore.order.domain.model.SubOrderItem;
+import com.github.spud.tinystore.order.domain.model.vo.OrderNo;
 import com.github.spud.tinystore.order.domain.repository.MultiShopAmountCalculateService;
 import com.github.spud.tinystore.order.domain.repository.MultiShopOrderRepository;
 import com.github.spud.tinystore.order.domain.service.TenantContext;
+import com.github.spud.tinystore.order.domain.status.OrderStatus;
 import com.github.spud.tinystore.order.infrastructure.acl.InventoryFeignClient;
 import com.github.spud.tinystore.order.infrastructure.acl.LogisticsFeignClient;
 import com.github.spud.tinystore.order.infrastructure.acl.MerchantFeignClient;
@@ -65,7 +67,7 @@ public class UserOrderApplicationService {
 	 * 多店铺创建订单核心流程（事务保证：主订单+子订单要么全成功，要么全回滚）
 	 */
 	@Transactional(rollbackOn = Exception.class)
-	public CreateOrderResponse createOrder(
+	public CreateOrderResponse submitOrder(
 		CreateOrderRequest request, String idempotencyKey
 	) throws Exception {
 		String tenantId = TenantContext.getTenantId();
@@ -85,7 +87,7 @@ public class UserOrderApplicationService {
 			RiskControlFeignClient.MultiShopRiskCheckRequest.builder()
 				.userId(userId)
 				.merchantCount(request.getMerchantSkuGroups().size())
-				.skuList(this.flattenSkuList(request.getMerchantSkuGroups())) // 扁平化所有SKU用于风控
+				.skuList(this.flattenSkuList(request.getMerchantSkuGroups()))
 				.addressId(request.getAddressId())
 				.build()
 		);
@@ -240,19 +242,19 @@ public class UserOrderApplicationService {
 				// 5.3 暂存子订单基础信息（平台优惠分摊后续统一处理）
 				subOrderList.add(SubOrder.builder()
 					.id(UUID.randomUUID().toString())
-					.subOrderNo(
-						"DO_S_" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 6))
+					.orderNo(
+						OrderNo.of("DO_S_" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 6)))
 					.mainOrderNo(null) // 主订单号后续生成
 					.merchantId(merchantId)
 					.merchantName(merchantDTO.getMerchantName())
-					.subStatus(SubOrderStatus.SUB_PENDING_PAY)
+					.status(OrderStatus.CREATED)
 					.subGoodsTotal(subGoodsTotal)
 					.subMerchantDiscount(subMerchantDiscount)
 					.subPlatformDiscount(Money.of(0)) // 待分摊
 					.subFreight(subFreight)
 					.subPayAmount(Money.of(0)) // 待计算（含平台优惠分摊）
 					.subItems(subItemList)
-					.merchantCouponId(merchantCouponId)
+//					.merchantCouponId(merchantCouponId)
 					.stockPreOccupyIds(merchantStockPreOccupyMap.get(merchantId))
 					.couponLockId(this.buildSubCouponLockId(platformCouponResponse, merchantCouponResp))
 					.build());
@@ -300,7 +302,8 @@ public class UserOrderApplicationService {
 				PaymentFeignClient.CreateMergePayRequest.builder()
 					.mainOrderNo(mainOrderNo)
 					.subOrderNos(subOrdersWithDiscount.stream()
-						.map(SubOrder::getSubOrderNo)
+						.map(SubOrder::getOrderNo)
+						.map(OrderNo::value)
 						.collect(Collectors.toList())
 					)
 					.userId(userId)
@@ -323,7 +326,7 @@ public class UserOrderApplicationService {
 				userId,
 				subOrdersWithDiscount.stream()
 					.map(sub -> new MultiShopOrderCreatedEvent.SubOrderRef(
-						sub.getSubOrderNo(),
+						sub.getOrderNo().value(),
 						sub.getMerchantId(),
 						sub.getStockPreOccupyIds(),
 						sub.getCouponLockId()
@@ -503,11 +506,11 @@ public class UserOrderApplicationService {
 		List<CreateOrderResponse.SubOrderResponseDTO> subRespList = subOrders.stream()
 			.map(sub -> {
 				CreateOrderResponse.SubOrderResponseDTO subResp = new CreateOrderResponse.SubOrderResponseDTO();
-				subResp.setSubOrderNo(sub.getSubOrderNo());
+				subResp.setSubOrderNo(sub.getOrderNo());
 				subResp.setMerchantId(sub.getMerchantId());
 				subResp.setMerchantName(sub.getMerchantName());
 				subResp.setSubPayAmount(sub.getSubPayAmount());
-				subResp.setSubOrderStatus(sub.getSubStatus().name());
+				subResp.setSubOrderStatus(sub.getStatus().name());
 				subResp.setMerchantDiscount(sub.getSubMerchantDiscount());
 				subResp.setSubPlatformDiscount(sub.getSubPlatformDiscount());
 				subResp.setSubFreight(sub.getSubFreight());

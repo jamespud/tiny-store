@@ -14,7 +14,7 @@ public interface MerchantFeignClient {
 
 	MerchantBatchQueryResponse batchGetMerchantInfo(List<String> merchantIds);
 
-	class MerchantBatchQueryResponse{
+	class MerchantBatchQueryResponse {
 
 		private Map<String, MerchantDTO> merchantMap;
 
@@ -28,11 +28,11 @@ public interface MerchantFeignClient {
 	}
 
 	@Data
-	class MerchantDTO{
+	class MerchantDTO {
 
 		private String merchantName;
 		private long freeFreightThreshold;
 		private long baseFreight;
-		
+
 	}
 }

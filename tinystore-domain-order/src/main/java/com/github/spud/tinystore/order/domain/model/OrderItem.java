@@ -1,6 +1,9 @@
 package com.github.spud.tinystore.order.domain.model;
 
 import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
+import com.github.spud.tinystore.order.domain.model.OrderAggregate.DeliveredArgs;
+import com.github.spud.tinystore.order.domain.model.OrderAggregate.PaymentSuccessArgs;
+import com.github.spud.tinystore.order.domain.model.OrderAggregate.ShipArgs;
 import com.github.spud.tinystore.order.domain.model.line.LineItem;
 import com.github.spud.tinystore.order.domain.status.AfterSaleStatus;
 import com.github.spud.tinystore.order.domain.status.CancellationStatus;
@@ -23,6 +26,7 @@ import lombok.NoArgsConstructor;
  * @author Spud
  * @date 2025/9/6
  */
+@Builder
 @Getter
 @Data
 @NoArgsConstructor
@@ -38,7 +42,7 @@ public class OrderItem {
 	 * 订单号（关联Order）
 	 */
 	private String orderNo;
-	
+
 	/**
 	 * 买家ID
 	 */
@@ -525,5 +529,49 @@ public class OrderItem {
 		// TODO: 基于库存域的投影/事件判断履约完成状态
 		return fulfillmentStatus
 			== com.github.spud.tinystore.order.domain.status.FulfillmentStatus.DELIVERED;
+	}
+
+	public void onPaymentSuccess(PaymentSuccessArgs build) {
+		// TODO: 
+	}
+
+	public void onMerchantAccept() {
+		// TODO: 
+	}
+
+	public void onShip(ShipArgs build) {
+		// TODO: 
+	}
+
+	public void onDelivered(DeliveredArgs build) {
+		// TODO: 
+	}
+
+	public void onAutoComplete() {
+		// TODO:
+	}
+
+	public void requestAfterSale() {
+		// TODO:
+	}
+
+	public void onRefundSuccess() {
+		// TODO:
+	}
+
+	public void requestCancel() {
+		// TODO: 
+	}
+
+	public void approveCancel() {
+		// TODO: 
+	}
+
+	public void rejectCancel() {
+		// TODO:
+	}
+
+	public void onExchangeCompleted() {
+		// TODO: 
 	}
 }

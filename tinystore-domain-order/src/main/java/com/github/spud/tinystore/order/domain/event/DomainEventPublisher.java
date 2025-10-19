@@ -10,7 +10,6 @@ import org.springframework.cloud.openfeign.FeignClient;
 public class DomainEventPublisher {
 
 	public void publish(MultiShopOrderCreatedEvent multiShopOrderCreatedEvent) {
-		
-		
+
 	}
 }

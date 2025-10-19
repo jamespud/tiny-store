@@ -2,22 +2,18 @@ package com.github.spud.tinystore.order.infrastructure.event.outbox;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.spud.tinystore.domain.event.DomainEvent;
 import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
 import com.github.spud.tinystore.order.infrastructure.persistence.po.OrderOutboxEventPO;
 import com.github.spud.tinystore.order.infrastructure.persistence.repository.OrderOutboxEventRepository;
+import java.time.OffsetDateTime;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.UUID;
-
 /**
- * Outbox 事件服务
- * 实现 Outbox Pattern，确保事件的最终一致性
+ * Outbox 事件服务 实现 Outbox Pattern，确保事件的最终一致性
  */
 @Slf4j
 @Service
@@ -106,7 +102,7 @@ public class OutboxEventService {
 	 * @param eventIds 事件ID列表
 	 */
 	@Transactional
-	public void markEventsSent(List<UUID> eventIds) {
+	public void markEventsSent(List<String> eventIds) {
 		if (eventIds == null || eventIds.isEmpty()) {
 			return;
 		}
@@ -126,7 +122,7 @@ public class OutboxEventService {
 	 * @param eventId 事件ID
 	 */
 	@Transactional
-	public void markEventFailed(UUID eventId) {
+	public void markEventFailed(String eventId) {
 		outboxEventRepository.incrementRetryCount(eventId, OffsetDateTime.now());
 
 		// 如果重试次数过多，标记为失败

@@ -1,8 +1,7 @@
 package com.github.spud.tinystore.order.application.command.user;
 
-import lombok.AllArgsConstructor;
-
 import java.util.UUID;
+import lombok.AllArgsConstructor;
 
 /**
  * @author Spud

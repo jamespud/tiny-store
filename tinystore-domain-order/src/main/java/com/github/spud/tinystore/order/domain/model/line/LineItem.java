@@ -10,8 +10,7 @@ import lombok.NoArgsConstructor;
 /**
  * 订单行实体 - 权威数据来源
  * <p>
- * 作为订单明细的唯一事实来源，支持简单行与组合套装
- * 所有的数量、价格、分摊等计算以此为准
+ * 作为订单明细的唯一事实来源，支持简单行与组合套装 所有的数量、价格、分摊等计算以此为准
  */
 @Data
 @Builder
@@ -75,11 +74,11 @@ public class LineItem {
 		// 简单行和组件行按数量计算
 		this.lineTotal = this.unitPrice.multiply(this.quantity);
 
-
 		this.linePayable = this.lineTotal.subtract(this.lineDiscount);
 
 		if (!this.linePayable.nonNegative()) {
-			throw new OrderDomainException("Line payable cannot be negative after recalculation", "NEGATIVE_PAYABLE");
+			throw new OrderDomainException("Line payable cannot be negative after recalculation",
+				"NEGATIVE_PAYABLE");
 		}
 	}
 

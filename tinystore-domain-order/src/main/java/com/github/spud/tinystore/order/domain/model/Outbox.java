@@ -1,11 +1,10 @@
 package com.github.spud.tinystore.order.domain.model;
 
+import java.time.Instant;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.Instant;
 
 /**
  * Outbox 实体 - 用于确保事件发布的事务一致性
