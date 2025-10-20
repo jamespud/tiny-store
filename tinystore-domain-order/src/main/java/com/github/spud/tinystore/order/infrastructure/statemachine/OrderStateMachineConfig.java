@@ -3,7 +3,6 @@ package com.github.spud.tinystore.order.infrastructure.statemachine;
 import com.github.spud.tinystore.order.infrastructure.statemachine.enums.OrderEvent;
 import com.github.spud.tinystore.order.infrastructure.statemachine.enums.OrderMainStatus;
 import lombok.extern.slf4j.Slf4j;
-import org.antlr.v4.runtime.atn.Transition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.statemachine.config.EnableStateMachine;
@@ -13,6 +12,7 @@ import org.springframework.statemachine.config.builders.StateMachineTransitionCo
 import org.springframework.statemachine.listener.StateMachineListener;
 import org.springframework.statemachine.listener.StateMachineListenerAdapter;
 import org.springframework.statemachine.state.State;
+import org.springframework.statemachine.transition.Transition;
 
 /**
  * 订单状态机配置 基于 Spring State Machine 实现订单状态流转控制
@@ -179,7 +179,7 @@ public class OrderStateMachineConfig extends
 			public void eventNotAccepted(org.springframework.messaging.Message<OrderEvent> event) {
 				log.warn("State machine event not accepted: {}", event.getPayload());
 			}
-
+			
 			@Override
 			public void transitionStarted(Transition<OrderMainStatus, OrderEvent> transition) {
 				log.debug("State machine transition started: {} -> {} on event {}",

@@ -1,6 +1,6 @@
 package com.github.spud.tinystore.order.application.command.user;
 
-import com.github.spud.tinystore.order.application.command.user.PreviewOrderCommand.MerchantSkuDTO.SkuItemDTO;
+import com.github.spud.tinystore.order.application.command.user.ConfirmOrderCommand.MerchantSkuDTO.SkuItemDTO;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -13,7 +13,7 @@ import lombok.Getter;
  */
 @Builder
 @Getter
-public class PreviewOrderCommand {
+public class ConfirmOrderCommand {
 
 	String userId;
 
