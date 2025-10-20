@@ -1,7 +1,5 @@
 package com.github.spud.tinystore.order.domain.service;
 
-import com.github.spud.tinystore.order.domain.service.RiskControlService.MerchantRiskDto.OrderRiskCheckResponse;
-import com.github.spud.tinystore.order.infrastructure.acl.RiskControlFeignClient;
 import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -14,8 +12,6 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class RiskControlService {
-
-	RiskControlFeignClient riskControlFeignClient;
 
 	public OrderRiskCheckResponse checkOrderRisk(OrderRiskCheckRequest request) {
 		return null;
@@ -43,6 +39,7 @@ public class RiskControlService {
 
 	}
 
+	@Getter
 	@AllArgsConstructor
 	public static class SkuRiskDTO {
 		private String skuId;

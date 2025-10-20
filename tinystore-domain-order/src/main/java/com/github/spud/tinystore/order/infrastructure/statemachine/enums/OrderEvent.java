@@ -51,7 +51,9 @@ public enum OrderEvent {
 	/**
 	 * 支付超时
 	 */
-	PAYMENT_TIMEOUT("PAYMENT_TIMEOUT", "支付超时");
+	PAYMENT_TIMEOUT("PAYMENT_TIMEOUT", "支付超时"), 
+	
+	PAYMENT_FAILED("PAYMENT_FAILED", "支付失败"), FULFILLMENT_STARTED("FULFILLMENT_STARTED", "履约开始");
 
 	private final String code;
 	private final String label;

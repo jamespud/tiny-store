@@ -1,8 +1,7 @@
 package com.github.spud.tinystore.order.application.result;
 
-import com.github.spud.tinystore.order.application.result.PreviewOrderResult.OrderSummary;
-import com.github.spud.tinystore.order.application.result.PreviewOrderResult.ShopProductSnapshot;
-import com.github.spud.tinystore.order.domain.model.OrderAggregate;
+import com.github.spud.tinystore.order.application.result.ConfirmOrderResult.OrderSummary;
+import com.github.spud.tinystore.order.application.result.ConfirmOrderResult.ShopProductSnapshot;
 import com.github.spud.tinystore.order.domain.model.vo.OrderNo;
 import com.github.spud.tinystore.order.interfaces.dto.response.CreateOrderVO;
 import java.util.List;

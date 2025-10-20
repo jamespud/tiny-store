@@ -1,6 +1,5 @@
 package com.github.spud.tinystore.order.infrastructure.acl;
 
-import com.github.spud.tinystore.order.infrastructure.acl.PromotionFeignClient.SkuDTO;
 import java.math.BigDecimal;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -68,7 +67,7 @@ public interface PromotionClient {
 
 		public String skuId;
 		public Integer quantity;
-		
+
 	}
 
 	@Data

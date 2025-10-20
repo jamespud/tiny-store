@@ -2,7 +2,7 @@ package com.github.spud.tinystore.order.interfaces.rest;
 
 import com.github.spud.tinystore.infrastructure.service.UserIdProvider;
 import com.github.spud.tinystore.infrastructure.vo.Response;
-import com.github.spud.tinystore.order.application.command.user.PreviewOrderCommand;
+import com.github.spud.tinystore.order.application.command.user.ConfirmOrderCommand;
 import com.github.spud.tinystore.order.application.command.user.SubmitOrderCommand;
 import com.github.spud.tinystore.order.application.service.OrderApplicationService;
 import com.github.spud.tinystore.order.interfaces.dto.request.AfterSaleApplyRequest;
@@ -43,7 +43,7 @@ public class UserOrderController {
 
 	@PostMapping(value = "/submit/preview", consumes = MediaType.APPLICATION_JSON_VALUE)
 	public Response<PreviewOrderVO> orderPreview(@RequestBody PreviewOrderRequest previewRequest) {
-		PreviewOrderCommand cmd = previewRequest.toCommand(UserIdProvider.getCurrentUserId());
+		ConfirmOrderCommand cmd = previewRequest.toCommand(UserIdProvider.getCurrentUserId());
 		PreviewOrderVO vo = applicationService.orderPreview(cmd).toVO();
 		return Response.ok(vo);
 	}

@@ -1,6 +1,6 @@
 package com.github.spud.tinystore.order.interfaces.dto.request;
 
-import com.github.spud.tinystore.order.application.command.user.PreviewOrderCommand;
+import com.github.spud.tinystore.order.application.command.user.ConfirmOrderCommand;
 import com.github.spud.tinystore.order.interfaces.dto.ShopProductDto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -27,9 +27,9 @@ public class PreviewOrderRequest {
 	@NotBlank(message = "请求中缺少设备ID")
 	private String deviceId;
 
-	public PreviewOrderCommand toCommand(String userId) {
+	public ConfirmOrderCommand toCommand(String userId) {
 		// TODO: map to command
-		return PreviewOrderCommand
+		return ConfirmOrderCommand
 			.builder()
 			.build();
 	}

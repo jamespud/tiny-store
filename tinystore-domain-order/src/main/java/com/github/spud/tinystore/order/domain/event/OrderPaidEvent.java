@@ -1,5 +1,6 @@
 package com.github.spud.tinystore.order.domain.event;
 
+import com.github.spud.tinystore.order.domain.model.Money;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
@@ -20,11 +21,11 @@ import org.slf4j.MDC;
 public class OrderPaidEvent extends OrderDomainBaseEvent {
 
 	private final String paymentId;
-	private final BigDecimal amount;
+	private final Money amount;
 	private final boolean isDeposit;
 	private final boolean isFinalPayment;
 
-	public OrderPaidEvent(String orderNo, String paymentId, BigDecimal amount, boolean isDeposit,
+	public OrderPaidEvent(String orderNo, String paymentId, Money amount, boolean isDeposit,
 		boolean isFinalPayment) {
 		this.setEventId(UUID.randomUUID().toString().replace("-", ""));
 		this.setOrderId(orderNo);

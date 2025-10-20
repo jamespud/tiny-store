@@ -9,7 +9,7 @@ import lombok.Getter;
  */
 @Getter
 @Builder
-public class SubmitOrderCommand extends PreviewOrderCommand {
+public class SubmitOrderCommand extends ConfirmOrderCommand {
 
 	private final String idempotentKey;
 }

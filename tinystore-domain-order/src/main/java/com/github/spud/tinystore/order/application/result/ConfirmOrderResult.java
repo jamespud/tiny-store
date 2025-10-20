@@ -15,7 +15,7 @@ import lombok.Data;
  * @date 2025/9/3
  */
 @Data
-public class PreviewOrderResult {
+public class ConfirmOrderResult {
 
 	private List<ShopProductSnapshot> lines;
 
@@ -24,16 +24,16 @@ public class PreviewOrderResult {
 	// ttl in seconds
 	private long expireAt;
 
-	private PreviewOrderResult() {
+	private ConfirmOrderResult() {
 	}
 
-	public PreviewOrderResult(List<ShopProductSnapshot> lines, OrderSummary summary, long expireAt) {
+	public ConfirmOrderResult(List<ShopProductSnapshot> lines, OrderSummary summary, long expireAt) {
 		this.lines = lines;
 		this.summary = summary;
 		this.expireAt = expireAt;
 	}
 
-	public static PreviewOrderResult fromOrder(OrderAggregate order) {
+	public static ConfirmOrderResult fromOrder(OrderAggregate order) {
 		return null;
 	}
 
