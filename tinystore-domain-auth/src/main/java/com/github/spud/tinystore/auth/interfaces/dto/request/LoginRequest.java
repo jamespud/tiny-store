@@ -7,26 +7,27 @@ import jakarta.validation.constraints.NotNull;
  * @param credential The credential (e.g., password or OTP) used for authentication.
  * @param authType   The type of authentication being performed (e.g., "password", "otp").
  */
-public record LoginRequest(@NotNull String principal, @NotNull String credential, @NotNull AuthType authType) {
+public record LoginRequest(@NotNull String principal, @NotNull String credential,
+                           @NotNull AuthType authType) {
 
-	public enum AuthType {
-		PASSWORD(0),
-		OTP(1);
+  public enum AuthType {
+    PASSWORD(0),
+    OTP(1);
 
-		final int code;
+    final int code;
 
-		AuthType(int code) {
-			this.code = code;
-		}
+    AuthType(int code) {
+      this.code = code;
+    }
 
-		static AuthType of(int code) {
-			for (AuthType type : AuthType.values()) {
-				if (type.code == code) {
-					return type;
-				}
-			}
-			throw new IllegalArgumentException("Invalid AuthType code: " + code);
-		}
-	}
+    static AuthType of(int code) {
+      for (AuthType type : AuthType.values()) {
+        if (type.code == code) {
+          return type;
+        }
+      }
+      throw new IllegalArgumentException("Invalid AuthType code: " + code);
+    }
+  }
 
 }

@@ -6,4 +6,5 @@ public record LoadConsentCommand(String clientId,
                                  String state,
                                  List<String> requestedScopes,
                                  String username) {
+
 }

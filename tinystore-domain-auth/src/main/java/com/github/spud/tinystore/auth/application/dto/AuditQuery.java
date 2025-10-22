@@ -7,4 +7,5 @@ public record AuditQuery(String userId,
                          OffsetDateTime from,
                          OffsetDateTime to,
                          int limit) {
+
 }

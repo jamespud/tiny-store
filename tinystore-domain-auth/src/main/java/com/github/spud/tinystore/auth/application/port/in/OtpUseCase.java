@@ -7,7 +7,7 @@ import com.github.spud.tinystore.auth.application.dto.VerifyOtpCommand;
 
 public interface OtpUseCase {
 
-	SendOtpResult sendOtp(SendOtpCommand command);
+  SendOtpResult sendOtp(SendOtpCommand command);
 
-	AuthResult verifyOtp(VerifyOtpCommand command);
+  AuthResult verifyOtp(VerifyOtpCommand command);
 }

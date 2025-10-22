@@ -12,27 +12,26 @@ import org.springframework.stereotype.Component;
 @Component
 public class OtpAuthenticationProvider implements AuthenticationProvider {
 
-	private final OtpApplicationService otpApplicationService;
+  private final OtpApplicationService otpApplicationService;
 
-	public OtpAuthenticationProvider(OtpApplicationService otpApplicationService) {
-		this.otpApplicationService = otpApplicationService;
-	}
+  public OtpAuthenticationProvider(OtpApplicationService otpApplicationService) {
+    this.otpApplicationService = otpApplicationService;
+  }
 
-	@Override
-	public Authentication authenticate(Authentication authentication) throws AuthenticationException {
+  @Override
+  public Authentication authenticate(Authentication authentication) throws AuthenticationException {
 
-		if (authentication instanceof OtpAuthenticationToken token) {
-			String phone = (String) token.getPrincipal();
-			String otp = (String) token.getCredentials();
-			AuthResult authResult = otpApplicationService.verifyOtp(new VerifyOtpCommand(phone, otp));
-			// TODO: 返回userDetails
-			return authResult.user();
-		}
-		return null;
-	}
+    if (authentication instanceof OtpAuthenticationToken token) {
+      String phone = (String) token.getPrincipal();
+      String otp = (String) token.getCredentials();
+      AuthResult authResult = otpApplicationService.verifyOtp(new VerifyOtpCommand(phone, otp));
+      return authResult.user();
+    }
+    return null;
+  }
 
-	@Override
-	public boolean supports(Class<?> authentication) {
-		return OtpAuthenticationToken.class.isAssignableFrom(authentication);
-	}
+  @Override
+  public boolean supports(Class<?> authentication) {
+    return OtpAuthenticationToken.class.isAssignableFrom(authentication);
+  }
 }

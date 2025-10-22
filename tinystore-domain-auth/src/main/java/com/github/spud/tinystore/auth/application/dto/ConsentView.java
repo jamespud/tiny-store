@@ -7,4 +7,5 @@ public record ConsentView(String clientId,
                           String username,
                           Set<String> scopesToApprove,
                           Set<String> previouslyApprovedScopes) {
+
 }

@@ -5,5 +5,5 @@ import com.github.spud.tinystore.auth.application.dto.LoadConsentCommand;
 
 public interface ConsentUseCase {
 
-	ConsentView loadConsent(LoadConsentCommand command);
+  ConsentView loadConsent(LoadConsentCommand command);
 }
