@@ -5,5 +5,5 @@ import com.github.spud.tinystore.auth.domain.primitives.PhoneNumber;
 
 public interface SmsSenderPort {
 
-	OtpCode sendLoginCode(PhoneNumber phone, OtpCode code);
+  OtpCode sendLoginCode(PhoneNumber phone, OtpCode code);
 }

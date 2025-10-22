@@ -5,11 +5,11 @@ import java.util.function.Supplier;
 
 public interface LockAndRateLimitPort {
 
-	<T> T withLock(String key, Duration ttl, Supplier<T> action);
+  <T> T withLock(String key, Duration ttl, Supplier<T> action);
 
-	long increment(String key, Duration window);
+  long increment(String key, Duration window);
 
-	void setIfAbsent(String key, String value, Duration ttl);
+  void setIfAbsent(String key, String value, Duration ttl);
 
-	String get(String key);
+  String get(String key);
 }

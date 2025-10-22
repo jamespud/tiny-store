@@ -12,39 +12,40 @@ import org.springframework.web.bind.annotation.ResponseBody;
 @Controller
 public class LoginController {
 
-	@GetMapping("/login")
-	public String login(Model model) {
-		if (!model.containsAttribute("otpForm")) {
-			model.addAttribute("otpForm", new OtpForm());
-		}
-		return "login";
-	}
+  @GetMapping("/login")
+  public String login(Model model) {
+    if (!model.containsAttribute("otpForm")) {
+      model.addAttribute("otpForm", new OtpForm());
+    }
+    return "login";
+  }
 
-	@PostMapping
-	@ResponseBody
-	public LoginResponse usernamePasswordLogin(
-		@RequestBody LoginRequest request) {
-		throw new UnsupportedOperationException("Not implemented");
-	}
+  @PostMapping
+  @ResponseBody
+  public LoginResponse usernamePasswordLogin(
+      @RequestBody LoginRequest request) {
+    throw new UnsupportedOperationException("Not implemented");
+  }
 
-	public static class OtpForm {
-		private String phone;
-		private String code;
+  public static class OtpForm {
 
-		public String getPhone() {
-			return phone;
-		}
+    private String phone;
+    private String code;
 
-		public void setPhone(String phone) {
-			this.phone = phone;
-		}
+    public String getPhone() {
+      return phone;
+    }
 
-		public String getCode() {
-			return code;
-		}
+    public void setPhone(String phone) {
+      this.phone = phone;
+    }
 
-		public void setCode(String code) {
-			this.code = code;
-		}
-	}
+    public String getCode() {
+      return code;
+    }
+
+    public void setCode(String code) {
+      this.code = code;
+    }
+  }
 }

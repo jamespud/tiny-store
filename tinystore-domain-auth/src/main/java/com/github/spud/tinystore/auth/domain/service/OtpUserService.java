@@ -10,11 +10,11 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
  */
 public class OtpUserService implements UserDetailsService {
 
-	private StringRedisTemplate redisTemplate;
+  private StringRedisTemplate redisTemplate;
 
-	@Override
-	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-		// TODO: Implement OTP user loading logic
-		throw new UnsupportedOperationException("Not implemented yet");
-	}
+  @Override
+  public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+    // TODO: Implement OTP user loading logic
+    throw new UnsupportedOperationException("Not implemented yet");
+  }
 }

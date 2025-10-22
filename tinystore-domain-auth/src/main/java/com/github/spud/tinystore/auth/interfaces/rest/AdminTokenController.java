@@ -12,16 +12,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/tokens")
 public class AdminTokenController {
 
-	private final TokenRevocationService tokenRevocationService;
+  private final TokenRevocationService tokenRevocationService;
 
-	public AdminTokenController(TokenRevocationService tokenRevocationService) {
-		this.tokenRevocationService = tokenRevocationService;
-	}
+  public AdminTokenController(TokenRevocationService tokenRevocationService) {
+    this.tokenRevocationService = tokenRevocationService;
+  }
 
-	@PostMapping("/revoke")
-	@PreAuthorize("hasRole('ADMIN')")
-	public ResponseEntity<Void> revoke(@RequestParam("user_id") String userId) {
-		tokenRevocationService.revokeAllTokensForUser(userId);
-		return ResponseEntity.accepted().build();
-	}
+  @PostMapping("/revoke")
+  @PreAuthorize("hasRole('ADMIN')")
+  public ResponseEntity<Void> revoke(@RequestParam("user_id") String userId) {
+    tokenRevocationService.revokeAllTokensForUser(userId);
+    return ResponseEntity.accepted().build();
+  }
 }

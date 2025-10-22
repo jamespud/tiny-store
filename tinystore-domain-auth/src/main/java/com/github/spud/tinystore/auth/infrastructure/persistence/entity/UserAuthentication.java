@@ -4,35 +4,35 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
-
-import java.time.Instant;
 
 @Setter
 @Getter
 @Entity
 @Table(name = "`user_authentication`")
 public class UserAuthentication {
-	@Id
-	@Column
-	private String id;
 
-	/* login username */
-	@Column(unique = true, nullable = false)
-	private String username;
+  @Id
+  @Column
+  private String id;
 
-	@Column(unique = true, nullable = false)
-	private String phoneNumber;
+  /* login username */
+  @Column(unique = true, nullable = false)
+  private String username;
 
-	@Column(nullable = false)
-	private String password;
+  @Column(unique = true, nullable = false)
+  private String phoneNumber;
 
-	private boolean enabled;
+  @Column(nullable = false)
+  private String password;
 
-	private long rtVersion;
+  private boolean enabled;
 
-	private Instant createdAt;
+  private long rtVersion;
 
-	private Instant updatedAt;
+  private Instant createdAt;
+
+  private Instant updatedAt;
 }

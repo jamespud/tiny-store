@@ -9,35 +9,35 @@ import java.util.Objects;
  */
 public record OtpCode(String value) implements Serializable {
 
-	@Serial
-	private static final long serialVersionUID = 1L;
+  @Serial
+  private static final long serialVersionUID = 1L;
 
-	public OtpCode(String value) {
-		String normalized = Objects.requireNonNull(value, "otp must not be null").trim();
-		if (normalized.isEmpty()) {
-			throw new IllegalArgumentException("otp must not be blank");
-		}
-		this.value = normalized;
-	}
+  public OtpCode(String value) {
+    String normalized = Objects.requireNonNull(value, "otp must not be null").trim();
+    if (normalized.isEmpty()) {
+      throw new IllegalArgumentException("otp must not be blank");
+    }
+    this.value = normalized;
+  }
 
-	public static OtpCode of(String value) {
-		return new OtpCode(value);
-	}
+  public static OtpCode of(String value) {
+    return new OtpCode(value);
+  }
 
 
-	@Override
-	public boolean equals(Object o) {
-		if (this == o) {
-			return true;
-		}
-		if (!(o instanceof OtpCode otpCode)) {
-			return false;
-		}
-		return value.equals(otpCode.value);
-	}
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (!(o instanceof OtpCode otpCode)) {
+      return false;
+    }
+    return value.equals(otpCode.value);
+  }
 
-	@Override
-	public String toString() {
-		return value;
-	}
+  @Override
+  public String toString() {
+    return value;
+  }
 }

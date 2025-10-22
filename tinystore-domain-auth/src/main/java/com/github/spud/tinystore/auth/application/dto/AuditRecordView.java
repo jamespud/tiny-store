@@ -9,4 +9,5 @@ public record AuditRecordView(String userId,
                               String ip,
                               String userAgent,
                               OffsetDateTime occurredAt) {
+
 }
