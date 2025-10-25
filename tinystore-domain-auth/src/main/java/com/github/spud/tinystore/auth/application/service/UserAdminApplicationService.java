@@ -3,8 +3,11 @@ package com.github.spud.tinystore.auth.application.service;
 import com.github.spud.tinystore.auth.application.dto.UserStatusView;
 import com.github.spud.tinystore.auth.application.port.in.UserAdminUseCase;
 import com.github.spud.tinystore.auth.application.port.out.AuditLogPort;
+import com.github.spud.tinystore.auth.application.port.out.OutboxPort;
 import com.github.spud.tinystore.auth.application.port.out.UserRepository;
 import com.github.spud.tinystore.auth.domain.audit.AuditEvent;
+import com.github.spud.tinystore.auth.domain.event.UserFrozenEvent;
+import com.github.spud.tinystore.auth.domain.event.UserUnfrozenEvent;
 import com.github.spud.tinystore.auth.domain.model.user.MallUser;
 import com.github.spud.tinystore.auth.domain.primitives.PhoneNumber;
 import com.github.spud.tinystore.auth.domain.primitives.UserId;
@@ -18,10 +21,13 @@ public class UserAdminApplicationService implements UserAdminUseCase {
 
   private final UserRepository userRepository;
   private final AuditLogPort auditLogPort;
+  private final OutboxPort outboxPort;
 
-  public UserAdminApplicationService(UserRepository userRepository, AuditLogPort auditLogPort) {
+  public UserAdminApplicationService(UserRepository userRepository, AuditLogPort auditLogPort,
+      OutboxPort outboxPort) {
     this.userRepository = userRepository;
     this.auditLogPort = auditLogPort;
+    this.outboxPort = outboxPort;
   }
 
   @Override
@@ -30,6 +36,7 @@ public class UserAdminApplicationService implements UserAdminUseCase {
     var user = loadUser(userId);
     user.freeze();
     userRepository.update(user);
+    outboxPort.save(UserFrozenEvent.of(UserId.of(userId)));
     auditLogPort.append(AuditEvent.success(user.getId().value(), user.getPhone().value(), null,
         "USER_FREEZE", Set.of(), null, null, null));
   }
@@ -40,6 +47,7 @@ public class UserAdminApplicationService implements UserAdminUseCase {
     var user = loadUser(userId);
     user.unfreeze();
     userRepository.update(user);
+    outboxPort.save(UserUnfrozenEvent.of(UserId.of(userId)));
     auditLogPort.append(AuditEvent.success(user.getId().value(), user.getPhone().value(), null,
         "USER_UNFREEZE", Set.of(), null, null, null));
   }

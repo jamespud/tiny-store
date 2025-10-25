@@ -36,18 +36,16 @@ public class RegisteredClientConfig {
 
   @Bean
   public RegisteredClientRepository registeredClientRepository(JdbcTemplate jdbcTemplate) {
+    // 显式配置 JDBC 存储，避免隐式自动装配
     return new JdbcRegisteredClientRepository(jdbcTemplate);
   }
 
   @Bean
-  public OAuth2AuthorizationService authorizationService(JdbcTemplate jdbcTemplate,
+  public OAuth2AuthorizationService authorizationService(
+      JdbcTemplate jdbcTemplate,
       RegisteredClientRepository repo) {
+    // 显式提供 AuthorizationService，避免隐式自动装配
     return new JdbcOAuth2AuthorizationService(jdbcTemplate, repo);
-  }
-
-  @Bean
-  public PasswordEncoder passwordEncoder() {
-    return PasswordEncoderFactories.createDelegatingPasswordEncoder();
   }
 
   @Bean
