@@ -1,5 +1,7 @@
 package com.github.spud.tinystore.auth.application.config;
 
+import com.github.spud.tinystore.auth.infrastructure.sso.sas.ConsentServiceFacade;
+import com.github.spud.tinystore.auth.infrastructure.sso.sas.SasConsentServiceAdapter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,15 +22,18 @@ public class AuthorizationServerConfig {
   private final OAuth2AuthorizationService authorizationService;
   private final OAuth2AuthorizationConsentService authorizationConsentService;
   private final OAuth2TokenGenerator<?> tokenGenerator;
+  private final SasConsentServiceAdapter sasConsentServiceAdapter;
 
   public AuthorizationServerConfig(RegisteredClientRepository registeredClientRepository,
       OAuth2AuthorizationService authorizationService,
       OAuth2AuthorizationConsentService authorizationConsentService,
-      OAuth2TokenGenerator<?> tokenGenerator) {
+      OAuth2TokenGenerator<?> tokenGenerator,
+      SasConsentServiceAdapter sasConsentServiceAdapter) {
     this.registeredClientRepository = registeredClientRepository;
     this.authorizationService = authorizationService;
     this.authorizationConsentService = authorizationConsentService;
     this.tokenGenerator = tokenGenerator;
+    this.sasConsentServiceAdapter = sasConsentServiceAdapter;
   }
 
   @Bean
@@ -37,13 +42,16 @@ public class AuthorizationServerConfig {
     OAuth2AuthorizationServerConfigurer authorizationServerConfigurer =
         OAuth2AuthorizationServerConfigurer.authorizationServer();
 
+    OAuth2AuthorizationConsentService consentFacade =
+        new ConsentServiceFacade(authorizationConsentService, sasConsentServiceAdapter);
+
     http
         .securityMatcher(authorizationServerConfigurer.getEndpointsMatcher())
         .with(authorizationServerConfigurer, (authorizationServer) ->
             authorizationServer
                 .registeredClientRepository(registeredClientRepository)
                 .authorizationService(authorizationService)
-                .authorizationConsentService(authorizationConsentService)
+                .authorizationConsentService(consentFacade)
                 .tokenGenerator(tokenGenerator)
                 .clientAuthentication(Customizer.withDefaults())
                 .authorizationEndpoint(Customizer.withDefaults())

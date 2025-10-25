@@ -1,5 +1,6 @@
 package com.github.spud.tinystore.auth.application.service;
 
+import com.github.spud.tinystore.auth.application.config.DynamicRegistrationProperties;
 import com.github.spud.tinystore.auth.application.dto.RegisteredClientDto;
 import com.github.spud.tinystore.auth.application.dto.RegisteredClientRequest;
 import com.github.spud.tinystore.auth.application.port.out.AuditLogPort;
@@ -25,18 +26,27 @@ public class ClientRegistrationApplicationService {
   private final RegisteredClientRepository registeredClientRepository;
   private final PasswordEncoder passwordEncoder;
   private final AuditLogPort auditLogPort;
+  private final DynamicRegistrationProperties dynamicProps;
 
   public ClientRegistrationApplicationService(
       RegisteredClientRepository registeredClientRepository,
       PasswordEncoder passwordEncoder,
-      AuditLogPort auditLogPort) {
+      AuditLogPort auditLogPort,
+      DynamicRegistrationProperties dynamicProps) {
     this.registeredClientRepository = registeredClientRepository;
     this.passwordEncoder = passwordEncoder;
     this.auditLogPort = auditLogPort;
+    this.dynamicProps = dynamicProps;
   }
 
   public RegisteredClientDto register(RegisteredClientRequest request, String registrationToken) {
-    // Strict validation
+    // 开关与令牌校验
+    if (!dynamicProps.isEnabled()) {
+      throw new IllegalStateException("dynamic registration disabled");
+    }
+    validateToken(registrationToken);
+
+    // 严格校验
     validate(request, registrationToken);
 
     String clientId = UUID.randomUUID().toString();
@@ -99,9 +109,6 @@ public class ClientRegistrationApplicationService {
   }
 
   private void validate(RegisteredClientRequest request, String registrationToken) {
-    if (!StringUtils.hasText(registrationToken)) {
-      throw new IllegalArgumentException("registration token required");
-    }
     if (!StringUtils.hasText(request.clientName())) {
       throw new IllegalArgumentException("client_name required");
     }
@@ -138,6 +145,18 @@ public class ClientRegistrationApplicationService {
         if (!scopeAllowed.contains(sc)) {
           throw new IllegalArgumentException("unsupported scope: " + sc);
         }
+      }
+    }
+  }
+
+  private void validateToken(String registrationToken) {
+    if (dynamicProps.isRequireToken()) {
+      if (!StringUtils.hasText(registrationToken)) {
+        throw new IllegalArgumentException("registration token required");
+      }
+      List<String> allowed = dynamicProps.getAllowedTokens();
+      if (allowed != null && !allowed.isEmpty() && !allowed.contains(registrationToken)) {
+        throw new IllegalArgumentException("registration token not allowed");
       }
     }
   }

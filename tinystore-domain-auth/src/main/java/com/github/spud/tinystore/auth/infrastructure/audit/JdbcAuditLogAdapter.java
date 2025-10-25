@@ -22,7 +22,7 @@ import org.springframework.stereotype.Repository;
 @Primary
 public class JdbcAuditLogAdapter implements AuditLogPort {
 
-  private static final String BASE_QUERY = "select user_id, client_id, action, scopes, ip, user_agent, occurred_at from auth_audit";
+  private static final String BASE_QUERY = "select user_id, client_id, action, scopes, ip, user_agent, created_at from auth_audit";
 
   private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -34,9 +34,9 @@ public class JdbcAuditLogAdapter implements AuditLogPort {
   public void append(AuditEvent event) {
     jdbcTemplate.getJdbcTemplate().update(con -> {
       var ps = con.prepareStatement(
-          "insert into auth_audit (user_id, subject, client_id, action, scopes, success, ip, user_agent, detail, occurred_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-      ps.setObject(1, event.userId());
-      ps.setString(2, event.subject());
+          "insert into auth_audit (user_id, phone, client_id, action, scopes, success, ip, user_agent, details, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+      ps.setObject(1, toUuidOrNull(event.userId()));
+      ps.setString(2, event.subject()); // subject 作为 phone 存储
       ps.setString(3, event.clientId());
       ps.setString(4, event.action());
       ps.setArray(5, createTextArray(con, event.scopes()));
@@ -64,11 +64,11 @@ public class JdbcAuditLogAdapter implements AuditLogPort {
       params.addValue("clientId", query.clientId());
     }
     if (query.from() != null) {
-      conditions.add("occurred_at >= :from");
+      conditions.add("created_at >= :from");
       params.addValue("from", query.from());
     }
     if (query.to() != null) {
-      conditions.add("occurred_at <= :to");
+      conditions.add("created_at <= :to");
       params.addValue("to", query.to());
     }
 
@@ -76,7 +76,7 @@ public class JdbcAuditLogAdapter implements AuditLogPort {
       sql.append(" where ").append(String.join(" and ", conditions));
     }
 
-    sql.append(" order by occurred_at desc");
+    sql.append(" order by created_at desc");
     int limit = query.limit() > 0 ? query.limit() : 50;
     sql.append(" limit ").append(limit);
 
@@ -87,7 +87,7 @@ public class JdbcAuditLogAdapter implements AuditLogPort {
         arrayToScopeString(rs.getArray("scopes")),
         rs.getString("ip"),
         rs.getString("user_agent"),
-        rs.getObject("occurred_at", OffsetDateTime.class)
+        rs.getObject("created_at", OffsetDateTime.class)
     ));
   }
 
@@ -108,5 +108,13 @@ public class JdbcAuditLogAdapter implements AuditLogPort {
       scopes.add(Objects.toString(value));
     }
     return String.join(" ", scopes);
+  }
+
+  private UUID toUuidOrNull(String v) {
+    try {
+      return v == null ? null : UUID.fromString(v);
+    } catch (Exception e) {
+      return null;
+    }
   }
 }

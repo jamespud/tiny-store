@@ -3,6 +3,7 @@ package com.github.spud.tinystore.auth.infrastructure.persistence.repository;
 import com.github.spud.tinystore.auth.infrastructure.persistence.entity.AuthorizationConsent;
 import java.util.HashSet;
 import java.util.Set;
+import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
+@Profile("jpa")
 @Component
 public class JpaOAuth2AuthorizationConsentService implements OAuth2AuthorizationConsentService {
 
