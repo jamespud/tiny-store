@@ -1,7 +1,10 @@
 package com.github.spud.tinystore.auth.infrastructure.outbox;
 
 import com.github.spud.tinystore.auth.application.port.out.OutboxPort;
+import com.github.spud.tinystore.auth.domain.event.ConsentChangedEvent;
 import com.github.spud.tinystore.auth.domain.event.RefreshTokenRevokedEvent;
+import com.github.spud.tinystore.auth.domain.event.UserFrozenEvent;
+import com.github.spud.tinystore.auth.domain.event.UserUnfrozenEvent;
 import com.github.spud.tinystore.auth.domain.primitives.RtVersion;
 import com.github.spud.tinystore.auth.domain.primitives.UserId;
 import java.sql.PreparedStatement;
@@ -34,7 +37,22 @@ public class JdbcOutboxAdapter implements OutboxPort {
     });
   }
 
-  @Override
+	@Override
+	public void save(ConsentChangedEvent event) {
+		
+	}
+
+	@Override
+	public void save(UserFrozenEvent event) {
+
+	}
+
+	@Override
+	public void save(UserUnfrozenEvent event) {
+
+	}
+
+	@Override
   public List<RefreshTokenRevokedEvent> fetchUnpublished(int batchSize) {
     return jdbcTemplate.query(
         "select aggregate_id, rt_version, reason, occurred_at from auth_outbox where published = false order by occurred_at asc limit ?",

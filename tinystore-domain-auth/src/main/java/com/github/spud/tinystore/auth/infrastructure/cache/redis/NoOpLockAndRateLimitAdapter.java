@@ -7,7 +7,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.stereotype.Component;
 
 @Component
-@ConditionalOnMissingBean(LockAndRateLimitPort.class)
+//@ConditionalOnMissingBean(LockAndRateLimitPort.class)
 public class NoOpLockAndRateLimitAdapter implements LockAndRateLimitPort {
 
   @Override
