@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.infrastructure.service;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Resource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -21,10 +22,10 @@ import org.springframework.stereotype.Service;
 @Service
 public class RedisOperator {
 
-	@Autowired
+	@Resource
 	private RedisTemplate<String, Object> redisTemplate;
 
-	@Autowired
+	@Resource
 	private RedissonClient redisson;
 
 	// 任一商品不存在则失败
