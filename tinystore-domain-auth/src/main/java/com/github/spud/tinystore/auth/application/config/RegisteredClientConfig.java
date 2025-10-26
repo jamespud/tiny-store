@@ -35,12 +35,6 @@ public class RegisteredClientConfig {
   private Duration m2mAccessTokenTtl;
 
   @Bean
-  public RegisteredClientRepository registeredClientRepository(JdbcTemplate jdbcTemplate) {
-    // 显式配置 JDBC 存储，避免隐式自动装配
-    return new JdbcRegisteredClientRepository(jdbcTemplate);
-  }
-
-  @Bean
   public OAuth2AuthorizationService authorizationService(
       JdbcTemplate jdbcTemplate,
       RegisteredClientRepository repo) {

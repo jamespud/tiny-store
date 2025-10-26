@@ -3,11 +3,14 @@ package com.github.spud.tinystore.auth.application.config;
 import com.github.spud.tinystore.auth.interfaces.security.otp.OtpAuthenticationFilter;
 import com.github.spud.tinystore.auth.interfaces.security.otp.OtpAuthenticationProvider;
 import com.github.spud.tinystore.auth.interfaces.security.password.PasswordAuthenticationProvider;
+import jakarta.annotation.Resource;
 import java.util.Arrays;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Scope;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
@@ -30,80 +33,78 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @EnableWebSecurity
 public class SecurityConfig {
 
-  private final OtpAuthenticationProvider otpAuthenticationProvider;
-  private final PasswordAuthenticationProvider passwordAuthenticationProvider;
+	@Resource
+	private OtpAuthenticationProvider otpAuthenticationProvider;
 
-  public SecurityConfig(OtpAuthenticationProvider otpAuthenticationProvider,
-      PasswordAuthenticationProvider passwordAuthenticationProvider) {
-    this.otpAuthenticationProvider = otpAuthenticationProvider;
-    this.passwordAuthenticationProvider = passwordAuthenticationProvider;
-  }
+	@Resource
+	private PasswordAuthenticationProvider passwordAuthenticationProvider;
 
-  @Bean
-  @Order(2)
-  SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http,
-      OtpAuthenticationFilter otpAuthenticationFilter) throws Exception {
-    http
-        .authorizeHttpRequests(auth -> auth
-            .requestMatchers(
-                "/assets/**", "/css/**", "/js/**", "/images/**",
-                "/.well-known/**", "/actuator/health", "/error",
-                "/api/auth/otp/**", "/login/otp", "/api/auth/login/password"
-            ).permitAll()
-            .anyRequest().authenticated()
-        )
-        .cors(Customizer.withDefaults())
-        .headers(h -> h
-            .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'"))
-            .referrerPolicy(r -> r.policy(
-                ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
-            .frameOptions(HeadersConfigurer.FrameOptionsConfig::deny)
-        )
-        .formLogin(form ->
-            form.loginPage("/login").permitAll()
-                .loginProcessingUrl("/login")
-        )
-        .logout(Customizer.withDefaults())
-        .csrf(csrf -> csrf
-            .ignoringRequestMatchers("/oauth2/**", "/api/auth/otp/**", "/login/otp",
-                "/api/auth/login/password")
-        )
-        .authenticationProvider(otpAuthenticationProvider)
-        .authenticationProvider(passwordAuthenticationProvider)
-        .addFilterBefore(otpAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
-    return http.build();
-  }
+	@Bean
+	@Order(2)
+	SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http,
+		OtpAuthenticationFilter otpAuthenticationFilter) throws Exception {
+		http
+			.authorizeHttpRequests(auth -> auth
+				.requestMatchers(
+					"/assets/**", "/css/**", "/js/**", "/images/**",
+					"/.well-known/**", "/actuator/health", "/error",
+					"/api/auth/otp/**", "/login/otp", "/api/auth/login/password"
+				).permitAll()
+				.anyRequest().authenticated()
+			)
+			.cors(Customizer.withDefaults())
+			.headers(h -> h
+				.contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'"))
+				.referrerPolicy(r -> r.policy(
+					ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
+				.frameOptions(HeadersConfigurer.FrameOptionsConfig::deny)
+			)
+			.formLogin(form ->
+				form.loginPage("/login").permitAll()
+					.loginProcessingUrl("/login")
+			)
+			.logout(Customizer.withDefaults())
+			.csrf(csrf -> csrf
+				.ignoringRequestMatchers("/oauth2/**", "/api/auth/otp/**", "/login/otp",
+					"/api/auth/login/password")
+			)
+			.authenticationProvider(otpAuthenticationProvider)
+			.authenticationProvider(passwordAuthenticationProvider)
+			.addFilterBefore(otpAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+		return http.build();
+	}
 
-  @Bean
-  public AuthenticationManager authenticationManager() {
-    return new ProviderManager(otpAuthenticationProvider, passwordAuthenticationProvider);
-  }
+	@Bean
+	public AuthenticationManager authenticationManager() {
+		return new ProviderManager(otpAuthenticationProvider, passwordAuthenticationProvider);
+	}
 
-  @Bean
-  public OtpAuthenticationFilter otpAuthenticationFilter(
-      AuthenticationManager authenticationManager) {
-    return new OtpAuthenticationFilter(authenticationManager);
-  }
+	@Bean
+	public OtpAuthenticationFilter otpAuthenticationFilter(
+		AuthenticationManager authenticationManager) {
+		return new OtpAuthenticationFilter(authenticationManager);
+	}
 
-  @Bean
-  public PasswordEncoder passwordEncoder() {
-    return PasswordEncoderFactories.createDelegatingPasswordEncoder();
-  }
+	@Scope(value = BeanDefinition.SCOPE_PROTOTYPE)
+	@Bean
+	public PasswordEncoder passwordEncoder() {
+		return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+	}
 
-  @Value("${tinystore.auth.cors.allowed-origins:http://localhost:3000,http://localhost:8080}")
-  private String allowedOrigins;
+	@Value("${tinystore.auth.cors.allowed-origins:http://localhost:3000,http://localhost:8080}")
+	private String allowedOrigins;
 
-  @Bean
-  CorsConfigurationSource corsConfigurationSource() {
-    CorsConfiguration cfg = new CorsConfiguration();
-    List<String> origins = Arrays.asList(allowedOrigins.split(","));
-    cfg.setAllowedOrigins(origins);
-    cfg.setAllowedMethods(Arrays.asList("GET", "POST", "OPTIONS"));
-    cfg.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type"));
-    cfg.setExposedHeaders(Arrays.asList("Cache-Control", "Pragma", "Expires"));
-    cfg.setAllowCredentials(true);
-    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-    source.registerCorsConfiguration("/**", cfg);
-    return source;
-  }
+	@Bean
+	CorsConfigurationSource corsConfigurationSource() {
+		CorsConfiguration cfg = new CorsConfiguration();
+		List<String> origins = Arrays.asList(allowedOrigins.split(","));
+		cfg.setAllowedOrigins(origins);
+		cfg.setAllowedMethods(Arrays.asList("GET", "POST", "OPTIONS"));
+		cfg.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type"));
+		cfg.setExposedHeaders(Arrays.asList("Cache-Control", "Pragma", "Expires"));
+		cfg.setAllowCredentials(true);
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/**", cfg);
+		return source;
+	}
 }
