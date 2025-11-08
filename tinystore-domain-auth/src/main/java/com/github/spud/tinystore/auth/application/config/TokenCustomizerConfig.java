@@ -12,12 +12,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.oauth2.core.OAuth2Token;
 import org.springframework.security.oauth2.core.oidc.endpoint.OidcParameterNames;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
-import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 
 @Configuration
 public class TokenCustomizerConfig {
@@ -25,10 +23,8 @@ public class TokenCustomizerConfig {
   @Value("${tinystore.auth.tokens.user.id-token-ttl:PT2H}")
   private Duration userIdTokenTtl;
 
-  @Bean
-  public OAuth2TokenGenerator<OAuth2Token> tokenGenerator() {
-    return (context -> (OAuth2Token) () -> "");
-  }
+  // Use default SAS token generator chain; do not override with empty implementation.
+  // Removed custom tokenGenerator bean to prevent invalid tokens.
 
   @Bean
   public OAuth2TokenCustomizer<JwtEncodingContext> jwtCustomizer() {

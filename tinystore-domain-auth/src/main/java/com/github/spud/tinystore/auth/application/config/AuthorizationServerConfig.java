@@ -12,7 +12,6 @@ import org.springframework.security.oauth2.server.authorization.OAuth2Authorizat
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
-import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
@@ -21,18 +20,15 @@ public class AuthorizationServerConfig {
   private final RegisteredClientRepository registeredClientRepository;
   private final OAuth2AuthorizationService authorizationService;
   private final OAuth2AuthorizationConsentService authorizationConsentService;
-  private final OAuth2TokenGenerator<?> tokenGenerator;
   private final SasConsentServiceAdapter sasConsentServiceAdapter;
 
   public AuthorizationServerConfig(RegisteredClientRepository registeredClientRepository,
       OAuth2AuthorizationService authorizationService,
       OAuth2AuthorizationConsentService authorizationConsentService,
-      OAuth2TokenGenerator<?> tokenGenerator,
       SasConsentServiceAdapter sasConsentServiceAdapter) {
     this.registeredClientRepository = registeredClientRepository;
     this.authorizationService = authorizationService;
     this.authorizationConsentService = authorizationConsentService;
-    this.tokenGenerator = tokenGenerator;
     this.sasConsentServiceAdapter = sasConsentServiceAdapter;
   }
 
@@ -52,7 +48,6 @@ public class AuthorizationServerConfig {
                 .registeredClientRepository(registeredClientRepository)
                 .authorizationService(authorizationService)
                 .authorizationConsentService(consentFacade)
-                .tokenGenerator(tokenGenerator)
                 .clientAuthentication(Customizer.withDefaults())
                 .authorizationEndpoint(Customizer.withDefaults())
                 .pushedAuthorizationRequestEndpoint(Customizer.withDefaults())

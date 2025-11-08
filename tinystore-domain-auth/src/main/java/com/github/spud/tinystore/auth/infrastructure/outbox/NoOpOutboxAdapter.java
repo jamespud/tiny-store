@@ -2,6 +2,7 @@ package com.github.spud.tinystore.auth.infrastructure.outbox;
 
 import com.github.spud.tinystore.auth.application.port.out.EventPublisherPort;
 import com.github.spud.tinystore.auth.application.port.out.OutboxPort;
+import com.github.spud.tinystore.auth.domain.event.ConsentChangedEvent;
 import com.github.spud.tinystore.auth.domain.event.RefreshTokenRevokedEvent;
 import java.util.Collections;
 import java.util.List;
@@ -18,12 +19,28 @@ public class NoOpOutboxAdapter implements OutboxPort, EventPublisherPort {
   }
 
   @Override
+  public void save(ConsentChangedEvent event) {
+    // Phase 1: no-op
+  }
+
+  @Override
   public List<RefreshTokenRevokedEvent> fetchUnpublished(int batchSize) {
     return Collections.emptyList();
   }
 
   @Override
   public void markPublished(List<RefreshTokenRevokedEvent> events) {
+    // no-op
+  }
+
+  @Override
+  public List<ConsentChangedEvent> fetchConsentChangedUnpublished(int batchSize) {
+    // no-op
+    return List.of();
+  }
+
+  @Override
+  public void markConsentChangedPublished(List<ConsentChangedEvent> events) {
     // no-op
   }
 

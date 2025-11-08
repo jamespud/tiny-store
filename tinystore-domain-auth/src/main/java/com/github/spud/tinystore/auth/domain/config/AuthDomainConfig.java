@@ -1,4 +1,4 @@
-package com.github.spud.tinystore.auth.infrastructure.config;
+package com.github.spud.tinystore.auth.domain.config;
 
 import com.github.spud.tinystore.auth.application.config.DynamicRegistrationProperties;
 import com.github.spud.tinystore.auth.application.config.OtpProperties;
@@ -12,8 +12,13 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties({OtpProperties.class, OutboxProperties.class, DynamicRegistrationProperties.class})
+@EnableConfigurationProperties({OtpProperties.class, DynamicRegistrationProperties.class})
 public class AuthDomainConfig {
+
+  @Bean
+  public OutboxProperties outboxProperties() {
+    return new OutboxProperties();
+  }
 
   @Bean
   public OtpGenerationService otpGenerationService(OtpProperties otpProperties) {

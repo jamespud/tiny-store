@@ -147,4 +147,25 @@ public class MallUser implements UserDetails, Authentication {
   public String getName() {
     return username;
   }
+
+  // Explicit getter methods to satisfy compile-time references in infra adapters/token customizer
+  public UserId getId() {
+    return id;
+  }
+
+  public PhoneNumber getPhone() {
+    return phone;
+  }
+
+  public String getAvatar() {
+    return avatar;
+  }
+
+  public MallUserStatus getStatus() {
+    return status;
+  }
+
+  public RtVersion getRtVersion() {
+    return rtVersion;
+  }
 }

@@ -13,4 +13,6 @@ public record RegisteredClientRequest(
     List<String> scopes,
     String jwks,
     String jwksUri
-) {}
+) {
+
+}
