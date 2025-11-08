@@ -3,11 +3,9 @@ package com.github.spud.tinystore.auth.infrastructure.cache.redis;
 import com.github.spud.tinystore.auth.application.port.out.LockAndRateLimitPort;
 import java.time.Duration;
 import java.util.function.Supplier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.stereotype.Component;
 
 @Component
-//@ConditionalOnMissingBean(LockAndRateLimitPort.class)
 public class NoOpLockAndRateLimitAdapter implements LockAndRateLimitPort {
 
   @Override

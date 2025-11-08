@@ -4,8 +4,10 @@ import com.github.spud.tinystore.auth.application.config.DynamicRegistrationProp
 import com.github.spud.tinystore.auth.application.dto.RegisteredClientDto;
 import com.github.spud.tinystore.auth.application.dto.RegisteredClientRequest;
 import com.github.spud.tinystore.auth.application.port.out.AuditLogPort;
+import com.github.spud.tinystore.auth.application.port.out.RegisteredClientStorePort;
 import com.github.spud.tinystore.auth.domain.audit.AuditEvent;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -14,7 +16,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.stereotype.Service;
@@ -23,17 +24,17 @@ import org.springframework.util.StringUtils;
 @Service
 public class ClientRegistrationApplicationService {
 
-  private final RegisteredClientRepository registeredClientRepository;
+  private final RegisteredClientStorePort registeredClientStore;
   private final PasswordEncoder passwordEncoder;
   private final AuditLogPort auditLogPort;
   private final DynamicRegistrationProperties dynamicProps;
 
   public ClientRegistrationApplicationService(
-      RegisteredClientRepository registeredClientRepository,
+      RegisteredClientStorePort registeredClientStore,
       PasswordEncoder passwordEncoder,
       AuditLogPort auditLogPort,
       DynamicRegistrationProperties dynamicProps) {
-    this.registeredClientRepository = registeredClientRepository;
+    this.registeredClientStore = registeredClientStore;
     this.passwordEncoder = passwordEncoder;
     this.auditLogPort = auditLogPort;
     this.dynamicProps = dynamicProps;
@@ -64,7 +65,8 @@ public class ClientRegistrationApplicationService {
       builder.redirectUri(uri);
     }
 
-    List<String> scopes = request.scopes() == null ? List.of("openid", "user.profile") : request.scopes();
+    List<String> scopes =
+        request.scopes() == null ? List.of("openid", "user.profile") : request.scopes();
     scopes.forEach(builder::scope);
 
     ClientSettings.Builder cs = ClientSettings.builder()
@@ -85,7 +87,7 @@ public class ClientRegistrationApplicationService {
     }
 
     RegisteredClient rc = builder.build();
-    registeredClientRepository.save(rc);
+    registeredClientStore.save(rc);
 
     auditLogPort.append(AuditEvent.success(null, null, clientId,
         "CLIENT_REGISTER", Set.copyOf(scopes), null, null, authMethod.getValue()));
@@ -95,15 +97,15 @@ public class ClientRegistrationApplicationService {
   }
 
   public RegisteredClientDto get(String clientId) {
-    RegisteredClient rc = registeredClientRepository.findByClientId(clientId);
+    RegisteredClient rc = registeredClientStore.findByClientId(clientId);
     if (rc == null) {
       throw new IllegalArgumentException("client not found");
     }
-    List<String> redirectUris = rc.getRedirectUris().stream().collect(Collectors.toList());
+    List<String> redirectUris = new ArrayList<>(rc.getRedirectUris());
     List<String> grantTypes = rc.getAuthorizationGrantTypes().stream()
         .map(AuthorizationGrantType::getValue)
         .collect(Collectors.toList());
-    List<String> scopes = rc.getScopes().stream().collect(Collectors.toList());
+    List<String> scopes = new ArrayList<>(rc.getScopes());
     return new RegisteredClientDto(rc.getClientId(), rc.getClientName(), redirectUris, grantTypes,
         scopes, rc.getClientAuthenticationMethods().iterator().next().getValue(), null);
   }
