@@ -8,7 +8,6 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.config.Customizer;
@@ -40,15 +39,18 @@ public class SecurityConfig {
   }
 
   @Bean
-  @Order(2)
   SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http,
-      OtpAuthenticationFilter otpAuthenticationFilter) throws Exception {
+      OtpAuthenticationFilter otpAuthenticationFilter,
+      AuthenticationManager authenticationManager,
+      OtpAuthenticationProvider otpAuthenticationProvider,
+      PasswordAuthenticationProvider passwordAuthenticationProvider) throws Exception {
     http
         .authorizeHttpRequests(auth -> auth
             .requestMatchers(
                 "/assets/**", "/css/**", "/js/**", "/images/**",
                 "/.well-known/**", "/actuator/health", "/error",
-                "/api/auth/otp/**", "/login/otp", "/api/auth/login/password"
+                "/api/auth/otp/**", "/login/otp", "/api/auth/login/password",
+                "/login", "/login/otp", "/api/auth/otp/**", "/oauth2/consent"
             ).permitAll()
             .anyRequest().authenticated()
         )
@@ -66,11 +68,15 @@ public class SecurityConfig {
         .logout(Customizer.withDefaults())
         .csrf(csrf -> csrf
             .ignoringRequestMatchers("/oauth2/**", "/api/auth/otp/**", "/login/otp",
-                "/api/auth/login/password")
+                "/api/**", "/oidc/**")
         )
+        // Register AuthenticationProviders
         .authenticationProvider(otpAuthenticationProvider)
-        .authenticationProvider(passwordAuthenticationProvider)
-        .addFilterBefore(otpAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        .authenticationProvider(passwordAuthenticationProvider);
+
+    // Add OTP filter for POST /login/otp before UsernamePasswordAuthenticationFilter
+    http.addFilterBefore(otpAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
     return http.build();
   }
 
@@ -86,7 +92,7 @@ public class SecurityConfig {
   }
 
   @Bean
-  public PasswordEncoder passwordEncoder() {
+  public static PasswordEncoder passwordEncoder() {
     return PasswordEncoderFactories.createDelegatingPasswordEncoder();
   }
 

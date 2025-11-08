@@ -4,15 +4,15 @@
 
 ## Scope 约定
 
-| 范围 | 说明 | 默认授予 | 需用户同意 |
-| ---- | ---- | -------- | ---------- |
-| `openid` | OIDC 基础标识 | ✅ | ❌ |
-| `user.profile` | 基础资料（昵称、头像） | ✅ | ❌ |
-| `user.phone` | 手机号 | ❌ | ✅ |
-| `user.address` | 收货地址 | ❌ | ✅ |
-| `user.follow` | 关注关系 | ❌ | ✅ |
-| `user.payment` | 支付信息 | ❌ | ✅ |
-| `svc.*` | 内部服务调用（如 `svc.order.read`） | N/A | N/A |
+| 范围             | 说明                         | 默认授予 | 需用户同意 |
+|----------------|----------------------------|------|-------|
+| `openid`       | OIDC 基础标识                  | ✅    | ❌     |
+| `user.profile` | 基础资料（昵称、头像）                | ✅    | ❌     |
+| `user.phone`   | 手机号                        | ❌    | ✅     |
+| `user.address` | 收货地址                       | ❌    | ✅     |
+| `user.follow`  | 关注关系                       | ❌    | ✅     |
+| `user.payment` | 支付信息                       | ❌    | ✅     |
+| `svc.*`        | 内部服务调用（如 `svc.order.read`） | N/A  | N/A   |
 
 ## 令牌策略
 
@@ -30,7 +30,8 @@
 
 ## 必备配置
 
-- Issuer（按环境）：`https://auth.dev.tinystore.com` / `https://auth.test.tinystore.com` / `https://auth.tinystore.com`
+- Issuer（按环境）：`https://auth.dev.tinystore.com` / `https://auth.test.tinystore.com` /
+  `https://auth.tinystore.com`
 - JWKS：`/.well-known/jwks.json`
 - CORS（dev）：`http://localhost:3000`、`http://localhost:8080`、`https://*.dev.tinystore.com`
 - 令牌 TTL、OTP TTL 可通过 `tinystore.auth.tokens.*`、`tinystore.auth.otp.ttl` 配置
