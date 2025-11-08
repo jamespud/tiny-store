@@ -51,7 +51,8 @@ public class JdbcUserRepositoryAdapter implements UserRepository {
     var now = OffsetDateTime.now();
     jdbcTemplate.update(con -> {
       PreparedStatement ps = con.prepareStatement(
-          "insert into mall_user (id, phone, nickname, avatar, status, rt_version, password_hash, created_at, updated_at) " +
+          "insert into mall_user (id, phone, nickname, avatar, status, rt_version, password_hash, created_at, updated_at) "
+              +
               "values (?, ?, ?, ?, ?, ?, ?, ?, ?)");
       ps.setObject(1, user.getId().value());
       ps.setString(2, user.getPhone().value());

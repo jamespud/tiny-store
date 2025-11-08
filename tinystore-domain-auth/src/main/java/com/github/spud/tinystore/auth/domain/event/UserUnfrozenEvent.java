@@ -9,3 +9,4 @@ public record UserUnfrozenEvent(UserId userId, OffsetDateTime occurredAt) {
     return new UserUnfrozenEvent(userId, OffsetDateTime.now());
   }
 }
+

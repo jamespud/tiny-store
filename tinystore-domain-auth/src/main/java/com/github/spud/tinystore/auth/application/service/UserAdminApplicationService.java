@@ -6,8 +6,6 @@ import com.github.spud.tinystore.auth.application.port.out.AuditLogPort;
 import com.github.spud.tinystore.auth.application.port.out.OutboxPort;
 import com.github.spud.tinystore.auth.application.port.out.UserRepository;
 import com.github.spud.tinystore.auth.domain.audit.AuditEvent;
-import com.github.spud.tinystore.auth.domain.event.UserFrozenEvent;
-import com.github.spud.tinystore.auth.domain.event.UserUnfrozenEvent;
 import com.github.spud.tinystore.auth.domain.model.user.MallUser;
 import com.github.spud.tinystore.auth.domain.primitives.PhoneNumber;
 import com.github.spud.tinystore.auth.domain.primitives.UserId;
@@ -36,7 +34,7 @@ public class UserAdminApplicationService implements UserAdminUseCase {
     var user = loadUser(userId);
     user.freeze();
     userRepository.update(user);
-    outboxPort.save(UserFrozenEvent.of(UserId.of(userId)));
+    // Phase 1: 用户冻结/解冻仅写审计；不写 Outbox（Outbox 目前专用于 RefreshTokenRevokedEvent 与 ConsentChangedEvent）
     auditLogPort.append(AuditEvent.success(user.getId().value(), user.getPhone().value(), null,
         "USER_FREEZE", Set.of(), null, null, null));
   }
@@ -47,7 +45,7 @@ public class UserAdminApplicationService implements UserAdminUseCase {
     var user = loadUser(userId);
     user.unfreeze();
     userRepository.update(user);
-    outboxPort.save(UserUnfrozenEvent.of(UserId.of(userId)));
+    // Phase 1: 用户冻结/解冻仅写审计；不写 Outbox（Outbox 目前专用于 RefreshTokenRevokedEvent 与 ConsentChangedEvent）
     auditLogPort.append(AuditEvent.success(user.getId().value(), user.getPhone().value(), null,
         "USER_UNFREEZE", Set.of(), null, null, null));
   }

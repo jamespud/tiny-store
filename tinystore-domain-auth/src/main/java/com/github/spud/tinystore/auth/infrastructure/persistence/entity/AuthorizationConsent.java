@@ -24,6 +24,31 @@ public class AuthorizationConsent {
   @Column(length = 1000)
   private String authorities;
 
+  // Explicit getters and setters to satisfy compile-time references in JPA services
+  public String getRegisteredClientId() {
+    return registeredClientId;
+  }
+
+  public void setRegisteredClientId(String registeredClientId) {
+    this.registeredClientId = registeredClientId;
+  }
+
+  public String getPrincipalName() {
+    return principalName;
+  }
+
+  public void setPrincipalName(String principalName) {
+    this.principalName = principalName;
+  }
+
+  public String getAuthorities() {
+    return authorities;
+  }
+
+  public void setAuthorities(String authorities) {
+    this.authorities = authorities;
+  }
+
   @Setter
   @Getter
   public static class AuthorizationConsentId implements Serializable {

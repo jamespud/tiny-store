@@ -1,5 +1,7 @@
 package com.github.spud.tinystore.auth.application.config;
 
+import com.github.spud.tinystore.auth.application.port.out.RegisteredClientStorePort;
+import com.github.spud.tinystore.auth.infrastructure.persistence.adapter.SasRegisteredClientStoreAdapter;
 import java.time.Duration;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
@@ -7,7 +9,6 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;

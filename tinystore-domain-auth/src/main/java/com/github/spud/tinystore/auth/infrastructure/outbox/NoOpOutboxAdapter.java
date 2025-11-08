@@ -4,8 +4,6 @@ import com.github.spud.tinystore.auth.application.port.out.EventPublisherPort;
 import com.github.spud.tinystore.auth.application.port.out.OutboxPort;
 import com.github.spud.tinystore.auth.domain.event.ConsentChangedEvent;
 import com.github.spud.tinystore.auth.domain.event.RefreshTokenRevokedEvent;
-import com.github.spud.tinystore.auth.domain.event.UserFrozenEvent;
-import com.github.spud.tinystore.auth.domain.event.UserUnfrozenEvent;
 import java.util.Collections;
 import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -20,28 +18,29 @@ public class NoOpOutboxAdapter implements OutboxPort, EventPublisherPort {
     // Phase 1: no-op
   }
 
-	@Override
-	public void save(ConsentChangedEvent event) {
-		
-	}
+  @Override
+  public void save(ConsentChangedEvent event) {
+    // Phase 1: no-op
+  }
 
-	@Override
-	public void save(UserFrozenEvent event) {
-
-	}
-
-	@Override
-	public void save(UserUnfrozenEvent event) {
-
-	}
-
-	@Override
+  @Override
   public List<RefreshTokenRevokedEvent> fetchUnpublished(int batchSize) {
     return Collections.emptyList();
   }
 
   @Override
   public void markPublished(List<RefreshTokenRevokedEvent> events) {
+    // no-op
+  }
+
+  @Override
+  public List<ConsentChangedEvent> fetchConsentChangedUnpublished(int batchSize) {
+    // no-op
+    return List.of();
+  }
+
+  @Override
+  public void markConsentChangedPublished(List<ConsentChangedEvent> events) {
     // no-op
   }
 

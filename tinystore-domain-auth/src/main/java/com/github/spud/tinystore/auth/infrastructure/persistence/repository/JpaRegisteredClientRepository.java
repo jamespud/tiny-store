@@ -20,7 +20,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
-@Component
 public class JpaRegisteredClientRepository implements RegisteredClientRepository {
 
   private final ClientRepository clientRepository;
