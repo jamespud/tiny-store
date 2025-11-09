@@ -1,8 +1,7 @@
 package com.github.spud.tinystore.order.infrastructure.statemachine.enums;
 
 /**
- * 订单状态机事件枚举
- * 定义触发状态变迁的各种事件
+ * 订单状态机事件枚举 定义触发状态变迁的各种事件
  *
  * @author Spud
  * @date 2025/9/29
@@ -52,7 +51,9 @@ public enum OrderEvent {
 	/**
 	 * 支付超时
 	 */
-	PAYMENT_TIMEOUT("PAYMENT_TIMEOUT", "支付超时");
+	PAYMENT_TIMEOUT("PAYMENT_TIMEOUT", "支付超时"), 
+	
+	PAYMENT_FAILED("PAYMENT_FAILED", "支付失败"), FULFILLMENT_STARTED("FULFILLMENT_STARTED", "履约开始");
 
 	private final String code;
 	private final String label;

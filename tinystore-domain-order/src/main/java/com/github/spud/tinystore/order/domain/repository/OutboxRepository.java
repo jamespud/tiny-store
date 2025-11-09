@@ -2,11 +2,9 @@ package com.github.spud.tinystore.order.domain.repository;
 
 import com.github.spud.tinystore.order.domain.event.OutboxEventEnvelope;
 import com.github.spud.tinystore.order.domain.model.Outbox;
-
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * Outbox Repository for transactional event publishing
@@ -85,7 +83,8 @@ public interface OutboxRepository {
 
 	int deletePublishedEventsBefore(Instant sevenDaysAgo);
 
-	void markAsPublished(UUID eventId);
+	void markAsPublished(String eventId);
 
-	void updateStatus(UUID eventId, Outbox.PublishStatus publishStatus, int newRetryCount, Instant nextRetryAt, String errorMessage);
+	void updateStatus(String eventId, Outbox.PublishStatus publishStatus, int newRetryCount,
+		Instant nextRetryAt, String errorMessage);
 }

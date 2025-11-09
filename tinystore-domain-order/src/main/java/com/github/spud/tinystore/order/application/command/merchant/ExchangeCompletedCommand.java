@@ -9,6 +9,7 @@ import lombok.Data;
 @Data
 @Builder
 public class ExchangeCompletedCommand {
+
 	private String orderId;
 	private String exchangeId;
 }

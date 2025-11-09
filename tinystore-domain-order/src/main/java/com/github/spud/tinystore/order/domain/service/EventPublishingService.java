@@ -3,8 +3,7 @@ package com.github.spud.tinystore.order.domain.service;
 import com.github.spud.tinystore.order.domain.model.Outbox;
 
 /**
- * 事件发布服务接口
- * 负责将 Outbox 事件发布到消息队列或其他事件总线
+ * 事件发布服务接口 负责将 Outbox 事件发布到消息队列或其他事件总线
  *
  * @author Spud
  * @date 2025/9/22

@@ -1,10 +1,9 @@
 package com.github.spud.tinystore.order.domain.event;
 
+import java.time.OffsetDateTime;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-
-import java.time.LocalDateTime;
 
 /**
  * Sub Order Shipped Domain Event
@@ -14,7 +13,7 @@ import java.time.LocalDateTime;
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class SubOrderShippedEvent extends OrderDomainEvent {
+public class SubOrderShippedEvent extends OrderDomainBaseEvent {
 
 	private String orderId;
 	private String subOrderId;
@@ -27,8 +26,8 @@ public class SubOrderShippedEvent extends OrderDomainEvent {
 		this.shipmentInfo = shipmentInfo;
 
 		// Set base event properties
-		setEventType(EventType.ORDER_SHIPPED);
+		setType(OrderEventType.ORDER_SHIPPED);
 		setAggregateId(orderId);
-		setOccurredAt(LocalDateTime.now());
+		setOccurredAt(OffsetDateTime.now());
 	}
 }

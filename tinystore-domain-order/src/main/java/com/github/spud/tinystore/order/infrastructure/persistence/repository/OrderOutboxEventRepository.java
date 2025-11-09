@@ -1,21 +1,19 @@
 package com.github.spud.tinystore.order.infrastructure.persistence.repository;
 
 import com.github.spud.tinystore.order.infrastructure.persistence.po.OrderOutboxEventPO;
+import java.time.OffsetDateTime;
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.UUID;
-
 /**
  * Outbox 事件数据访问接口
  */
 @Repository
-public interface OrderOutboxEventRepository extends JpaRepository<OrderOutboxEventPO, UUID> {
+public interface OrderOutboxEventRepository extends JpaRepository<OrderOutboxEventPO, String> {
 
 	/**
 	 * 查询待发送的事件
@@ -40,16 +38,16 @@ public interface OrderOutboxEventRepository extends JpaRepository<OrderOutboxEve
 	 */
 	@Modifying
 	@Query("UPDATE OrderOutboxEventPO e SET e.status = :status, e.updatedAt = :updatedAt WHERE e.id IN :ids")
-	void updateStatusBatch(@Param("ids") List<UUID> ids,
-	                       @Param("status") OrderOutboxEventPO.OutboxEventStatus status,
-	                       @Param("updatedAt") OffsetDateTime updatedAt);
+	void updateStatusBatch(@Param("ids") List<String> ids,
+		@Param("status") OrderOutboxEventPO.OutboxEventStatus status,
+		@Param("updatedAt") OffsetDateTime updatedAt);
 
 	/**
 	 * 增加重试次数
 	 */
 	@Modifying
 	@Query("UPDATE OrderOutboxEventPO e SET e.retryCount = e.retryCount + 1, e.updatedAt = :updatedAt WHERE e.id = :id")
-	void incrementRetryCount(@Param("id") UUID id, @Param("updatedAt") OffsetDateTime updatedAt);
+	void incrementRetryCount(@Param("id") String id, @Param("updatedAt") OffsetDateTime updatedAt);
 
 	/**
 	 * 根据订单号查询事件

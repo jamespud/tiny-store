@@ -1,12 +1,11 @@
 package com.github.spud.tinystore.order.application.command;
 
 import com.github.spud.tinystore.order.interfaces.dto.request.RefundSuccessRequest;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 
 /**
  * 退款成功命令
@@ -17,6 +16,7 @@ import java.util.UUID;
 @Data
 @AllArgsConstructor
 public class RefundSuccessCommand {
+
 	/**
 	 * 订单ID
 	 */

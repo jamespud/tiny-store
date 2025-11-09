@@ -7,5 +7,6 @@ import java.util.List;
  * @date 2025/9/6
  */
 public record PricingSummary(Money total, Money discountTotal, List<ChargeItem> charges,
-                             Money payable) {
+														 Money payable) {
+
 }

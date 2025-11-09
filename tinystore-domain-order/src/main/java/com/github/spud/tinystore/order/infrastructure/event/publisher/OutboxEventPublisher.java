@@ -4,6 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService;
 import com.github.spud.tinystore.order.infrastructure.persistence.po.OrderOutboxEventPO;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -11,13 +14,8 @@ import org.springframework.kafka.support.SendResult;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-
 /**
- * Outbox 事件发布器
- * 定时扫描 Outbox 表，将事件发布到 Kafka
+ * Outbox 事件发布器 定时扫描 Outbox 表，将事件发布到 Kafka
  */
 @Slf4j
 @Service
@@ -34,8 +32,7 @@ public class OutboxEventPublisher {
 	private static final String TOPIC_PREFIX = "tinystore.order.";
 
 	/**
-	 * 定时发布 Outbox 事件到 Kafka
-	 * 每10秒执行一次
+	 * 定时发布 Outbox 事件到 Kafka 每10秒执行一次
 	 */
 	@Scheduled(fixedDelay = 10000, initialDelay = 5000)
 	public void publishPendingEvents() {
@@ -69,8 +66,7 @@ public class OutboxEventPublisher {
 	}
 
 	/**
-	 * 定时处理失败的事件重试
-	 * 每分钟执行一次
+	 * 定时处理失败的事件重试 每分钟执行一次
 	 */
 	@Scheduled(fixedDelay = 60000, initialDelay = 30000)
 	public void retryFailedEvents() {
@@ -97,12 +93,12 @@ public class OutboxEventPublisher {
 	private CompletableFuture<Void> publishEventAsync(OrderOutboxEventPO event) {
 		try {
 			String topic = getTopicName(event.getEventType());
-			String key = event.getOrderNo(); // 使用订单号作为分区键
+			String key = event.getOrderId(); // 使用订单号作为分区键
 
 			// 构造 Kafka 消息
 			KafkaEventMessage kafkaMessage = new KafkaEventMessage(
-				event.getId().toString(),
-				event.getOrderNo(),
+				event.getId(),
+				event.getOrderId(),
 				event.getEventType(),
 				event.getEventPayload(),
 				event.getTraceId(),
@@ -118,13 +114,14 @@ public class OutboxEventPublisher {
 			return future.handle((result, throwable) -> {
 				if (throwable != null) {
 					log.error("发布事件到 Kafka 失败: eventId={}, orderNo={}, topic={}",
-						event.getId(), event.getOrderNo(), topic, throwable);
+						event.getId(), event.getOrderId(), topic, throwable);
 
 					// 标记事件失败
 					outboxEventService.markEventFailed(event.getId());
 				} else {
-					log.debug("发布事件到 Kafka 成功: eventId={}, orderNo={}, topic={}, partition={}, offset={}",
-						event.getId(), event.getOrderNo(), topic,
+					log.debug(
+						"发布事件到 Kafka 成功: eventId={}, orderNo={}, topic={}, partition={}, offset={}",
+						event.getId(), event.getOrderId(), topic,
 						result.getRecordMetadata().partition(),
 						result.getRecordMetadata().offset());
 
@@ -146,25 +143,18 @@ public class OutboxEventPublisher {
 	 */
 	private String getTopicName(String eventType) {
 		// 事件类型到 Topic 的映射规则
-		switch (eventType) {
-			case "OrderPaidEvent":
-				return TOPIC_PREFIX + "paid";
-			case "OrderStatusChangedEvent":
-				return TOPIC_PREFIX + "status-changed";
-			case "OrderShippedEvent":
-				return TOPIC_PREFIX + "shipped";
-			case "OrderCompletedEvent":
-				return TOPIC_PREFIX + "completed";
-			case "OrderCancelledEvent":
-				return TOPIC_PREFIX + "cancelled";
-			default:
-				return TOPIC_PREFIX + "general";
-		}
+		return switch (eventType) {
+			case "OrderPaidEvent" -> TOPIC_PREFIX + "paid";
+			case "OrderStatusChangedEvent" -> TOPIC_PREFIX + "status-changed";
+			case "OrderShippedEvent" -> TOPIC_PREFIX + "shipped";
+			case "OrderCompletedEvent" -> TOPIC_PREFIX + "completed";
+			case "OrderCancelledEvent" -> TOPIC_PREFIX + "cancelled";
+			default -> TOPIC_PREFIX + "general";
+		};
 	}
 
 	/**
-	 * 定时清理已完成的事件
-	 * 每天凌晨2点执行
+	 * 定时清理已完成的事件 每天凌晨2点执行
 	 */
 	@Scheduled(cron = "0 0 2 * * ?")
 	public void cleanCompletedEvents() {
@@ -180,6 +170,7 @@ public class OutboxEventPublisher {
 	 * Kafka 事件消息格式
 	 */
 	public static class KafkaEventMessage {
+
 		private String eventId;
 		private String orderNo;
 		private String eventType;
@@ -191,7 +182,7 @@ public class OutboxEventPublisher {
 		}
 
 		public KafkaEventMessage(String eventId, String orderNo, String eventType,
-		                         String payload, String traceId, String timestamp) {
+			String payload, String traceId, String timestamp) {
 			this.eventId = eventId;
 			this.orderNo = orderNo;
 			this.eventType = eventType;

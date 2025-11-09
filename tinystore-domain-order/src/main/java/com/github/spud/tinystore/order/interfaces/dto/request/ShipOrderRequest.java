@@ -4,12 +4,10 @@ import com.github.spud.tinystore.order.application.command.merchant.ShipOrderCom
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.List;
-import java.util.UUID;
 
 /**
  * 商家发货请求DTO
@@ -21,11 +19,12 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ShipOrderRequest {
+
 	/**
 	 * 订单ID
 	 */
 	@NotNull(message = "订单ID不能为空")
-	private UUID orderId;
+	private String orderId;
 
 	/**
 	 * 物流信息
@@ -63,6 +62,7 @@ public class ShipOrderRequest {
 	@NoArgsConstructor
 	@AllArgsConstructor
 	public static class LogisticsInfo {
+
 		/**
 		 * 物流公司代码
 		 */
@@ -88,6 +88,7 @@ public class ShipOrderRequest {
 	@NoArgsConstructor
 	@AllArgsConstructor
 	public static class ShipItem {
+
 		private String skuId;
 		private Integer quantity;
 	}

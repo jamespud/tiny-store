@@ -1,11 +1,10 @@
 package com.github.spud.tinystore.order.interfaces.vo;
 
 import com.github.spud.tinystore.order.domain.enums.CancelDecisionType;
-import com.github.spud.tinystore.order.domain.event.OrderStatus;
+import com.github.spud.tinystore.order.domain.status.OrderStatus;
+import java.time.Instant;
 import lombok.Builder;
 import lombok.Data;
-
-import java.time.Instant;
 
 /**
  * @author Spud

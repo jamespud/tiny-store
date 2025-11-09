@@ -3,10 +3,9 @@ package com.github.spud.tinystore.order.domain.service.pricing.step;
 import com.github.spud.tinystore.order.domain.service.pricing.spi.PricingContext;
 import com.github.spud.tinystore.order.domain.service.pricing.spi.PricingLine;
 import com.github.spud.tinystore.order.domain.service.pricing.spi.PricingStep;
-import org.springframework.stereotype.Component;
-
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.stereotype.Component;
 
 @Component
 public class PriceLoadingStep implements PricingStep {
@@ -32,7 +31,7 @@ public class PriceLoadingStep implements PricingStep {
 			long unit = p.getUnitPrice();
 			long raw = Math.multiplyExact(unit, item.getAmount());
 			lines.add(PricingLine.builder()
-				.shopId(String.valueOf(p.getSpuId()))
+				.tenantId(String.valueOf(p.getSpuId()))
 				.skuId(String.valueOf(p.getSkuId()))
 				.quantity(item.getAmount())
 				.unitPriceCents(unit)

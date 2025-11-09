@@ -4,13 +4,12 @@ import com.github.spud.tinystore.order.application.command.RefundSuccessCommand;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * 退款成功回调请求DTO
@@ -22,6 +21,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RefundSuccessRequest {
+
 	/**
 	 * 订单ID
 	 */
@@ -74,6 +74,7 @@ public class RefundSuccessRequest {
 	@NoArgsConstructor
 	@AllArgsConstructor
 	public static class RefundItem {
+
 		private String skuId;
 		private Integer quantity;
 		private BigDecimal amount;

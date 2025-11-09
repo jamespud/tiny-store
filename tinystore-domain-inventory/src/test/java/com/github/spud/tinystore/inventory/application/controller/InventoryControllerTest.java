@@ -48,7 +48,7 @@ class InventoryControllerTest {
     void availableOk() throws Exception {
         when(service.available("s1","sku1")).thenReturn(42L);
         mockMvc.perform(get("/api/inventory/stock/available")
-                        .param("shopId","s1")
+                        .param("tenantId","s1")
                         .param("skuId","sku1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").value(42));

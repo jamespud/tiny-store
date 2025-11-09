@@ -1,15 +1,18 @@
 package com.github.spud.tinystore.order.infrastructure.persistence.po;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import java.time.OffsetDateTime;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;
 
-import java.time.OffsetDateTime;
-
 /**
- * 订单幂等性控制持久化对象
- * 基于 requestId 确保接口调用的幂等性
+ * 订单幂等性控制持久化对象 基于 requestId 确保接口调用的幂等性
  */
 @Data
 @EqualsAndHashCode(callSuper = false)

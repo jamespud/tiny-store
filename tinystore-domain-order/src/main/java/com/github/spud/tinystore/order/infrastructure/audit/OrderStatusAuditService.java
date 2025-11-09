@@ -2,19 +2,16 @@ package com.github.spud.tinystore.order.infrastructure.audit;
 
 import com.github.spud.tinystore.order.infrastructure.persistence.po.OrderStatusAuditPO;
 import com.github.spud.tinystore.order.infrastructure.persistence.repository.OrderStatusAuditRepository;
+import java.time.OffsetDateTime;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.UUID;
-
 /**
- * 订单状态审计服务
- * 记录订单状态变更的完整审计链路
+ * 订单状态审计服务 记录订单状态变更的完整审计链路
  */
 @Slf4j
 @Service
@@ -36,12 +33,12 @@ public class OrderStatusAuditService {
 	 */
 	@Transactional
 	public void recordStatusChange(String orderNo,
-	                               String fromStatus,
-	                               String toStatus,
-	                               OrderStatusAuditPO.ActorType actorType,
-	                               String actorId,
-	                               String reason,
-	                               UUID eventId) {
+		String fromStatus,
+		String toStatus,
+		OrderStatusAuditPO.ActorType actorType,
+		String actorId,
+		String reason,
+		String eventId) {
 		OrderStatusAuditPO audit = new OrderStatusAuditPO()
 			.setOrderNo(orderNo)
 			.setFromStatus(fromStatus)
@@ -62,12 +59,13 @@ public class OrderStatusAuditService {
 	 * 记录用户操作的状态变更
 	 */
 	@Transactional
-	public void recordUserStatusChange(String orderNo,
-	                                   String fromStatus,
-	                                   String toStatus,
-	                                   String userId,
-	                                   String reason,
-	                                   UUID eventId) {
+	public void recordUserStatusChange(
+		String orderNo,
+		String fromStatus,
+		String toStatus,
+		String userId,
+		String reason,
+		String eventId) {
 		recordStatusChange(orderNo, fromStatus, toStatus,
 			OrderStatusAuditPO.ActorType.USER, userId, reason, eventId);
 	}
@@ -76,12 +74,13 @@ public class OrderStatusAuditService {
 	 * 记录商户操作的状态变更
 	 */
 	@Transactional
-	public void recordMerchantStatusChange(String orderNo,
-	                                       String fromStatus,
-	                                       String toStatus,
-	                                       String merchantId,
-	                                       String reason,
-	                                       UUID eventId) {
+	public void recordMerchantStatusChange(
+		String orderNo,
+		String fromStatus,
+		String toStatus,
+		String merchantId,
+		String reason,
+		String eventId) {
 		recordStatusChange(orderNo, fromStatus, toStatus,
 			OrderStatusAuditPO.ActorType.MERCHANT, merchantId, reason, eventId);
 	}
@@ -90,12 +89,13 @@ public class OrderStatusAuditService {
 	 * 记录系统操作的状态变更
 	 */
 	@Transactional
-	public void recordSystemStatusChange(String orderNo,
-	                                     String fromStatus,
-	                                     String toStatus,
-	                                     String systemComponent,
-	                                     String reason,
-	                                     UUID eventId) {
+	public void recordSystemStatusChange(
+		String orderNo,
+		String fromStatus,
+		String toStatus,
+		String systemComponent,
+		String reason,
+		String eventId) {
 		recordStatusChange(orderNo, fromStatus, toStatus,
 			OrderStatusAuditPO.ActorType.SYSTEM, systemComponent, reason, eventId);
 	}
@@ -121,8 +121,8 @@ public class OrderStatusAuditService {
 	 */
 	@Transactional(readOnly = true)
 	public List<OrderStatusAuditPO> getStatusChangeHistory(String orderNo,
-	                                                       OffsetDateTime startTime,
-	                                                       OffsetDateTime endTime) {
+		OffsetDateTime startTime,
+		OffsetDateTime endTime) {
 		return auditRepository.findByOrderNoAndTimeRange(orderNo, startTime, endTime);
 	}
 
@@ -135,7 +135,7 @@ public class OrderStatusAuditService {
 	 */
 	@Transactional(readOnly = true)
 	public List<OrderStatusAuditPO> getStatusChangesByActor(OrderStatusAuditPO.ActorType actorType,
-	                                                        String actorId) {
+		String actorId) {
 		return auditRepository.findByActorTypeAndActorIdOrderByCreatedAtDesc(actorType, actorId);
 	}
 

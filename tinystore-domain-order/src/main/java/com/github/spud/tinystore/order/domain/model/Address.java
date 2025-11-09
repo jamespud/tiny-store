@@ -13,8 +13,8 @@ package com.github.spud.tinystore.order.domain.model;
  * @param country    国家
  */
 public record Address(String name, String phone, String detail, String street, String city,
-                      String state,
-                      String postalCode,
-                      String country) {
+											String state,
+											String postalCode,
+											String country) {
 
 }

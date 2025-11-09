@@ -1,12 +1,11 @@
 package com.github.spud.tinystore.order.application.command.user;
 
 import com.github.spud.tinystore.order.interfaces.dto.request.AfterSaleApplyRequest;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 
 /**
  * 售后申请命令
@@ -17,6 +16,7 @@ import java.util.UUID;
 @Data
 @AllArgsConstructor
 public class AfterSaleApplyCommand {
+
 	/**
 	 * 订单ID
 	 */

@@ -6,7 +6,7 @@ package com.github.spud.tinystore.inventory.logging;
 public final class LoggingMdcKeys {
 
 	public static final String TRACE_ID = "traceId";
-	public static final String SHOP_ID = "shopId";
+	public static final String SHOP_ID = "tenantId";
 	public static final String SKU_ID = "skuId";
 	public static final String RESERVATION_ID = "reservationId";
 

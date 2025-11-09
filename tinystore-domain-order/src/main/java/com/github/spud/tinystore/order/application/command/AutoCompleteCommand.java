@@ -12,6 +12,7 @@ import lombok.Data;
 @Data
 @AllArgsConstructor
 public class AutoCompleteCommand {
+
 	/**
 	 * 订单ID
 	 */
