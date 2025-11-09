@@ -8,9 +8,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * @date 2025/8/10
  */
 @SpringBootApplication(scanBasePackages = "com.github.spud.tinystore")
-public class WarehouseApplication {
+public class InventoryApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(WarehouseApplication.class, args);
+		SpringApplication.run(InventoryApplication.class, args);
 	}
 }
