@@ -1,92 +1,143 @@
 <!DOCTYPE html>
 <html lang="zh">
 <head>
-    <meta charset="UTF-8">
-    <title>商城统一认证 - 登录</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { font-family: Arial, sans-serif; margin: 2rem auto; max-width: 520px; color: #1f2d3d; }
-        h1 { text-align: center; }
-        form { border: 1px solid #dfe4ea; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; }
-        label { display: block; margin-bottom: .5rem; font-weight: bold; }
-        input[type="text"], input[type="password"] { width: 100%; padding: .6rem; margin-bottom: 1rem; border: 1px solid #cbd5e1; border-radius: 4px; }
-        button { background-color: #2563eb; color: #fff; padding: .6rem 1.2rem; border: none; border-radius: 4px; cursor: pointer; }
-        button[disabled] { background-color: #94a3b8; cursor: not-allowed; }
-        .helper { font-size: .9rem; color: #64748b; margin-bottom: 1rem; }
-        .otp-actions { display: flex; gap: .8rem; }
-        .error { color: #dc2626; margin-top: .5rem; }
-    </style>
+  <meta charset="UTF-8">
+  <title>商城统一认证 - 登录</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2rem auto;
+      max-width: 520px;
+      color: #1f2d3d;
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    form {
+      border: 1px solid #dfe4ea;
+      padding: 1.5rem;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+    }
+
+    label {
+      display: block;
+      margin-bottom: .5rem;
+      font-weight: bold;
+    }
+
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: .6rem;
+      margin-bottom: 1rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+    }
+
+    button {
+      background-color: #2563eb;
+      color: #fff;
+      padding: .6rem 1.2rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    button[disabled] {
+      background-color: #94a3b8;
+      cursor: not-allowed;
+    }
+
+    .helper {
+      font-size: .9rem;
+      color: #64748b;
+      margin-bottom: 1rem;
+    }
+
+    .otp-actions {
+      display: flex;
+      gap: .8rem;
+    }
+
+    .error {
+      color: #dc2626;
+      margin-top: .5rem;
+    }
+  </style>
 </head>
 <body>
 <h1>登录字节商城账号</h1>
 
 <form method="post" action="/login">
-    <h2>用户名密码登录（开发调试）</h2>
-    <label for="username">用户名</label>
-    <input type="text" id="username" name="username" autofocus>
+  <h2>用户名密码登录（开发调试）</h2>
+  <label for="username">用户名</label>
+  <input type="text" id="username" name="username" autofocus>
 
-    <label for="password">密码</label>
-    <input type="password" id="password" name="password">
+  <label for="password">密码</label>
+  <input type="password" id="password" name="password">
 
-    <button type="submit">登录</button>
-    <p class="helper">此登录方式仅用于开发阶段内存用户（user/admin）。</p>
+  <button type="submit">登录</button>
+  <p class="helper">此登录方式仅用于开发阶段内存用户（user/admin）。</p>
 </form>
 
 <form id="otp-login-form" method="post" action="/login/otp">
-    <h2>手机号验证码登录</h2>
-    <label for="otp-phone">手机号</label>
-    <input type="text" id="otp-phone" name="phone" placeholder="请输入11位手机号" value="" required>
+  <h2>手机号验证码登录</h2>
+  <label for="otp-phone">手机号</label>
+  <input type="text" id="otp-phone" name="phone" placeholder="请输入11位手机号" value="" required>
 
-    <div class="otp-actions">
-        <button type="button" id="send-otp">获取验证码</button>
-        <span id="send-status" class="helper"></span>
-    </div>
+  <div class="otp-actions">
+    <button type="button" id="send-otp">获取验证码</button>
+    <span id="send-status" class="helper"></span>
+  </div>
 
-    <label for="otp-code">验证码</label>
-    <input type="text" id="otp-code" name="code" placeholder="请输入6位验证码" required>
+  <label for="otp-code">验证码</label>
+  <input type="text" id="otp-code" name="code" placeholder="请输入6位验证码" required>
 
-    <button type="submit">短信验证码登录</button>
-    <p class="helper">当前为开发态 Stub，验证码固定为 <strong>123456</strong>。</p>
-    <p id="otp-error" class="error" hidden></p>
+  <button type="submit">短信验证码登录</button>
+  <p class="helper">当前为开发态 Stub，验证码固定为 <strong>123456</strong>。</p>
+  <p id="otp-error" class="error" hidden></p>
 </form>
 
 <script>
-    const sendBtn = document.getElementById('send-otp');
-    const phoneInput = document.getElementById('otp-phone');
-    const statusEl = document.getElementById('send-status');
-    const errorEl = document.getElementById('otp-error');
+  const sendBtn = document.getElementById('send-otp');
+  const phoneInput = document.getElementById('otp-phone');
+  const statusEl = document.getElementById('send-status');
+  const errorEl = document.getElementById('otp-error');
 
-    sendBtn.addEventListener('click', async () => {
-        const phone = phoneInput.value.trim();
-        if (!phone) {
-            statusEl.textContent = '请输入手机号';
-            return;
-        }
-        sendBtn.disabled = true;
-        statusEl.textContent = '发送中...';
-        try {
-            const res = await fetch('/api/auth/otp/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone })
-            });
-            if (res.ok) {
-                statusEl.textContent = '验证码已发送（开发态固定为 123456）';
-                errorEl.hidden = true;
-            } else {
-                statusEl.textContent = '发送失败';
-            }
-        } catch (e) {
-            statusEl.textContent = '网络错误';
-        } finally {
-            sendBtn.disabled = false;
-        }
-    });
+  sendBtn.addEventListener('click', async () => {
+      const phone = phoneInput.value.trim();
+      if (!phone) {
+          statusEl.textContent = '请输入手机号';
+          return;
+      }
+      sendBtn.disabled = true;
+      statusEl.textContent = '发送中...';
+      try {
+          const res = await fetch('/api/auth/otp/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ phone })
+          });
+          if (res.ok) {
+              statusEl.textContent = '验证码已发送（开发态固定为 123456）';
+              errorEl.hidden = true;
+          } else {
+              statusEl.textContent = '发送失败';
+          }
+      } catch (e) {
+          statusEl.textContent = '网络错误';
+      } finally {
+          sendBtn.disabled = false;
+      }
+  });
 
-    document.getElementById('otp-login-form').addEventListener('submit', () => {
-        errorEl.hidden = true;
-        statusEl.textContent = '';
-    });
+  document.getElementById('otp-login-form').addEventListener('submit', () => {
+      errorEl.hidden = true;
+      statusEl.textContent = '';
+  });
 </script>
 </body>
 </html>

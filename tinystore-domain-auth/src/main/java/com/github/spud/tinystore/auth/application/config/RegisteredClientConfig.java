@@ -1,5 +1,7 @@
 package com.github.spud.tinystore.auth.application.config;
 
+import com.github.spud.tinystore.auth.application.port.out.RegisteredClientStorePort;
+import com.github.spud.tinystore.auth.infrastructure.persistence.adapter.SasRegisteredClientStoreAdapter;
 import java.time.Duration;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
@@ -7,7 +9,6 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
@@ -33,12 +34,6 @@ public class RegisteredClientConfig {
 
   @Value("${tinystore.auth.tokens.m2m.access-token-ttl:PT5M}")
   private Duration m2mAccessTokenTtl;
-
-  @Bean
-  public RegisteredClientRepository registeredClientRepository(JdbcTemplate jdbcTemplate) {
-    // 显式配置 JDBC 存储，避免隐式自动装配
-    return new JdbcRegisteredClientRepository(jdbcTemplate);
-  }
 
   @Bean
   public OAuth2AuthorizationService authorizationService(

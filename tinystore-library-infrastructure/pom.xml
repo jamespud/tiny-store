@@ -15,7 +15,7 @@
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<redisson.version>3.11.5</redisson.version>
+		<redisson.version>3.32.0</redisson.version>
 	</properties>
 	
 	<dependencies>
@@ -67,6 +67,7 @@
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
+      <optional>true</optional>
 		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>

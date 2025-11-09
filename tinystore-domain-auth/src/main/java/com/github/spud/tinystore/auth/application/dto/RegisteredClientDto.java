@@ -10,4 +10,6 @@ public record RegisteredClientDto(
     List<String> scopes,
     String tokenEndpointAuthMethod,
     String clientSecret
-) {}
+) {
+
+}

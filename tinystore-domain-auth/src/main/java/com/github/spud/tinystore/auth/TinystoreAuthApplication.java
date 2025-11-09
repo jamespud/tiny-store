@@ -6,9 +6,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @EnableScheduling
 @SpringBootApplication(scanBasePackages = "com.github.spud.tinystore")
-public class AuthApplication {
+public class TinystoreAuthApplication {
 
   public static void main(String[] args) {
-    SpringApplication.run(AuthApplication.class, args);
+    SpringApplication.run(TinystoreAuthApplication.class, args);
   }
 }

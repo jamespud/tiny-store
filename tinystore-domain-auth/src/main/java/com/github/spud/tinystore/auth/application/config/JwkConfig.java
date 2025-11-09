@@ -56,5 +56,5 @@ public class JwkConfig {
   public JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource) {
     return OAuth2AuthorizationServerConfiguration.jwtDecoder(jwkSource);
   }
-  
+
 }
