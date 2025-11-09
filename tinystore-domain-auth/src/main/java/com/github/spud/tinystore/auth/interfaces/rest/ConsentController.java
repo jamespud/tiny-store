@@ -40,8 +40,12 @@ public class ConsentController {
 
     Set<String> previouslyApprovedScopes = Set.of();
     OAuth2AuthorizationConsent consent = consentService.findById(clientId, username);
-    if (consent != null) {
-      previouslyApprovedScopes = consent.getScopes();
+    if (consent != null && consent.getAuthorities() != null) {
+      previouslyApprovedScopes = consent.getAuthorities().stream()
+          .map(org.springframework.security.core.GrantedAuthority::getAuthority)
+          .filter(a -> a != null && a.startsWith("SCOPE_"))
+          .map(a -> a.substring("SCOPE_".length()))
+          .collect(Collectors.toCollection(LinkedHashSet::new));
     }
     Set<String> previouslyApprovedUserScopes = previouslyApprovedScopes.stream()
         .filter(scope -> scope.startsWith("user."))

@@ -11,8 +11,8 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
-@Component
-@Primary
+//@Component
+//@Primary
 @ConditionalOnBean(RedissonClient.class)
 public class RedissonLockAndRateLimitAdapter implements LockAndRateLimitPort {
 
