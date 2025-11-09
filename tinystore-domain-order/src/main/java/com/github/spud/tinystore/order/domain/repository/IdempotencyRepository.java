@@ -1,10 +1,9 @@
 package com.github.spud.tinystore.order.domain.repository;
 
-import org.springframework.stereotype.Repository;
-
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import org.springframework.stereotype.Repository;
 
 /**
  * Repository for managing idempotency keys to prevent duplicate processing
@@ -62,6 +61,7 @@ public interface IdempotencyRepository {
 	 * Idempotency record
 	 */
 	class IdempotencyRecord {
+
 		private final String key;
 		private final String owner;
 		private final LocalDateTime createdAt;
@@ -69,7 +69,7 @@ public interface IdempotencyRepository {
 		private final String result; // Optional: cached result for idempotent responses
 
 		public IdempotencyRecord(String key, String owner, LocalDateTime createdAt,
-		                         LocalDateTime expiresAt, String result) {
+			LocalDateTime expiresAt, String result) {
 			this.key = key;
 			this.owner = owner;
 			this.createdAt = createdAt;
@@ -112,8 +112,7 @@ public interface IdempotencyRepository {
 	class IdempotencyKeyGenerator {
 
 		/**
-		 * Generate key for payment callbacks
-		 * Uses third-party payment ID or fallback to content hash
+		 * Generate key for payment callbacks Uses third-party payment ID or fallback to content hash
 		 */
 		public static String forPaymentCallback(String paymentId, String orderId, String amount) {
 			if (paymentId != null && !paymentId.trim().isEmpty()) {
@@ -133,8 +132,8 @@ public interface IdempotencyRepository {
 		}
 
 		/**
-		 * Generate key for logistics callbacks
-		 * Uses content hash since logistics systems often don't provide stable IDs
+		 * Generate key for logistics callbacks Uses content hash since logistics systems often don't
+		 * provide stable IDs
 		 */
 		public static String forLogisticsCallback(String orderId, String status, String timestamp) {
 			String content = orderId + ":" + status + ":" + timestamp;

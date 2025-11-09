@@ -46,7 +46,7 @@ public class CacheStockService {
 				return false;
 			}
 		}
-		log.info("Increase stock failed after retries for shopId: {}, skuId: {}", shopId, skuId);
+		log.info("Increase stock failed after retries for tenantId: {}, skuId: {}", shopId, skuId);
 		return false;
 	}
 
@@ -76,7 +76,7 @@ public class CacheStockService {
 				return false;
 			}
 		}
-		log.info("Decrease stock failed after retries for shopId: {}, skuId: {}", shopId, skuId);
+		log.info("Decrease stock failed after retries for tenantId: {}, skuId: {}", shopId, skuId);
 		return false;
 	}
 
@@ -92,7 +92,7 @@ public class CacheStockService {
 			List.of(quantity))) {
 			return true;
 		}
-		log.info("Decrease reserved stock failed for shopId: {}, skuId: {}", shopId, skuId);
+		log.info("Decrease reserved stock failed for tenantId: {}, skuId: {}", shopId, skuId);
 		return false;
 	}
 
@@ -108,7 +108,7 @@ public class CacheStockService {
 			List.of(quantity))) {
 			return true;
 		}
-		log.info("Increase reserved stock failed for shopId: {}, skuId: {}", shopId, skuId);
+		log.info("Increase reserved stock failed for tenantId: {}, skuId: {}", shopId, skuId);
 		return false;
 	}
 

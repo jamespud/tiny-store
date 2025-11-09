@@ -2,7 +2,13 @@ package com.github.spud.tinystore.order.interfaces.rest;
 
 import com.github.spud.tinystore.infrastructure.vo.Response;
 import com.github.spud.tinystore.order.application.service.OrderApplicationService;
-import com.github.spud.tinystore.order.interfaces.dto.request.*;
+import com.github.spud.tinystore.order.interfaces.dto.request.AutoCompleteRequest;
+import com.github.spud.tinystore.order.interfaces.dto.request.DeliveredRequest;
+import com.github.spud.tinystore.order.interfaces.dto.request.LogisticsPickedRequest;
+import com.github.spud.tinystore.order.interfaces.dto.request.MoveToAwaitFulfillmentRequest;
+import com.github.spud.tinystore.order.interfaces.dto.request.PaymentSuccessRequest;
+import com.github.spud.tinystore.order.interfaces.dto.request.RefundSuccessRequest;
+import com.github.spud.tinystore.order.interfaces.dto.request.UnpaidTimeoutRequest;
 import com.github.spud.tinystore.order.interfaces.dto.response.BasicAckVO;
 import com.github.spud.tinystore.order.interfaces.util.IdempotencyHelper;
 import lombok.extern.slf4j.Slf4j;
@@ -124,7 +130,8 @@ public class InternalOrderController {
 		applicationService.timeoutCancel(request.toCommand());
 
 		log.info("Unpaid timeout processed successfully for order: {}", request.getOrderId());
-		return Response.ok(new BasicAckVO("success", "Order cancelled due to timeout", request.getEventId()));
+		return Response.ok(
+			new BasicAckVO("success", "Order cancelled due to timeout", request.getEventId()));
 	}
 
 	/**
@@ -152,9 +159,11 @@ public class InternalOrderController {
 	 * 支付后自动转待履约（保障性作业）
 	 */
 	@PostMapping(value = "/auto/await-fulfillment", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> moveToAwaitFulfillment(@RequestBody MoveToAwaitFulfillmentRequest request) {
+	public Response<BasicAckVO> moveToAwaitFulfillment(
+		@RequestBody MoveToAwaitFulfillmentRequest request) {
 		// TODO: 幂等校验 (eventId)
 		applicationService.moveToAwaitFulfillment(request.toCommand());
-		return Response.ok(new BasicAckVO("success", "Moved to awaiting fulfillment", request.getEventId()));
+		return Response.ok(
+			new BasicAckVO("success", "Moved to awaiting fulfillment", request.getEventId()));
 	}
 }

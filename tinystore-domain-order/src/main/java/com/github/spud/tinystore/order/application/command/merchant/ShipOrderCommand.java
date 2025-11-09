@@ -1,10 +1,9 @@
 package com.github.spud.tinystore.order.application.command.merchant;
 
 import com.github.spud.tinystore.order.interfaces.dto.request.ShipOrderRequest;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Data;
-
-import java.util.List;
 
 /**
  * 商家发货命令
@@ -15,6 +14,7 @@ import java.util.List;
 @Data
 @AllArgsConstructor
 public class ShipOrderCommand {
+
 	/**
 	 * 订单ID
 	 */

@@ -1,17 +1,20 @@
 package com.github.spud.tinystore.order.infrastructure.persistence.po;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import java.time.OffsetDateTime;
+import java.util.UUID;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;
 import org.hibernate.annotations.UuidGenerator;
 
-import java.time.OffsetDateTime;
-import java.util.UUID;
-
 /**
- * 订单状态审计持久化对象
- * 记录订单状态变更的完整审计链路
+ * 订单状态审计持久化对象 记录订单状态变更的完整审计链路
  */
 @Data
 @EqualsAndHashCode(callSuper = false)
@@ -69,7 +72,7 @@ public class OrderStatusAuditPO {
 	 * 关联的领域事件ID
 	 */
 	@Column(name = "event_id")
-	private UUID eventId;
+	private String eventId;
 
 	/**
 	 * 分布式追踪ID

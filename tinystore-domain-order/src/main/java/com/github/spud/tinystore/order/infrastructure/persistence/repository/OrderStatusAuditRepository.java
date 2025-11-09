@@ -1,14 +1,13 @@
 package com.github.spud.tinystore.order.infrastructure.persistence.repository;
 
 import com.github.spud.tinystore.order.infrastructure.persistence.po.OrderStatusAuditPO;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
-
-import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.UUID;
 
 /**
  * 订单状态审计数据访问接口
@@ -48,7 +47,7 @@ public interface OrderStatusAuditRepository extends JpaRepository<OrderStatusAud
 	@Query("SELECT COUNT(a) FROM OrderStatusAuditPO a WHERE a.orderNo = :orderNo " +
 		"AND a.createdAt >= :since")
 	Long countStatusChangesSince(@Param("orderNo") String orderNo,
-	                             @Param("since") OffsetDateTime since);
+		@Param("since") OffsetDateTime since);
 
 	/**
 	 * 查询订单的最后一次状态变更

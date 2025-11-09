@@ -5,9 +5,12 @@ import com.github.spud.tinystore.order.domain.statemachine.OrderStateMachineServ
 import com.github.spud.tinystore.order.infrastructure.statemachine.enums.OrderEvent;
 import com.github.spud.tinystore.order.infrastructure.statemachine.enums.OrderMainStatus;
 import jakarta.annotation.PostConstruct;
+import java.util.HashMap;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.context.Lifecycle;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.statemachine.StateMachine;
 import org.springframework.statemachine.StateMachineContext;
@@ -18,9 +21,6 @@ import org.springframework.statemachine.service.StateMachineService;
 import org.springframework.statemachine.support.DefaultExtendedState;
 import org.springframework.statemachine.support.DefaultStateMachineContext;
 import org.springframework.stereotype.Service;
-
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * 订单状态机服务实现
@@ -39,7 +39,6 @@ public class OrderStateMachineServiceImpl implements OrderStateMachineService {
 		this.persister = new DefaultStateMachinePersister<>(new InMemoryStateMachinePersist());
 	}
 
-	@Override
 	public boolean sendEvent(String orderNo, OrderEvent event, Map<String, Object> context) {
 		try {
 			// 获取或创建状态机实例
@@ -78,7 +77,6 @@ public class OrderStateMachineServiceImpl implements OrderStateMachineService {
 		}
 	}
 
-	@Override
 	public OrderMainStatus getCurrentStatus(String orderNo) {
 		try {
 			StateMachine<OrderMainStatus, OrderEvent> stateMachine = getStateMachine(orderNo);
@@ -89,7 +87,6 @@ public class OrderStateMachineServiceImpl implements OrderStateMachineService {
 		}
 	}
 
-	@Override
 	public boolean canTransition(String orderNo, OrderEvent event) {
 		try {
 			StateMachine<OrderMainStatus, OrderEvent> stateMachine = getStateMachine(orderNo);
@@ -107,7 +104,6 @@ public class OrderStateMachineServiceImpl implements OrderStateMachineService {
 		}
 	}
 
-	@Override
 	public void resetStateMachine(String orderNo, OrderMainStatus initialStatus) {
 		try {
 			// 创建新的状态机并设置初始状态
@@ -136,7 +132,8 @@ public class OrderStateMachineServiceImpl implements OrderStateMachineService {
 	/**
 	 * 获取状态机实例
 	 */
-	private StateMachine<OrderMainStatus, OrderEvent> getStateMachine(String orderNo) throws Exception {
+	private StateMachine<OrderMainStatus, OrderEvent> getStateMachine(String orderNo)
+		throws Exception {
 		StateMachine<OrderMainStatus, OrderEvent> stateMachine =
 			stateMachineService.acquireStateMachine(orderNo);
 
@@ -144,7 +141,7 @@ public class OrderStateMachineServiceImpl implements OrderStateMachineService {
 		persister.restore(stateMachine, orderNo);
 
 		// 如果状态机未启动，则启动它
-		if (!stateMachine.isRunning()) {
+		if (!((Lifecycle) stateMachine).isRunning()) {
 			stateMachine.start();
 		}
 
@@ -152,7 +149,8 @@ public class OrderStateMachineServiceImpl implements OrderStateMachineService {
 	}
 
 	@Override
-	public OrderAggregate transition(OrderAggregate order, OrderEvent event, Map<String, Object> context) {
+	public OrderAggregate transition(OrderAggregate order, OrderEvent event,
+		Map<String, Object> context) {
 		return null;
 	}
 

@@ -1,14 +1,12 @@
 package com.github.spud.tinystore.order.domain.model.line;
 
 import com.github.spud.tinystore.order.domain.model.Money;
-
 import java.time.Instant;
 
 /**
  * SKU快照值对象
  * <p>
- * 记录下单时刻的商品信息，用于价格冻结与历史追溯
- * 避免商品信息变更影响已下单的订单
+ * 记录下单时刻的商品信息，用于价格冻结与历史追溯 避免商品信息变更影响已下单的订单
  *
  * @param skuId        SKU标识符
  * @param title        商品标题（下单时快照）
@@ -53,7 +51,8 @@ public record SkuSnapshot(
 	 * @param unitPriceInCents 单价（分）
 	 * @return SKU快照实例
 	 */
-	public static SkuSnapshot create(String skuId, String title, String specJson, long unitPriceInCents) {
+	public static SkuSnapshot create(String skuId, String title, String specJson,
+		long unitPriceInCents) {
 		return new SkuSnapshot(
 			skuId,
 			title,

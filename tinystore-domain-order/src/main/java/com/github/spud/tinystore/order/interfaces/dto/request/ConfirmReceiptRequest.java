@@ -8,8 +8,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.UUID;
-
 /**
  * 确认收货请求DTO
  *
@@ -20,11 +18,12 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ConfirmReceiptRequest {
+
 	/**
 	 * 订单ID
 	 */
 	@NotNull(message = "订单ID不能为空")
-	private UUID orderId;
+	private String orderId;
 
 	/**
 	 * 幂等键

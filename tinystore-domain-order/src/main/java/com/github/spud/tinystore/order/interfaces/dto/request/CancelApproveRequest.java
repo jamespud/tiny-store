@@ -18,6 +18,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CancelApproveRequest {
+
 	/**
 	 * 订单ID
 	 */

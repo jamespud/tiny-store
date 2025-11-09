@@ -1,9 +1,8 @@
 package com.github.spud.tinystore.order.application.command;
 
+import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Data;
-
-import java.util.UUID;
 
 /**
  * 支付超时取消命令
@@ -14,6 +13,7 @@ import java.util.UUID;
 @Data
 @AllArgsConstructor
 public class UnpaidTimeoutCancelCommand {
+
 	/**
 	 * 订单ID
 	 */

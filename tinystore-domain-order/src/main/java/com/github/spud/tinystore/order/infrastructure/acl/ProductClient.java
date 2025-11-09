@@ -5,10 +5,9 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.core.MediaType;
-import org.springframework.cloud.openfeign.FeignClient;
-
 import java.util.List;
 import java.util.Map;
+import org.springframework.cloud.openfeign.FeignClient;
 
 /**
  * @author Spud

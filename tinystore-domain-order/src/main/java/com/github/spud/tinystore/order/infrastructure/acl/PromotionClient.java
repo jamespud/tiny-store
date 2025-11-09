@@ -2,57 +2,93 @@ package com.github.spud.tinystore.order.infrastructure.acl;
 
 import java.math.BigDecimal;
 import java.util.List;
-
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
 import org.springframework.cloud.openfeign.FeignClient;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 
 @FeignClient(name = "promotion-service", path = "/api/promotion")
 public interface PromotionClient {
 
-	@PostMapping("/coupon/pre-use")
-	PreUseResponse preUse(@RequestHeader("Idempotency-Key") String idempotencyKey,
-		@RequestBody PreUseRequest request);
+	@Data
+	class CalculateFreightResponse {
 
-	@PostMapping("/coupon/confirm-use")
-	ConfirmUseResponse confirmUse(@RequestHeader("Idempotency-Key") String idempotencyKey,
-		@RequestBody ConfirmUseRequest request);
+		private long freightAmount;
+	}
 
-	@PostMapping("/coupon/rollback")
-	RollbackResponse rollback(@RequestHeader("Idempotency-Key") String idempotencyKey,
-		@RequestBody RollbackRequest request);
+	@Builder
+	class CalculateMerchantFreightRequest {
+
+		private String merchantId;
+		private String addressId;
+		private double totalWeight;
+		private long freeFreightThreshold;
+		private long baseFreight;
+	}
+
+	@Builder
+	class PreUseMerchantCouponRequest {
+
+		public String userId;
+		public String merchantId;
+		public String couponId;
+		public List<SkuDetail> skus;
+	}
+
+	@Builder
+	class PreUsePlatformCouponRequest {
+
+		public String userId;
+		public String couponId;
+		public List<SkuDetail> skus;
+	}
+
+	@Data
+	class MerchantInfo {
+
+		public String merchantId;
+		public String merchantName;
+		public BigDecimal freeFreightThreshold;
+		public BigDecimal baseFreight;
+	}
 
 	class PreUseRequest {
+
 		public String userId;
 		public List<String> couponIds;
 		public List<SkuDetail> skus;
-		public BigDecimal orderAmount;
+		public long orderAmount;
 		public String userTags;
 		public String traceId;
 	}
 
+	@AllArgsConstructor
 	class SkuDetail {
+
 		public String skuId;
 		public Integer quantity;
-		public BigDecimal price;
+
 	}
 
-	class PreUseResponse {
+	@Data
+	class PreUseCouponResponse {
+
 		public boolean valid;
-		public List<AppliedCoupon> appliedCoupons;
-		public BigDecimal totalDiscount;
-		public String lockId;
 		public String invalidReason;
+		public long totalDiscount;
+		public String lockId;
+		private String couponId;
 	}
 
 	class AppliedCoupon {
+
 		public String couponId;
-		public BigDecimal discountAmount;
+		public long discountAmount;
 		public String ruleTrace;
 	}
 
 	class ConfirmUseRequest {
+
 		public String orderNo;
 		public String lockId;
 		public String payNo;
@@ -60,13 +96,14 @@ public interface PromotionClient {
 	}
 
 	class ConfirmUseResponse {
+
 		public boolean success;
-		public List<AppliedCoupon> appliedCoupons;
-		public BigDecimal totalDiscount;
+		public long totalDiscount;
 		public String message;
 	}
 
 	class RollbackRequest {
+
 		public String orderNo;
 		public RefundType refundType;
 		public String lockId;
@@ -79,6 +116,7 @@ public interface PromotionClient {
 	}
 
 	class RollbackResponse {
+
 		public boolean success;
 		public String message;
 	}

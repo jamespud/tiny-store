@@ -1,11 +1,10 @@
 package com.github.spud.tinystore.order.interfaces.util;
 
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.util.StringUtils;
-
-import java.util.UUID;
 
 /**
  * 幂等性和关联ID处理工具类
@@ -27,8 +26,7 @@ public class IdempotencyHelper {
 	public static final String MDC_REQUEST_ID = "requestId";
 
 	/**
-	 * 从请求中提取并设置幂等性键和关联ID到 MDC
-	 * 用于日志记录和追踪
+	 * 从请求中提取并设置幂等性键和关联ID到 MDC 用于日志记录和追踪
 	 *
 	 * @param request HTTP 请求
 	 * @return 提取的幂等性键（如果存在）
@@ -67,8 +65,7 @@ public class IdempotencyHelper {
 	}
 
 	/**
-	 * 清理 MDC 上下文
-	 * 避免内存泄漏
+	 * 清理 MDC 上下文 避免内存泄漏
 	 */
 	public static void clearContext() {
 		MDC.remove(MDC_CORRELATION_ID);
@@ -122,8 +119,7 @@ public class IdempotencyHelper {
 	}
 
 	/**
-	 * 验证请求是否包含必需的幂等性键
-	 * 注意：这只用于日志记录，不用于强制执行（由网关处理）
+	 * 验证请求是否包含必需的幂等性键 注意：这只用于日志记录，不用于强制执行（由网关处理）
 	 *
 	 * @param requireIdempotency 是否需要幂等性键
 	 * @return 是否包含幂等性键
@@ -133,7 +129,8 @@ public class IdempotencyHelper {
 		boolean hasKey = StringUtils.hasText(idempotencyKey);
 
 		if (requireIdempotency && !hasKey) {
-			log.warn("Operation requires idempotency key but none provided (should be caught by gateway)");
+			log.warn(
+				"Operation requires idempotency key but none provided (should be caught by gateway)");
 		}
 
 		return hasKey;

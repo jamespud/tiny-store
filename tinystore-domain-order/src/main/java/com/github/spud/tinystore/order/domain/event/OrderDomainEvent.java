@@ -1,31 +1,21 @@
 package com.github.spud.tinystore.order.domain.event;
 
-import lombok.Data;
-
-import java.time.LocalDateTime;
+import com.github.spud.tinystore.domain.event.DomainEvent;
 
 /**
+ * 领域事件基础接口 所有订单相关的领域事件都应该实现此接口
+ *
  * @author Spud
- * @date 2025/9/3
+ * @date 2025/9/29
  */
-@Data
-public class OrderDomainEvent {
+public interface OrderDomainEvent extends DomainEvent {
 
-	private String eventId;
+	/**
+	 * 订单号
+	 *
+	 * @return 订单号
+	 */
+	String getOrderId();
 
-	private EventType eventType;
 
-	private LocalDateTime occurredAt;
-
-	private Object aggregateType;
-
-	private String aggregateId;
-
-	private Integer version;
-
-	private Object payloadType;
-
-	private Object payload;
-
-	private Object dataHash;
 }

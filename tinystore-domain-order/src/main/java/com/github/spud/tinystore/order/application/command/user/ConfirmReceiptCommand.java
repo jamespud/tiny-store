@@ -3,8 +3,6 @@ package com.github.spud.tinystore.order.application.command.user;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
-import java.util.UUID;
-
 /**
  * 确认收货命令
  *
@@ -14,10 +12,11 @@ import java.util.UUID;
 @Data
 @AllArgsConstructor
 public class ConfirmReceiptCommand {
+
 	/**
 	 * 订单ID
 	 */
-	private UUID orderId;
+	private String orderId;
 
 	/**
 	 * 用户ID

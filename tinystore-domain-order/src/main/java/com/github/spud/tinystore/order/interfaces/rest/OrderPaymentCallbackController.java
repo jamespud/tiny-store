@@ -4,19 +4,22 @@ import com.github.spud.tinystore.order.application.service.OrderPaymentCallbackA
 import com.github.spud.tinystore.order.application.service.OrderPaymentCallbackAppService.PaymentCallbackResult;
 import com.github.spud.tinystore.order.application.service.OrderPaymentCallbackAppService.PaymentSuccessCallbackRequest;
 import jakarta.servlet.http.HttpServletRequest;
+import java.math.BigDecimal;
+import java.util.Map;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import java.math.BigDecimal;
-import java.util.Map;
-import java.util.UUID;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 订单支付回调接口
- * 接收第三方支付平台的回调通知
+ * 订单支付回调接口 接收第三方支付平台的回调通知
  */
 @Slf4j
 @RestController
@@ -51,7 +54,8 @@ public class OrderPaymentCallbackController {
 			callbackRequest.setRequestId(generateRequestId(callbackRequest));
 
 			// 业务处理
-			PaymentCallbackResult result = paymentCallbackAppService.handlePaymentSuccess(callbackRequest);
+			PaymentCallbackResult result = paymentCallbackAppService.handlePaymentSuccess(
+				callbackRequest);
 
 			// 构造响应
 			CallbackResponse response = new CallbackResponse(
@@ -218,6 +222,7 @@ public class OrderPaymentCallbackController {
 	 * 回调响应
 	 */
 	public static class CallbackResponse {
+
 		private String status;      // SUCCESS, FAILURE
 		private String message;     // 处理结果消息
 		private String orderNo;     // 订单号

@@ -1,32 +1,31 @@
 package com.github.spud.tinystore.order.domain.event;
 
+import java.time.OffsetDateTime;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
-import java.time.LocalDateTime;
-
 /**
- * Order Cancelled Domain Event
+ * Order Canceled Domain Event
  *
  * @author Spud
  * @date 2025/9/6
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class OrderCancelledEvent extends OrderDomainEvent {
+public class OrderCancelledEvent extends OrderDomainBaseEvent {
 
 	private String orderId;
-	private LocalDateTime cancelledAt;
+	private OffsetDateTime cancelledAt;
 
 	@Builder
-	public OrderCancelledEvent(String orderId, LocalDateTime cancelledAt) {
+	public OrderCancelledEvent(String orderId, OffsetDateTime cancelledAt) {
 		this.orderId = orderId;
 		this.cancelledAt = cancelledAt;
 
 		// Set base event properties
-		setEventType(EventType.ORDER_CANCELLED);
+		setType(OrderEventType.ORDER_CANCELLED);
 		setAggregateId(orderId);
-		setOccurredAt(cancelledAt != null ? cancelledAt : LocalDateTime.now());
+		setOccurredAt(cancelledAt != null ? cancelledAt : OffsetDateTime.now());
 	}
 }

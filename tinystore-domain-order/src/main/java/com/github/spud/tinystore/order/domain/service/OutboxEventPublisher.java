@@ -2,14 +2,13 @@ package com.github.spud.tinystore.order.domain.service;
 
 import com.github.spud.tinystore.order.domain.model.Outbox;
 import com.github.spud.tinystore.order.domain.repository.OutboxRepository;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.List;
 
 /**
  * Outbox 事件发布调度器
@@ -28,14 +27,14 @@ public class OutboxEventPublisher {
 	private final OutboxRepository outboxRepository;
 	private final EventPublishingService eventPublishingService;
 
-	public OutboxEventPublisher(OutboxRepository outboxRepository, EventPublishingService eventPublishingService) {
+	public OutboxEventPublisher(OutboxRepository outboxRepository,
+		EventPublishingService eventPublishingService) {
 		this.outboxRepository = outboxRepository;
 		this.eventPublishingService = eventPublishingService;
 	}
 
 	/**
-	 * 定期发布待发布的事件
-	 * 每30秒执行一次
+	 * 定期发布待发布的事件 每30秒执行一次
 	 */
 	@Scheduled(fixedRate = 30000) // 30秒
 	@Async
@@ -58,8 +57,7 @@ public class OutboxEventPublisher {
 	}
 
 	/**
-	 * 定期重试失败的事件
-	 * 每5分钟执行一次
+	 * 定期重试失败的事件 每5分钟执行一次
 	 */
 	@Scheduled(fixedRate = 300000) // 5分钟
 	@Async
@@ -71,7 +69,8 @@ public class OutboxEventPublisher {
 
 		for (Outbox event : retryEvents) {
 			if (event.getRetryCount() >= MAX_RETRY_COUNT) {
-				log.warn("Event exceeded max retry count, giving up: eventId={}, eventType={}, retryCount={}",
+				log.warn(
+					"Event exceeded max retry count, giving up: eventId={}, eventType={}, retryCount={}",
 					event.getEventId(), event.getEventType(), event.getRetryCount());
 				continue;
 			}
@@ -89,8 +88,7 @@ public class OutboxEventPublisher {
 	}
 
 	/**
-	 * 清理已发布的老事件
-	 * 每天执行一次，删除7天前的已发布事件
+	 * 清理已发布的老事件 每天执行一次，删除7天前的已发布事件
 	 */
 	@Scheduled(cron = "0 0 2 * * ?") // 每天凌晨2点
 	@Async
@@ -107,7 +105,8 @@ public class OutboxEventPublisher {
 	 * 发布单个事件
 	 */
 	private void publishEvent(Outbox event) {
-		log.debug("Publishing event: eventId={}, eventType={}", event.getEventId(), event.getEventType());
+		log.debug("Publishing event: eventId={}, eventType={}", event.getEventId(),
+			event.getEventType());
 
 		try {
 			// 调用事件发布服务（例如发送到消息队列）

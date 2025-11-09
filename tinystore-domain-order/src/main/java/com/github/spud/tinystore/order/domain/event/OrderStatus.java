@@ -1,6 +1,12 @@
 package com.github.spud.tinystore.order.domain.event;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * 优化后的订单状态枚举（仍为单枚举示例；推荐后续拆分多维状态） 说明： 1. code: 机器可读 2. label: 展示名称（可后续 i18n） 3. category: 用于聚合/分组 4.
@@ -11,6 +17,7 @@ import java.util.*;
  * @author Spud
  * @date 2025/8/29
  */
+@Deprecated
 public enum OrderStatus {
 
 	// CORE FLOW
@@ -240,7 +247,7 @@ public enum OrderStatus {
 	}
 
 	private static void put(Map<OrderStatus, Set<OrderStatus>> m, OrderStatus from,
-	                        OrderStatus... tos) {
+		OrderStatus... tos) {
 		m.put(from, new LinkedHashSet<>(Arrays.asList(tos)));
 	}
 

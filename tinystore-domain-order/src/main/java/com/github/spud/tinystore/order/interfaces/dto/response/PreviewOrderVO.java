@@ -1,10 +1,9 @@
 package com.github.spud.tinystore.order.interfaces.dto.response;
 
-import com.github.spud.tinystore.order.application.result.PreviewOrderResult.OrderSummary;
-import com.github.spud.tinystore.order.application.result.PreviewOrderResult.ShopProductSnapshot;
-import lombok.Data;
-
+import com.github.spud.tinystore.order.application.result.ConfirmOrderResult.OrderSummary;
+import com.github.spud.tinystore.order.application.result.ConfirmOrderResult.ShopProductSnapshot;
 import java.util.List;
+import lombok.Data;
 
 /**
  * @author Spud

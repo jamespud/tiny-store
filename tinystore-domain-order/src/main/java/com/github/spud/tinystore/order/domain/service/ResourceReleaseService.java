@@ -1,6 +1,6 @@
 package com.github.spud.tinystore.order.domain.service;
 
-import com.github.spud.tinystore.order.domain.model.Order;
+import com.github.spud.tinystore.order.domain.model.MainOrder;
 import org.springframework.stereotype.Service;
 
 /**
@@ -17,7 +17,7 @@ public class ResourceReleaseService {
 	 *
 	 * @param order 订单
 	 */
-	public void release(Order order) {
+	public void release(MainOrder order) {
 		// TODO: 实现库存释放逻辑
 		// TODO: 实现优惠券释放逻辑
 		// TODO: 实现积分释放逻辑

@@ -1,10 +1,9 @@
 package com.github.spud.tinystore.order.domain.event;
 
+import java.time.OffsetDateTime;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-
-import java.time.LocalDateTime;
 
 /**
  * Refund Completed Domain Event
@@ -14,19 +13,19 @@ import java.time.LocalDateTime;
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class RefundCompletedEvent extends OrderDomainEvent {
+public class RefundCompletedEvent extends OrderDomainBaseEvent {
 
 	private String orderId;
-	private LocalDateTime refundedAt;
+	private OffsetDateTime refundedAt;
 
 	@Builder
-	public RefundCompletedEvent(String orderId, LocalDateTime refundedAt) {
+	public RefundCompletedEvent(String orderId, OffsetDateTime refundedAt) {
 		this.orderId = orderId;
 		this.refundedAt = refundedAt;
 
 		// Set base event properties
-		setEventType(EventType.AFTERSALE_COMPLETED);
+		setType(OrderEventType.AFTERSALE_COMPLETED);
 		setAggregateId(orderId);
-		setOccurredAt(refundedAt != null ? refundedAt : LocalDateTime.now());
+		setOccurredAt(refundedAt != null ? refundedAt : OffsetDateTime.now());
 	}
 }

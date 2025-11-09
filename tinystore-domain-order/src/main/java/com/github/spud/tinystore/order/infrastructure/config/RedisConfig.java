@@ -10,8 +10,7 @@ import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSeriali
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 /**
- * Redis 配置
- * 用于状态机持久化、缓存、幂等性控制等
+ * Redis 配置 用于状态机持久化、缓存、幂等性控制等
  */
 @Configuration
 public class RedisConfig {
@@ -50,7 +49,8 @@ public class RedisConfig {
 	}
 
 	@Bean
-	public RedisTemplate<String, String> stringRedisTemplate(RedisConnectionFactory connectionFactory) {
+	public RedisTemplate<String, String> stringRedisTemplate(
+		RedisConnectionFactory connectionFactory) {
 		RedisTemplate<String, String> template = new RedisTemplate<>();
 		template.setConnectionFactory(connectionFactory);
 
