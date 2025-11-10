@@ -42,6 +42,8 @@ public class OrderBusinessException extends RuntimeException {
 	}
 
 	public OrderBusinessException(String s, String message, HttpStatus httpStatus) {
+		errorCode = OrderErrorCode.ORDER_NOT_FOUND;
+		this.contextMap = new HashMap<>();
 
 	}
 
