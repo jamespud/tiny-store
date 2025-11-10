@@ -11,7 +11,8 @@ import lombok.Getter;
 @AllArgsConstructor
 public class OrderStatus {
 	
-	public static final OrderStatus CREATED = new OrderStatus(CoreFlowStatus.PENDING_PAYMENT, PaymentStatus.NONE, FulfillmentStatus.NONE, AfterSaleStatus.NONE);
+	public static final OrderStatus CREATED = new OrderStatus(CoreFlowStatus.PENDING_PAYMENT,
+		PaymentStatus.NONE, FulfillmentStatus.NONE, AfterSaleStatus.NONE);
 
 	/**
 	 * 核心流程状态

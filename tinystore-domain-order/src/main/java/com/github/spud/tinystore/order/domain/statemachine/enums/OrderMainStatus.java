@@ -1,4 +1,4 @@
-package com.github.spud.tinystore.order.infrastructure.statemachine.enums;
+package com.github.spud.tinystore.order.domain.statemachine.enums;
 
 /**
  * 订单主状态枚举 定义订单的主要流转状态

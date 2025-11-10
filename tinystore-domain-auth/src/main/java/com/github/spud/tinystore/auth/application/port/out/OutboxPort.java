@@ -16,8 +16,6 @@ public interface OutboxPort {
 	
 	void save(UserUnfrozenEvent event);
 
-  void save(ConsentChangedEvent event);
-
   List<RefreshTokenRevokedEvent> fetchUnpublished(int batchSize);
 
   void markPublished(List<RefreshTokenRevokedEvent> events);

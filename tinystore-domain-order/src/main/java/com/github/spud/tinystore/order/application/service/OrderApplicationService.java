@@ -19,10 +19,9 @@ import com.github.spud.tinystore.order.application.command.user.AfterSaleApplyCo
 import com.github.spud.tinystore.order.application.command.user.ApplyAfterSaleCommand;
 import com.github.spud.tinystore.order.application.command.user.ApplyCancelCommand;
 import com.github.spud.tinystore.order.application.command.user.CancelOrderCommand;
-import com.github.spud.tinystore.order.application.command.user.ConfirmReceiptCommand;
 import com.github.spud.tinystore.order.application.command.user.ConfirmOrderCommand;
 import com.github.spud.tinystore.order.application.command.user.ConfirmOrderCommand.MerchantSkuDTO;
-import com.github.spud.tinystore.order.application.command.user.ConfirmOrderCommand.MerchantSkuDTO.SkuItemDTO;
+import com.github.spud.tinystore.order.application.command.user.ConfirmReceiptCommand;
 import com.github.spud.tinystore.order.application.command.user.SubmitOrderCommand;
 import com.github.spud.tinystore.order.application.result.ConfirmOrderResult;
 import com.github.spud.tinystore.order.application.result.SubmitOrderResult;
@@ -55,7 +54,6 @@ import com.github.spud.tinystore.order.domain.service.RiskControlService.OrderRi
 import com.github.spud.tinystore.order.domain.service.RiskControlService.OrderRiskCheckResponse;
 import com.github.spud.tinystore.order.domain.service.RiskControlService.SkuRiskDTO;
 import com.github.spud.tinystore.order.domain.status.CoreFlowStatus;
-import com.github.spud.tinystore.order.domain.status.OrderStateTransitionService;
 import com.github.spud.tinystore.order.infrastructure.acl.InventoryClient.StockPreOccupyRequest;
 import com.github.spud.tinystore.order.infrastructure.acl.InventoryClient.StockPreOccupyResponse;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient;
@@ -95,7 +93,6 @@ public class OrderApplicationService {
 
 	private final OrderDomainService orderDomainService;
 	private final CancelDecisionService cancelDecisionService;
-	private final OrderStateTransitionService orderStateTransitionService;
 	private final OrderRepository orderRepository;
 	private final IdempotencyRepository idempotencyRepository;
 	private final ObjectMapper objectMapper;
@@ -730,8 +727,6 @@ public class OrderApplicationService {
 		// 4. 应用状态机过渡
 		boolean isDeposit = false; // 根据 payType 判断，暂时默认为全款支付
 		boolean isFinalPayment = true; // 根据订单类型判断，暂时默认为最终支付
-		CoreFlowStatus newStatus = orderStateTransitionService.paymentSuccess(currentStatus, isDeposit,
-			isFinalPayment);
 
 		// 5. 持久化 (save with optimistic lock) - 待实现 Order.setStatus
 		// order.setStatus(orderStatusTranslator.toLegacy(newStatus));
@@ -763,7 +758,6 @@ public class OrderApplicationService {
 		CoreFlowStatus currentStatus = CoreFlowStatus.PAID_CONFIRMED;
 
 		// 3. 应用状态机过渡
-		CoreFlowStatus newStatus = orderStateTransitionService.moveToAwaitingFulfillment(currentStatus);
 
 		// 4. 持久化 (save with optimistic lock) - 待实现 Order.setStatus
 		// order.setStatus(orderStatusTranslator.toLegacy(newStatus));
@@ -796,7 +790,6 @@ public class OrderApplicationService {
 		CoreFlowStatus currentStatus = CoreFlowStatus.AWAITING_FULFILLMENT;
 
 		// 3. 应用状态机过渡
-		CoreFlowStatus newStatus = orderStateTransitionService.startFulfillment(currentStatus);
 
 		// 4. 持久化 (save with optimistic lock) - 待实现 Order.setStatus
 		// order.setStatus(orderStatusTranslator.toLegacy(newStatus));
@@ -851,8 +844,6 @@ public class OrderApplicationService {
 
 		// 3. 应用状态机过渡 (启用售后观察期)
 		boolean afterSaleWindowOpen = true; // 物流妥投后开启售后观察期
-		CoreFlowStatus newStatus = orderStateTransitionService.delivered(currentStatus,
-			afterSaleWindowOpen);
 
 		// 4. 持久化 (save with optimistic lock) - 待实现 Order.setStatus
 		// order.setStatus(orderStatusTranslator.toLegacy(newStatus));
@@ -885,9 +876,6 @@ public class OrderApplicationService {
 
 		// 3. 应用状态机过渡 (用户确认收货，不开启售后观察期)
 		boolean afterSaleWindowOpen = false; // 用户主动确认，直接完成
-		CoreFlowStatus deliveredStatus = orderStateTransitionService.delivered(currentStatus,
-			afterSaleWindowOpen);
-		CoreFlowStatus newStatus = orderStateTransitionService.completeIfNoAfterSale(deliveredStatus);
 
 		// 4. 持久化 (save with optimistic lock) - 待实现 Order.setStatus
 		// order.setStatus(orderStatusTranslator.toLegacy(newStatus));
@@ -967,7 +955,7 @@ public class OrderApplicationService {
 	) throws Exception {
 		for (var merchantSku : merchantSkus) {
 			String requestMerchantId = merchantSku.merchantId();
-			for (SkuItemDTO item : merchantSku.skuItems()) {
+			for (ConfirmOrderCommand.SkuItemDTO item : merchantSku.skuItems()) {
 				String skuId = item.skuId();
 				SkuDTO skuDTO = skuMap.get(skuId);
 

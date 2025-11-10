@@ -1,7 +1,7 @@
-package com.github.spud.tinystore.order.infrastructure.statemachine;
+package com.github.spud.tinystore.order.domain.statemachine;
 
-import com.github.spud.tinystore.order.infrastructure.statemachine.enums.OrderEvent;
-import com.github.spud.tinystore.order.infrastructure.statemachine.enums.OrderMainStatus;
+import com.github.spud.tinystore.order.domain.statemachine.enums.OrderEvent;
+import com.github.spud.tinystore.order.domain.statemachine.enums.OrderMainStatus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -61,7 +61,7 @@ public class OrderStateMachineConfig extends
 			.event(OrderEvent.PAYMENT_FAILED)
 			.action(context -> {
 				log.info("Order payment failed: orderNo={}",
-					context.getExtendedState().get("orderNo"));
+					context.getExtendedState().get("orderNo", String.class));
 			})
 
 			// 开始履约：已支付 -> 履约中
@@ -72,7 +72,7 @@ public class OrderStateMachineConfig extends
 			.event(OrderEvent.FULFILLMENT_STARTED)
 			.action(context -> {
 				log.info("Order fulfillment started: orderNo={}",
-					context.getExtendedState().get("orderNo"));
+					context.getExtendedState().get("orderNo", String.class));
 			})
 
 			// 发货：履约中 -> 履约中 (子状态变更)
@@ -82,7 +82,7 @@ public class OrderStateMachineConfig extends
 			.event(OrderEvent.GOODS_SHIPPED)
 			.action(context -> {
 				log.info("Goods shipped: orderNo={}",
-					context.getExtendedState().get("orderNo"));
+					context.getExtendedState().get("orderNo", String.class));
 			})
 
 			// 确认收货：履约中 -> 已完成
@@ -93,7 +93,7 @@ public class OrderStateMachineConfig extends
 			.event(OrderEvent.GOODS_RECEIVED)
 			.action(context -> {
 				log.info("Goods received, order completed: orderNo={}",
-					context.getExtendedState().get("orderNo"));
+					context.getExtendedState().get("orderNo", String.class));
 			})
 
 			// 超时自动确认：履约中 -> 已完成
@@ -104,7 +104,7 @@ public class OrderStateMachineConfig extends
 			.event(OrderEvent.AUTO_CONFIRM_TIMEOUT)
 			.action(context -> {
 				log.info("Order auto-confirmed due to timeout: orderNo={}",
-					context.getExtendedState().get("orderNo"));
+					context.getExtendedState().get("orderNo", String.class));
 			})
 
 			// 用户取消：待支付 -> 已取消
@@ -115,7 +115,7 @@ public class OrderStateMachineConfig extends
 			.event(OrderEvent.USER_CANCELLED)
 			.action(context -> {
 				log.info("Order cancelled by user: orderNo={}",
-					context.getExtendedState().get("orderNo"));
+					context.getExtendedState().get("orderNo", String.class));
 			})
 
 			// 商户取消：已支付/履约中 -> 已取消
@@ -126,7 +126,7 @@ public class OrderStateMachineConfig extends
 			.event(OrderEvent.MERCHANT_CANCELLED)
 			.action(context -> {
 				log.info("Order cancelled by merchant: orderNo={}",
-					context.getExtendedState().get("orderNo"));
+					context.getExtendedState().get("orderNo", String.class));
 			})
 
 			.and()
@@ -136,7 +136,7 @@ public class OrderStateMachineConfig extends
 			.event(OrderEvent.MERCHANT_CANCELLED)
 			.action(context -> {
 				log.info("Order cancelled by merchant during fulfillment: orderNo={}",
-					context.getExtendedState().get("orderNo"));
+					context.getExtendedState().get("orderNo", String.class));
 			})
 
 			// 系统取消：任意状态 -> 已取消

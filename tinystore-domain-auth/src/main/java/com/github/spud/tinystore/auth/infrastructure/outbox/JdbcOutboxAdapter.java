@@ -3,6 +3,8 @@ package com.github.spud.tinystore.auth.infrastructure.outbox;
 import com.github.spud.tinystore.auth.application.port.out.OutboxPort;
 import com.github.spud.tinystore.auth.domain.event.ConsentChangedEvent;
 import com.github.spud.tinystore.auth.domain.event.RefreshTokenRevokedEvent;
+import com.github.spud.tinystore.auth.domain.event.UserFrozenEvent;
+import com.github.spud.tinystore.auth.domain.event.UserUnfrozenEvent;
 import com.github.spud.tinystore.auth.domain.primitives.ClientId;
 import com.github.spud.tinystore.auth.domain.primitives.RtVersion;
 import com.github.spud.tinystore.auth.domain.primitives.ScopeName;
@@ -61,7 +63,17 @@ public class JdbcOutboxAdapter implements OutboxPort {
     });
   }
 
-  @Override
+	@Override
+	public void save(UserFrozenEvent event) {
+		
+	}
+
+	@Override
+	public void save(UserUnfrozenEvent event) {
+
+	}
+
+	@Override
   public List<ConsentChangedEvent> fetchConsentChangedUnpublished(int batchSize) {
     return jdbcTemplate.query(
         "select aggregate_id, client_id, added_scopes, removed_scopes, occurred_at from auth_outbox where event_type = 'ConsentChangedEvent' and published = false order by occurred_at asc limit ?",

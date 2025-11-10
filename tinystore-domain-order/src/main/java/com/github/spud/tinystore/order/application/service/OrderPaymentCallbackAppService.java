@@ -2,7 +2,6 @@ package com.github.spud.tinystore.order.application.service;
 
 import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
 import com.github.spud.tinystore.order.domain.model.OrderAggregate;
-import com.github.spud.tinystore.order.domain.statemachine.OrderStateMachineService;
 import com.github.spud.tinystore.order.infrastructure.audit.OrderStatusAuditService;
 import com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService;
 import com.github.spud.tinystore.order.infrastructure.idempotency.OrderIdempotencyService;
@@ -25,7 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrderPaymentCallbackAppService {
 
 	private final OrderIdempotencyService idempotencyService;
-	private final OrderStateMachineService stateMachineService;
 	private final OutboxEventService outboxEventService;
 	private final OrderStatusAuditService auditService;
 

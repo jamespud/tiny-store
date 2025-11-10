@@ -1,4 +1,4 @@
-package com.github.spud.tinystore.order.infrastructure.statemachine.enums;
+package com.github.spud.tinystore.order.domain.statemachine.enums;
 
 /**
  * 订单状态机事件枚举 定义触发状态变迁的各种事件
@@ -53,7 +53,22 @@ public enum OrderEvent {
 	 */
 	PAYMENT_TIMEOUT("PAYMENT_TIMEOUT", "支付超时"), 
 	
-	PAYMENT_FAILED("PAYMENT_FAILED", "支付失败"), FULFILLMENT_STARTED("FULFILLMENT_STARTED", "履约开始");
+	PAYMENT_FAILED("PAYMENT_FAILED", "支付失败"),
+	
+	FULFILLMENT_STARTED("FULFILLMENT_STARTED", "履约开始"),
+	
+	GOODS_SHIPPED("GOOD_SHIPPED", "商品已发货"), 
+	
+	GOODS_RECEIVED("GOODS_RECEIVED", "商品已收货"),
+	
+	AUTO_CONFIRM_TIMEOUT("AUTO_CONFIRM_TIMEOUT", "自动确认收货超时"),
+	
+	USER_CANCELLED("USER_CANCELLED", "用户取消订单"),
+	
+	SYSTEM_CANCELLED("SYSTEM_CANCELLED", "系统取消订单"),
+	
+ MERCHANT_CANCELLED("MERCHANT_CANCELLED", "商家取消订单");
+
 
 	private final String code;
 	private final String label;
