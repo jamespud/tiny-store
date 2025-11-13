@@ -3,12 +3,10 @@ package com.github.spud.tinystore.order.application.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.spud.tinystore.order.application.command.AutoCompleteCommand;
 import com.github.spud.tinystore.order.application.command.MoveToAwaitFulfillmentCommand;
-import com.github.spud.tinystore.order.application.command.PaymentSucceededCommand;
 import com.github.spud.tinystore.order.application.command.PaymentSuccessCommand;
 import com.github.spud.tinystore.order.application.command.RefundSucceededCommand;
 import com.github.spud.tinystore.order.application.command.RefundSuccessCommand;
 import com.github.spud.tinystore.order.application.command.UnpaidTimeoutCancelCommand;
-import com.github.spud.tinystore.order.application.command.merchant.AcceptOrderCommand;
 import com.github.spud.tinystore.order.application.command.merchant.ApproveCancelOrderCommand;
 import com.github.spud.tinystore.order.application.command.merchant.DeliveredCommand;
 import com.github.spud.tinystore.order.application.command.merchant.ExchangeCompletedCommand;
@@ -32,7 +30,6 @@ import com.github.spud.tinystore.order.domain.event.OrderEventType;
 import com.github.spud.tinystore.order.domain.event.OutboxEventEnvelope;
 import com.github.spud.tinystore.order.domain.model.MainOrder;
 import com.github.spud.tinystore.order.domain.model.Money;
-import com.github.spud.tinystore.order.domain.model.OrderAggregate;
 import com.github.spud.tinystore.order.domain.model.OrderItem;
 import com.github.spud.tinystore.order.domain.model.PricingSummary;
 import com.github.spud.tinystore.order.domain.model.SubOrder;
@@ -53,7 +50,7 @@ import com.github.spud.tinystore.order.domain.service.RiskControlService;
 import com.github.spud.tinystore.order.domain.service.RiskControlService.OrderRiskCheckRequest;
 import com.github.spud.tinystore.order.domain.service.RiskControlService.OrderRiskCheckResponse;
 import com.github.spud.tinystore.order.domain.service.RiskControlService.SkuRiskDTO;
-import com.github.spud.tinystore.order.domain.status.CoreFlowStatus;
+import com.github.spud.tinystore.order.domain.statemachine.status.CoreFlowStatus;
 import com.github.spud.tinystore.order.infrastructure.acl.InventoryClient.StockPreOccupyRequest;
 import com.github.spud.tinystore.order.infrastructure.acl.InventoryClient.StockPreOccupyResponse;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient;
@@ -384,117 +381,117 @@ public class OrderApplicationService {
 	/**
 	 * Handle payment success callback (with idempotency)
 	 */
-	@Transactional
-	public void handlePaymentSucceeded(PaymentSucceededCommand cmd) {
-		String idempotencyKey = IdempotencyRepository.IdempotencyKeyGenerator
-			.forPaymentCallback(cmd.getPaymentId(), cmd.getOrderId(), cmd.getAmount().toString());
-
-		if (!idempotencyRepository.tryAcquire(idempotencyKey, "order-service", Duration.ofHours(1))) {
-			log.info("Payment callback already processed: {}", idempotencyKey);
-			return; // Already processed
-		}
-
-		try {
-			log.info("Processing payment success for order: {}", cmd.getOrderId());
-
-			OrderItem order = orderRepository.findById(cmd.getOrderId())
-				.orElseThrow(() -> new IllegalArgumentException("Order not found: " + cmd.getOrderId()));
-
-			order.onPaymentSuccess(OrderAggregate.PaymentSuccessArgs.builder()
-				.paymentId(cmd.getPaymentId())
-				.amount(cmd.getAmount())
-				.isDeposit(cmd.isDeposit())
-				.isFinalPayment(cmd.isFinalPayment())
-				.build());
-
-			List<OrderDomainEvent> events = order.pullDomainEvents();
-			List<OutboxEventEnvelope> envelopes = mapToOutboxEnvelopes(events);
-			orderRepository.saveWithOutbox(order, envelopes);
-
-			log.info("Payment success processed for order: {}", cmd.getOrderId());
-		} catch (Exception e) {
-			idempotencyRepository.release(idempotencyKey, "order-service");
-			throw e;
-		}
-	}
+//	@Transactional
+//	public void handlePaymentSucceeded(PaymentSucceededCommand cmd) {
+//		String idempotencyKey = IdempotencyRepository.IdempotencyKeyGenerator
+//			.forPaymentCallback(cmd.getPaymentId(), cmd.getOrderId(), cmd.getAmount().toString());
+//
+//		if (!idempotencyRepository.tryAcquire(idempotencyKey, "order-service", Duration.ofHours(1))) {
+//			log.info("Payment callback already processed: {}", idempotencyKey);
+//			return; // Already processed
+//		}
+//
+//		try {
+//			log.info("Processing payment success for order: {}", cmd.getOrderId());
+//
+//			OrderItem order = orderRepository.findById(cmd.getOrderId())
+//				.orElseThrow(() -> new IllegalArgumentException("Order not found: " + cmd.getOrderId()));
+//
+//			order.onPaymentSuccess(OrderAggregate.PaymentSuccessArgs.builder()
+//				.paymentId(cmd.getPaymentId())
+//				.amount(cmd.getAmount())
+//				.isDeposit(cmd.isDeposit())
+//				.isFinalPayment(cmd.isFinalPayment())
+//				.build());
+//
+//			List<OrderDomainEvent> events = order.pullDomainEvents();
+//			List<OutboxEventEnvelope> envelopes = mapToOutboxEnvelopes(events);
+//			orderRepository.saveWithOutbox(order, envelopes);
+//
+//			log.info("Payment success processed for order: {}", cmd.getOrderId());
+//		} catch (Exception e) {
+//			idempotencyRepository.release(idempotencyKey, "order-service");
+//			throw e;
+//		}
+//	}
 
 	/**
 	 * Merchant receives order
 	 */
-	@Transactional
-	public void merchantAcceptOrder(AcceptOrderCommand cmd) {
-		log.info("Merchant receiving order: {}", cmd.getOrderId());
-
-		OrderItem order = orderRepository.findById(cmd.getOrderId())
-			.orElseThrow(() -> new IllegalArgumentException("Order not found: " + cmd.getOrderId()));
-
-		order.onMerchantAccept();
-
-		List<OrderDomainEvent> events = order.pullDomainEvents();
-		List<OutboxEventEnvelope> envelopes = mapToOutboxEnvelopes(events);
-		orderRepository.saveWithOutbox(order, envelopes);
-
-		log.info("Merchant receive processed for order: {}", cmd.getOrderId());
-	}
+//	@Transactional
+//	public void merchantAcceptOrder(AcceptOrderCommand cmd) {
+//		log.info("Merchant receiving order: {}", cmd.getOrderId());
+//
+//		OrderItem order = orderRepository.findById(cmd.getOrderId())
+//			.orElseThrow(() -> new IllegalArgumentException("Order not found: " + cmd.getOrderId()));
+//
+//		order.onMerchantAccept();
+//
+//		List<OrderDomainEvent> events = order.pullDomainEvents();
+//		List<OutboxEventEnvelope> envelopes = mapToOutboxEnvelopes(events);
+//		orderRepository.saveWithOutbox(order, envelopes);
+//
+//		log.info("Merchant receive processed for order: {}", cmd.getOrderId());
+//	}
 
 	/**
 	 * Ship order
 	 */
-	@Transactional
-	public void ship(ShipOrderCommand cmd) {
-		log.info("Shipping order: {}", cmd.getOrderId());
-
-		OrderItem order = orderRepository.findById(cmd.getOrderId())
-			.orElseThrow(() -> new IllegalArgumentException("Order not found: " + cmd.getOrderId()));
-
-		// TODO: 
-		order.onShip(OrderAggregate.ShipArgs.builder()
-			.subOrderId(cmd.getOrderId())
-			.shipmentInfo(cmd.getLogistics().getTrackingNo())
-			.build());
-
-		List<OrderDomainEvent> events = order.pullDomainEvents();
-		List<OutboxEventEnvelope> envelopes = mapToOutboxEnvelopes(events);
-		orderRepository.saveWithOutbox(order, envelopes);
-
-		log.info("Ship processed for order: {}", cmd.getOrderId());
-	}
+//	@Transactional
+//	public void ship(ShipOrderCommand cmd) {
+//		log.info("Shipping order: {}", cmd.getOrderId());
+//
+//		OrderItem order = orderRepository.findById(cmd.getOrderId())
+//			.orElseThrow(() -> new IllegalArgumentException("Order not found: " + cmd.getOrderId()));
+//
+//		// TODO: 
+//		order.onShip(OrderAggregate.ShipArgs.builder()
+//			.subOrderId(cmd.getOrderId())
+//			.shipmentInfo(cmd.getLogistics().getTrackingNo())
+//			.build());
+//
+//		List<OrderDomainEvent> events = order.pullDomainEvents();
+//		List<OutboxEventEnvelope> envelopes = mapToOutboxEnvelopes(events);
+//		orderRepository.saveWithOutbox(order, envelopes);
+//
+//		log.info("Ship processed for order: {}", cmd.getOrderId());
+//	}
 
 	/**
 	 * Handle delivery callback (with idempotency)
 	 */
-	@Transactional
-	public void handleDelivered(DeliveredCommand cmd) {
-		String idempotencyKey = IdempotencyRepository.IdempotencyKeyGenerator
-			.forLogisticsCallback(cmd.getOrderId(), "DELIVERED", cmd.getIdempotencyKey());
-
-		if (!idempotencyRepository.tryAcquire(idempotencyKey, "order-service", Duration.ofHours(1))) {
-			log.info("Delivery callback already processed: {}", idempotencyKey);
-			return;
-		}
-
-		try {
-			log.info("Processing delivery for order: {}", cmd.getOrderId());
-
-			OrderItem order = orderRepository.findById(cmd.getOrderId())
-				.orElseThrow(() -> new IllegalArgumentException("Order not found: " + cmd.getOrderId()));
-
-			// TODO: 
-			order.onDelivered(OrderAggregate.DeliveredArgs.builder()
-				.shipmentInfo(cmd.getTrackingNo())
-				.afterSaleWindowOpen(false)
-				.build());
-
-			List<OrderDomainEvent> events = order.pullDomainEvents();
-			List<OutboxEventEnvelope> envelopes = mapToOutboxEnvelopes(events);
-			orderRepository.saveWithOutbox(order, envelopes);
-
-			log.info("Delivery processed for order: {}", cmd.getOrderId());
-		} catch (Exception e) {
-			idempotencyRepository.release(idempotencyKey, "order-service");
-			throw e;
-		}
-	}
+//	@Transactional
+//	public void handleDelivered(DeliveredCommand cmd) {
+//		String idempotencyKey = IdempotencyRepository.IdempotencyKeyGenerator
+//			.forLogisticsCallback(cmd.getOrderId(), "DELIVERED", cmd.getIdempotencyKey());
+//
+//		if (!idempotencyRepository.tryAcquire(idempotencyKey, "order-service", Duration.ofHours(1))) {
+//			log.info("Delivery callback already processed: {}", idempotencyKey);
+//			return;
+//		}
+//
+//		try {
+//			log.info("Processing delivery for order: {}", cmd.getOrderId());
+//
+//			OrderItem order = orderRepository.findById(cmd.getOrderId())
+//				.orElseThrow(() -> new IllegalArgumentException("Order not found: " + cmd.getOrderId()));
+//
+//			// TODO: 
+//			order.onDelivered(OrderAggregate.DeliveredArgs.builder()
+//				.shipmentInfo(cmd.getTrackingNo())
+//				.afterSaleWindowOpen(false)
+//				.build());
+//
+//			List<OrderDomainEvent> events = order.pullDomainEvents();
+//			List<OutboxEventEnvelope> envelopes = mapToOutboxEnvelopes(events);
+//			orderRepository.saveWithOutbox(order, envelopes);
+//
+//			log.info("Delivery processed for order: {}", cmd.getOrderId());
+//		} catch (Exception e) {
+//			idempotencyRepository.release(idempotencyKey, "order-service");
+//			throw e;
+//		}
+//	}
 
 	/**
 	 * Auto complete order
@@ -722,7 +719,7 @@ public class OrderApplicationService {
 		// 3. 转换当前状态到 CoreFlowStatus (待实现 - Order 需要添加状态字段)
 		// CoreFlowStatus currentStatus = orderStatusTranslator.toCore(order.getCurrentStatus());
 		// 临时使用占位符
-		CoreFlowStatus currentStatus = CoreFlowStatus.PENDING_PAYMENT;
+//		CoreFlowStatus currentStatus = CoreFlowStatus.PENDING_PAYMENT;
 
 		// 4. 应用状态机过渡
 		boolean isDeposit = false; // 根据 payType 判断，暂时默认为全款支付
@@ -755,7 +752,7 @@ public class OrderApplicationService {
 		// 2. 转换当前状态到 CoreFlowStatus (待实现 - Order 需要添加状态字段)
 		// CoreFlowStatus currentStatus = orderStatusTranslator.toCore(order.getCurrentStatus());
 		// 临时使用占位符
-		CoreFlowStatus currentStatus = CoreFlowStatus.PAID_CONFIRMED;
+//		CoreFlowStatus currentStatus = CoreFlowStatus.PAID_CONFIRMED;
 
 		// 3. 应用状态机过渡
 
@@ -787,7 +784,7 @@ public class OrderApplicationService {
 		// 2. 转换当前状态到 CoreFlowStatus (待实现 - Order 需要添加状态字段)
 		// CoreFlowStatus currentStatus = orderStatusTranslator.toCore(order.getCurrentStatus());
 		// 临时使用占位符
-		CoreFlowStatus currentStatus = CoreFlowStatus.AWAITING_FULFILLMENT;
+//		CoreFlowStatus currentStatus = CoreFlowStatus.AWAITING_FULFILLMENT;
 
 		// 3. 应用状态机过渡
 

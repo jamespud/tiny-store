@@ -1,15 +1,8 @@
 package com.github.spud.tinystore.order.domain.model;
 
 import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
-import com.github.spud.tinystore.order.domain.model.OrderAggregate.DeliveredArgs;
-import com.github.spud.tinystore.order.domain.model.OrderAggregate.PaymentSuccessArgs;
-import com.github.spud.tinystore.order.domain.model.OrderAggregate.ShipArgs;
 import com.github.spud.tinystore.order.domain.model.line.LineItem;
-import com.github.spud.tinystore.order.domain.status.AfterSaleStatus;
-import com.github.spud.tinystore.order.domain.status.CancellationStatus;
-import com.github.spud.tinystore.order.domain.status.CoreFlowStatus;
-import com.github.spud.tinystore.order.domain.status.FulfillmentStatus;
-import com.github.spud.tinystore.order.domain.status.PaymentStatus;
+import com.github.spud.tinystore.order.domain.statemachine.status.OrderStatus;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -91,12 +84,7 @@ public class OrderItem {
 	/**
 	 * 订单状态
 	 */
-	private CoreFlowStatus coreFlowStatus;
-	private PaymentStatus paymentStatus;
-	private FulfillmentStatus fulfillmentStatus;
-	private AfterSaleStatus afterSaleStatus;
-	private CancellationStatus cancellationStatus;
-	private CoreFlowStatus previousCoreFlowStatus;
+	private OrderStatus orderStatus = OrderStatus.CREATED;
 
 	private Integer version;
 
@@ -110,12 +98,6 @@ public class OrderItem {
 		this.lines = lines;
 		this.charges = charges;
 		this.address = address;
-		// 默认状态
-		this.coreFlowStatus = CoreFlowStatus.CREATED;
-		this.paymentStatus = PaymentStatus.NONE;
-		this.fulfillmentStatus = FulfillmentStatus.NONE;
-		this.afterSaleStatus = AfterSaleStatus.NONE;
-		this.cancellationStatus = CancellationStatus.NONE;
 		// TODO: 计算金额
 	}
 
@@ -526,26 +508,24 @@ public class OrderItem {
 	 * @return true 如果所有行都已履约完成
 	 */
 	public boolean isFulfilled() {
-		// TODO: 基于库存域的投影/事件判断履约完成状态
-		return fulfillmentStatus
-			== com.github.spud.tinystore.order.domain.status.FulfillmentStatus.DELIVERED;
+		return false;
 	}
 
-	public void onPaymentSuccess(PaymentSuccessArgs build) {
-		// TODO: 
-	}
-
-	public void onMerchantAccept() {
-		// TODO: 
-	}
-
-	public void onShip(ShipArgs build) {
-		// TODO: 
-	}
-
-	public void onDelivered(DeliveredArgs build) {
-		// TODO: 
-	}
+//	public void onPaymentSuccess(PaymentSuccessArgs build) {
+//		// TODO: 
+//	}
+//
+//	public void onMerchantAccept() {
+//		// TODO: 
+//	}
+//
+//	public void onShip(ShipArgs build) {
+//		// TODO: 
+//	}
+//
+//	public void onDelivered(DeliveredArgs build) {
+//		// TODO: 
+//	}
 
 	public void onAutoComplete() {
 		// TODO:

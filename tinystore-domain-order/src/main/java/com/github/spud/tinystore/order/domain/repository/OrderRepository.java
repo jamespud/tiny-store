@@ -2,7 +2,6 @@ package com.github.spud.tinystore.order.domain.repository;
 
 import com.github.spud.tinystore.order.domain.event.OutboxEventEnvelope;
 import com.github.spud.tinystore.order.domain.model.MainOrder;
-import com.github.spud.tinystore.order.domain.model.OrderAggregate;
 import com.github.spud.tinystore.order.domain.model.OrderItem;
 import java.util.List;
 import java.util.Optional;
@@ -33,17 +32,6 @@ public interface OrderRepository {
 	 * @throws OptimisticLockException if version conflict occurs
 	 */
 	OrderItem save(OrderItem order);
-
-	/**
-	 * Save order with outbox events in single transaction This is the primary method for aggregate
-	 * persistence with events
-	 *
-	 * @param order     Order to save
-	 * @param envelopes Outbox envelopes to publish
-	 * @return Saved order with updated version
-	 * @throws OptimisticLockException if version conflict occurs
-	 */
-	OrderAggregate saveWithOutbox(OrderAggregate order, List<OutboxEventEnvelope> envelopes);
 
 	/**
 	 * Check if order exists
