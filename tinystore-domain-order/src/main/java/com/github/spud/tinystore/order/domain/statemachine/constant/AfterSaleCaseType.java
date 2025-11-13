@@ -1,4 +1,4 @@
-package com.github.spud.tinystore.order.domain.status;
+package com.github.spud.tinystore.order.domain.statemachine.constant;
 
 /**
  * 售后案例类型枚举

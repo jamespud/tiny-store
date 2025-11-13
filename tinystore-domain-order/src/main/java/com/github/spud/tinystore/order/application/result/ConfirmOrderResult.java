@@ -4,7 +4,6 @@ import com.github.spud.tinystore.order.domain.model.ChargeItem;
 import com.github.spud.tinystore.order.domain.model.Coupon;
 import com.github.spud.tinystore.order.domain.model.Discount;
 import com.github.spud.tinystore.order.domain.model.Money;
-import com.github.spud.tinystore.order.domain.model.OrderAggregate;
 import com.github.spud.tinystore.order.domain.model.OrderItem;
 import com.github.spud.tinystore.order.interfaces.dto.response.PreviewOrderVO;
 import java.util.List;
@@ -31,10 +30,6 @@ public class ConfirmOrderResult {
 		this.lines = lines;
 		this.summary = summary;
 		this.expireAt = expireAt;
-	}
-
-	public static ConfirmOrderResult fromOrder(OrderAggregate order) {
-		return null;
 	}
 
 	public PreviewOrderVO toVO() {

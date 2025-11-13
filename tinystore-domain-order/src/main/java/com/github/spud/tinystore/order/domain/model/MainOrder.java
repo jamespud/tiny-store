@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.order.domain.model;
 
 import com.github.spud.tinystore.order.domain.enums.MainOrderStatus;
+import com.github.spud.tinystore.order.domain.model.vo.OrderId;
 import com.github.spud.tinystore.order.domain.model.vo.OrderNo;
 import java.util.List;
 import lombok.Builder;
@@ -14,7 +15,7 @@ import lombok.Setter;
 @Builder
 public class MainOrder {
 
-	private final String id;                 				// 主订单数据库主键
+	private final OrderId id;                 				// 主订单数据库主键
 	private final OrderNo orderNo;        					// 主订单号（业务唯一，如“DO_M_20240520xxxx”）
 	private final String userId;             				// 用户ID
 	@Setter			

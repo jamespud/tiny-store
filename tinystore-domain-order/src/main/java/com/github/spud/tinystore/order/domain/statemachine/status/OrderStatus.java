@@ -1,4 +1,4 @@
-package com.github.spud.tinystore.order.domain.status;
+package com.github.spud.tinystore.order.domain.statemachine.status;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -11,7 +11,7 @@ import lombok.Getter;
 @AllArgsConstructor
 public class OrderStatus {
 	
-	public static final OrderStatus CREATED = new OrderStatus(CoreFlowStatus.PENDING_PAYMENT,
+	public static final OrderStatus CREATED = new OrderStatus(CoreFlowStatus.CREATED,
 		PaymentStatus.NONE, FulfillmentStatus.NONE, AfterSaleStatus.NONE);
 
 	/**

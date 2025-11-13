@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.spud.tinystore.order.domain.model.OrderItem;
 import com.github.spud.tinystore.order.domain.repository.OrderRepository;
 import com.github.spud.tinystore.order.domain.repository.OutboxRepository;
-import com.github.spud.tinystore.order.domain.status.CoreFlowStatus;
+import com.github.spud.tinystore.order.domain.statemachine.status.CoreFlowStatus;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

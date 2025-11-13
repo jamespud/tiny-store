@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
  * @author Spud
  * @date 2025/8/5
  */
+@Deprecated
 @Service
 public class OrderRedisOperatorService {
 

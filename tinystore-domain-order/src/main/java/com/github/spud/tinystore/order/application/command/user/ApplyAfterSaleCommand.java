@@ -2,8 +2,8 @@ package com.github.spud.tinystore.order.application.command.user;
 
 import com.github.spud.tinystore.order.domain.model.Address;
 import com.github.spud.tinystore.order.domain.model.Money;
-import com.github.spud.tinystore.order.domain.status.AfterSaleCaseType;
-import com.github.spud.tinystore.order.domain.status.AfterSaleScope;
+import com.github.spud.tinystore.order.domain.statemachine.constant.AfterSaleCaseType;
+import com.github.spud.tinystore.order.domain.statemachine.constant.AfterSaleScope;
 import java.util.List;
 import lombok.Builder;
 import lombok.Data;

@@ -1,177 +1,133 @@
 package com.github.spud.tinystore.order.domain.statemachine;
 
-import com.github.spud.tinystore.order.domain.statemachine.enums.OrderEvent;
-import com.github.spud.tinystore.order.domain.statemachine.enums.OrderMainStatus;
-import lombok.extern.slf4j.Slf4j;
+import com.github.spud.tinystore.order.domain.statemachine.event.OrderEvent;
+import com.github.spud.tinystore.order.domain.statemachine.status.CoreFlowStatus;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.statemachine.config.EnableStateMachine;
-import org.springframework.statemachine.config.StateMachineConfigurerAdapter;
 import org.springframework.statemachine.config.builders.StateMachineStateConfigurer;
 import org.springframework.statemachine.config.builders.StateMachineTransitionConfigurer;
 import org.springframework.statemachine.listener.StateMachineListener;
 import org.springframework.statemachine.listener.StateMachineListenerAdapter;
 import org.springframework.statemachine.state.State;
 import org.springframework.statemachine.transition.Transition;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.statemachine.config.EnableStateMachineFactory;
+import org.springframework.statemachine.config.StateMachineConfigurerAdapter;
 
 /**
  * 订单状态机配置 基于 Spring State Machine 实现订单状态流转控制
  */
 @Slf4j
 @Configuration
-@EnableStateMachine
+@EnableStateMachineFactory
 public class OrderStateMachineConfig extends
-	StateMachineConfigurerAdapter<OrderMainStatus, OrderEvent> {
+	StateMachineConfigurerAdapter<CoreFlowStatus, OrderEvent> {
 
 	@Override
-	public void configure(StateMachineStateConfigurer<OrderMainStatus, OrderEvent> states)
+	public void configure(StateMachineStateConfigurer<CoreFlowStatus, OrderEvent> states)
 		throws Exception {
 		states
 			.withStates()
-			// 初始状态
-			.initial(OrderMainStatus.PENDING_PAYMENT)
-
-			// 所有状态
-			.states(java.util.EnumSet.allOf(OrderMainStatus.class))
-
-			// 终态
-			.end(OrderMainStatus.COMPLETED)
-			.end(OrderMainStatus.CANCELLED);
+			.initial(CoreFlowStatus.PENDING_PAYMENT)
+			.states(java.util.EnumSet.allOf(CoreFlowStatus.class))
+			.end(CoreFlowStatus.COMPLETED)
+			.end(CoreFlowStatus.CANCELLED);
 	}
 
 	@Override
-	public void configure(StateMachineTransitionConfigurer<OrderMainStatus, OrderEvent> transitions)
+	public void configure(StateMachineTransitionConfigurer<CoreFlowStatus, OrderEvent> transitions)
 		throws Exception {
 		transitions
-			// 支付成功：待支付 -> 已支付
+			// PENDING_PAYMENT -> PAID
 			.withExternal()
-			.source(OrderMainStatus.PENDING_PAYMENT)
-			.target(OrderMainStatus.PAID)
+			.source(CoreFlowStatus.PENDING_PAYMENT)
+			.target(CoreFlowStatus.PAID)
 			.event(OrderEvent.PAYMENT_SUCCEEDED)
-			.action(context -> {
-				log.info("Order payment succeeded: orderNo={}",
-					context.getExtendedState().get("orderNo", Object.class));
-			})
-
-			// 支付失败：待支付 -> 已取消
 			.and()
+			// PENDING_PAYMENT cancellation paths
 			.withExternal()
-			.source(OrderMainStatus.PENDING_PAYMENT)
-			.target(OrderMainStatus.CANCELLED)
+			.source(CoreFlowStatus.PENDING_PAYMENT)
+			.target(CoreFlowStatus.CANCELLED)
 			.event(OrderEvent.PAYMENT_FAILED)
-			.action(context -> {
-				log.info("Order payment failed: orderNo={}",
-					context.getExtendedState().get("orderNo", String.class));
-			})
-
-			// 开始履约：已支付 -> 履约中
 			.and()
 			.withExternal()
-			.source(OrderMainStatus.PAID)
-			.target(OrderMainStatus.FULFILLING)
+			.source(CoreFlowStatus.PENDING_PAYMENT)
+			.target(CoreFlowStatus.CANCELLED)
+			.event(OrderEvent.PAYMENT_TIMEOUT)
+			.and()
+			.withExternal()
+			.source(CoreFlowStatus.PENDING_PAYMENT)
+			.target(CoreFlowStatus.CANCELLED)
+			.event(OrderEvent.USER_CANCELLED)
+			.and()
+			.withExternal()
+			.source(CoreFlowStatus.PENDING_PAYMENT)
+			.target(CoreFlowStatus.CANCELLED)
+			.event(OrderEvent.SYSTEM_CANCELLED)
+			.and()
+			// PAID -> ACCEPTED
+			.withExternal()
+			.source(CoreFlowStatus.PAID)
+			.target(CoreFlowStatus.ACCEPTED)
+			.event(OrderEvent.MERCHANT_ACCEPTED)
+			.and()
+			// PAID cancellation (merchant)
+			.withExternal()
+			.source(CoreFlowStatus.PAID)
+			.target(CoreFlowStatus.CANCELLED)
+			.event(OrderEvent.MERCHANT_CANCELLED)
+			.and()
+			// ACCEPTED -> FULFILLING
+			.withExternal()
+			.source(CoreFlowStatus.ACCEPTED)
+			.target(CoreFlowStatus.FULFILLING)
 			.event(OrderEvent.FULFILLMENT_STARTED)
-			.action(context -> {
-				log.info("Order fulfillment started: orderNo={}",
-					context.getExtendedState().get("orderNo", String.class));
-			})
-
-			// 发货：履约中 -> 履约中 (子状态变更)
+			.and()
+			// FULFILLING internal progress events
+			.withInternal()
+			.source(CoreFlowStatus.FULFILLING)
+			.event(OrderEvent.GOODS_SHIPPED)
 			.and()
 			.withInternal()
-			.source(OrderMainStatus.FULFILLING)
-			.event(OrderEvent.GOODS_SHIPPED)
-			.action(context -> {
-				log.info("Goods shipped: orderNo={}",
-					context.getExtendedState().get("orderNo", String.class));
-			})
-
-			// 确认收货：履约中 -> 已完成
+			.source(CoreFlowStatus.FULFILLING)
+			.event(OrderEvent.GOODS_DELIVERED)
 			.and()
+			// FULFILLING -> COMPLETED
 			.withExternal()
-			.source(OrderMainStatus.FULFILLING)
-			.target(OrderMainStatus.COMPLETED)
+			.source(CoreFlowStatus.FULFILLING)
+			.target(CoreFlowStatus.COMPLETED)
 			.event(OrderEvent.GOODS_RECEIVED)
-			.action(context -> {
-				log.info("Goods received, order completed: orderNo={}",
-					context.getExtendedState().get("orderNo", String.class));
-			})
-
-			// 超时自动确认：履约中 -> 已完成
 			.and()
 			.withExternal()
-			.source(OrderMainStatus.FULFILLING)
-			.target(OrderMainStatus.COMPLETED)
-			.event(OrderEvent.AUTO_CONFIRM_TIMEOUT)
-			.action(context -> {
-				log.info("Order auto-confirmed due to timeout: orderNo={}",
-					context.getExtendedState().get("orderNo", String.class));
-			})
-
-			// 用户取消：待支付 -> 已取消
+			.source(CoreFlowStatus.FULFILLING)
+			.target(CoreFlowStatus.COMPLETED)
+			.event(OrderEvent.AUTO_RECEIVE_TIMEOUT)
+			.and()
+			// FULFILLING -> CANCELLED (reject / merchant / system)
+			.withExternal()
+			.source(CoreFlowStatus.FULFILLING)
+			.target(CoreFlowStatus.CANCELLED)
+			.event(OrderEvent.GOODS_REJECTED)
 			.and()
 			.withExternal()
-			.source(OrderMainStatus.PENDING_PAYMENT)
-			.target(OrderMainStatus.CANCELLED)
-			.event(OrderEvent.USER_CANCELLED)
-			.action(context -> {
-				log.info("Order cancelled by user: orderNo={}",
-					context.getExtendedState().get("orderNo", String.class));
-			})
-
-			// 商户取消：已支付/履约中 -> 已取消
-			.and()
-			.withExternal()
-			.source(OrderMainStatus.PAID)
-			.target(OrderMainStatus.CANCELLED)
+			.source(CoreFlowStatus.FULFILLING)
+			.target(CoreFlowStatus.CANCELLED)
 			.event(OrderEvent.MERCHANT_CANCELLED)
-			.action(context -> {
-				log.info("Order cancelled by merchant: orderNo={}",
-					context.getExtendedState().get("orderNo", String.class));
-			})
-
 			.and()
 			.withExternal()
-			.source(OrderMainStatus.FULFILLING)
-			.target(OrderMainStatus.CANCELLED)
-			.event(OrderEvent.MERCHANT_CANCELLED)
-			.action(context -> {
-				log.info("Order cancelled by merchant during fulfillment: orderNo={}",
-					context.getExtendedState().get("orderNo", String.class));
-			})
-
-			// 系统取消：任意状态 -> 已取消
-			.and()
-			.withExternal()
-			.source(OrderMainStatus.PENDING_PAYMENT)
-			.target(OrderMainStatus.CANCELLED)
-			.event(OrderEvent.SYSTEM_CANCELLED)
-
-			.and()
-			.withExternal()
-			.source(OrderMainStatus.PAID)
-			.target(OrderMainStatus.CANCELLED)
-			.event(OrderEvent.SYSTEM_CANCELLED)
-
-			.and()
-			.withExternal()
-			.source(OrderMainStatus.FULFILLING)
-			.target(OrderMainStatus.CANCELLED)
+			.source(CoreFlowStatus.FULFILLING)
+			.target(CoreFlowStatus.CANCELLED)
 			.event(OrderEvent.SYSTEM_CANCELLED);
 	}
 
-	/**
-	 * 状态机监听器
-	 */
 	@Bean
-	public StateMachineListener<OrderMainStatus, OrderEvent> stateMachineListener() {
-		return new StateMachineListenerAdapter<OrderMainStatus, OrderEvent>() {
-
+	public StateMachineListener<CoreFlowStatus, OrderEvent> stateMachineListener() {
+		return new StateMachineListenerAdapter<>() {
 			@Override
-			public void stateChanged(State<OrderMainStatus, OrderEvent> from,
-				State<OrderMainStatus, OrderEvent> to) {
+			public void stateChanged(State<CoreFlowStatus, OrderEvent> from,
+				State<CoreFlowStatus, OrderEvent> to) {
 				if (from != null && to != null) {
-					log.info("State machine transition: {} -> {}",
-						from.getId(), to.getId());
+					log.info("State machine transition: {} -> {}", from.getId(), to.getId());
 				}
 			}
 
@@ -179,21 +135,21 @@ public class OrderStateMachineConfig extends
 			public void eventNotAccepted(org.springframework.messaging.Message<OrderEvent> event) {
 				log.warn("State machine event not accepted: {}", event.getPayload());
 			}
-			
+
 			@Override
-			public void transitionStarted(Transition<OrderMainStatus, OrderEvent> transition) {
-				log.debug("State machine transition started: {} -> {} on event {}",
-					transition.getSource().getId(),
-					transition.getTarget().getId(),
-					transition.getTrigger().getEvent());
+			public void transitionStarted(Transition<CoreFlowStatus, OrderEvent> transition) {
+				CoreFlowStatus sourceId = transition.getSource() != null ? transition.getSource().getId() : null;
+				CoreFlowStatus targetId = transition.getTarget() != null ? transition.getTarget().getId() : null;
+				OrderEvent evt = transition.getTrigger() != null ? transition.getTrigger().getEvent() : null;
+				log.debug("Transition started: {} -> {} on {}", sourceId, targetId, evt);
 			}
 
 			@Override
-			public void transitionEnded(Transition<OrderMainStatus, OrderEvent> transition) {
-				log.debug("State machine transition ended: {} -> {} on event {}",
-					transition.getSource().getId(),
-					transition.getTarget().getId(),
-					transition.getTrigger().getEvent());
+			public void transitionEnded(Transition<CoreFlowStatus, OrderEvent> transition) {
+				CoreFlowStatus sourceId = transition.getSource() != null ? transition.getSource().getId() : null;
+				CoreFlowStatus targetId = transition.getTarget() != null ? transition.getTarget().getId() : null;
+				OrderEvent evt = transition.getTrigger() != null ? transition.getTrigger().getEvent() : null;
+				log.debug("Transition ended: {} -> {} on {}", sourceId, targetId, evt);
 			}
 		};
 	}

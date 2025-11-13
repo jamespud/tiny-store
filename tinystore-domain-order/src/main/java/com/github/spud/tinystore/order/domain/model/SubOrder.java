@@ -1,7 +1,7 @@
 package com.github.spud.tinystore.order.domain.model;
 
 import com.github.spud.tinystore.order.domain.model.vo.OrderNo;
-import com.github.spud.tinystore.order.domain.status.OrderStatus;
+import com.github.spud.tinystore.order.domain.statemachine.status.OrderStatus;
 import java.util.List;
 import lombok.Builder;
 import lombok.Getter;
