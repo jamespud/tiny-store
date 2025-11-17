@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.order.interfaces.dto.request;
 
-import com.github.spud.tinystore.order.application.command.PaymentSuccessCommand;
+import com.github.spud.tinystore.order.application.command.PaymentSucceededCommand;
+import com.github.spud.tinystore.order.domain.model.Money;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -57,8 +58,18 @@ public class PaymentSuccessRequest {
 	@Size(max = 100)
 	private String paymentId;
 
-	public PaymentSuccessCommand toCommand() {
-		return new PaymentSuccessCommand(orderId, payType, payAmount, paidAt, eventId, paymentId);
+	public PaymentSucceededCommand toCommand() {
+		boolean isDeposit = this.payType == PayType.DEPOSIT;
+		boolean isFinal = this.payType == PayType.FINAL;
+		// 金额单位转换：假设传入为“分”的长整型或可直接取整；如为元请在网关侧统一换算
+		long cents = this.payAmount.movePointRight(2).longValue();
+		return PaymentSucceededCommand.builder()
+			.orderId(this.orderId)
+			.paymentId(this.paymentId)
+			.amount(Money.of(cents))
+			.isDeposit(isDeposit)
+			.isFinalPayment(isFinal)
+			.build();
 	}
 
 	public String getEventId() {

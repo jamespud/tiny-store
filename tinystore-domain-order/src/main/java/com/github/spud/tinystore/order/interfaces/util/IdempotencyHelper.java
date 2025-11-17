@@ -2,6 +2,7 @@ package com.github.spud.tinystore.order.interfaces.util;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.UUID;
+import com.github.spud.tinystore.order.domain.exception.OrderDomainException;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.util.StringUtils;
@@ -135,4 +136,14 @@ public class IdempotencyHelper {
 
 		return hasKey;
 	}
+
+    /**
+     * 严格要求必须存在幂等性键，不存在则抛业务异常（400）。
+     */
+    public static void requireIdempotencyKey() {
+        String idempotencyKey = getCurrentIdempotencyKey();
+        if (!StringUtils.hasText(idempotencyKey)) {
+            throw new OrderDomainException("Missing X-Idempotency-Key header", "ORDER-4001");
+        }
+    }
 }

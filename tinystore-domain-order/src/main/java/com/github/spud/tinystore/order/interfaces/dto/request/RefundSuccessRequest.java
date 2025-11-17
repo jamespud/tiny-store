@@ -1,6 +1,6 @@
 package com.github.spud.tinystore.order.interfaces.dto.request;
 
-import com.github.spud.tinystore.order.application.command.RefundSuccessCommand;
+import com.github.spud.tinystore.order.application.command.RefundSucceededCommand;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -59,8 +59,12 @@ public class RefundSuccessRequest {
 	@Size(max = 100)
 	private String eventId;
 
-	public RefundSuccessCommand toCommand() {
-		return new RefundSuccessCommand(orderId, refundId, amount, items, time, eventId);
+	public RefundSucceededCommand toCommand() {
+		return RefundSucceededCommand.builder()
+			.orderId(orderId != null ? orderId.toString() : null)
+			.refundId(refundId)
+			.idempotencyKey(eventId)
+			.build();
 	}
 
 	public String getEventId() {

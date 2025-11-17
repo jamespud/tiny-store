@@ -2,6 +2,7 @@ package com.github.spud.tinystore.order.infrastructure.event.publisher;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.spud.tinystore.order.infrastructure.metrics.OutboxMetrics;
 import com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService;
 import com.github.spud.tinystore.order.infrastructure.persistence.po.OrderOutboxEventPO;
 import java.util.List;
@@ -25,6 +26,10 @@ public class OutboxEventPublisher {
 	private final OutboxEventService outboxEventService;
 	private final KafkaTemplate<String, String> kafkaTemplate;
 	private final ObjectMapper objectMapper;
+	private final OutboxMetrics outboxMetrics;
+
+	@org.springframework.beans.factory.annotation.Value("${order.outbox.map-event-type:true}")
+	private boolean mapExternalEventType = true;
 
 	// 发布配置
 	private static final int BATCH_SIZE = 100;
@@ -80,7 +85,10 @@ public class OutboxEventPublisher {
 
 			log.info("开始重试失败的 Outbox 事件: eventCount={}", retryableEvents.size());
 
-			retryableEvents.forEach(this::publishEventAsync);
+			retryableEvents.forEach(e -> {
+				outboxMetrics.retryAttempt(e.getEventType());
+				publishEventAsync(e);
+			});
 
 		} catch (Exception e) {
 			log.error("重试失败事件异常", e);
@@ -92,14 +100,17 @@ public class OutboxEventPublisher {
 	 */
 	private CompletableFuture<Void> publishEventAsync(OrderOutboxEventPO event) {
 		try {
-			String topic = getTopicName(event.getEventType());
+			String rawType = event.getEventType();
+			String effectiveEventType = mapExternalEventType ? mapToExternalEventType(rawType)
+				: (rawType == null ? "order.general" : rawType);
+			String topic = getTopicName(effectiveEventType);
 			String key = event.getOrderId(); // 使用订单号作为分区键
 
 			// 构造 Kafka 消息
 			KafkaEventMessage kafkaMessage = new KafkaEventMessage(
 				event.getId(),
 				event.getOrderId(),
-				event.getEventType(),
+				effectiveEventType,
 				event.getEventPayload(),
 				event.getTraceId(),
 				event.getCreatedAt().toString()
@@ -118,6 +129,7 @@ public class OutboxEventPublisher {
 
 					// 标记事件失败
 					outboxEventService.markEventFailed(event.getId());
+					outboxMetrics.publishFailure(event.getEventType(), event.getCreatedAt());
 				} else {
 					log.debug(
 						"发布事件到 Kafka 成功: eventId={}, orderNo={}, topic={}, partition={}, offset={}",
@@ -127,6 +139,7 @@ public class OutboxEventPublisher {
 
 					// 标记事件已发送
 					outboxEventService.markEventsSent(List.of(event.getId()));
+					outboxMetrics.publishSuccess(event.getEventType(), event.getCreatedAt());
 				}
 				return null;
 			});
@@ -141,15 +154,49 @@ public class OutboxEventPublisher {
 	/**
 	 * 根据事件类型获取 Kafka Topic 名称
 	 */
-	private String getTopicName(String eventType) {
-		// 事件类型到 Topic 的映射规则
-		return switch (eventType) {
-			case "OrderPaidEvent" -> TOPIC_PREFIX + "paid";
-			case "OrderStatusChangedEvent" -> TOPIC_PREFIX + "status-changed";
-			case "OrderShippedEvent" -> TOPIC_PREFIX + "shipped";
-			case "OrderCompletedEvent" -> TOPIC_PREFIX + "completed";
-			case "OrderCancelledEvent" -> TOPIC_PREFIX + "cancelled";
-			default -> TOPIC_PREFIX + "general";
+	private String getTopicName(String externalEventType) {
+		// 标准事件名 → Topic 映射
+		switch (externalEventType) {
+			case "order.payment.succeeded":
+				return TOPIC_PREFIX + "paid";
+			case "order.fulfillment.shipped":
+				return TOPIC_PREFIX + "shipped";
+			case "order.fulfillment.delivered":
+				return TOPIC_PREFIX + "delivered";
+			case "order.received":
+				return TOPIC_PREFIX + "received";
+			case "order.completed":
+				return TOPIC_PREFIX + "completed";
+			case "order.cancelled":
+				return TOPIC_PREFIX + "cancelled";
+			case "order.refund.succeeded":
+				return TOPIC_PREFIX + "refund-succeeded";
+			case "order.created":
+				return TOPIC_PREFIX + "created";
+			case "order.lifecycle.changed":
+				return TOPIC_PREFIX + "status-changed";
+			default:
+				return TOPIC_PREFIX + "general";
+		}
+	}
+
+	/**
+	 * 将内部/历史事件类型名映射为对外标准蛇形点分命名
+	 */
+	private String mapToExternalEventType(String rawType) {
+		if (rawType == null) return "order.general";
+		// 已是标准名
+		if (rawType.startsWith("order.")) return rawType;
+		// 历史类名/枚举名映射
+		return switch (rawType) {
+			case "ORDER_PAID", "OrderPaidEvent" -> "order.payment.succeeded";
+			case "ORDER_SHIPPED", "OrderShippedEvent" -> "order.fulfillment.shipped";
+			case "ORDER_COMPLETED", "OrderCompletedEvent" -> "order.completed";
+			case "ORDER_CANCELLED", "OrderCancelledEvent" -> "order.cancelled";
+			case "AFTERSALE_COMPLETED", "RefundSucceededEvent" -> "order.refund.succeeded";
+			case "ORDER_CREATED", "OrderCreatedEvent" -> "order.created";
+			case "STATUS_CHANGED", "OrderStatusChangedEvent" -> "order.lifecycle.changed";
+			default -> "order.general";
 		};
 	}
 

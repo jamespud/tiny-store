@@ -1,26 +1,28 @@
 package com.github.spud.tinystore.order.application.service;
 
-import com.github.spud.tinystore.order.application.result.SubmitOrderResult;
-import com.github.spud.tinystore.order.interfaces.dto.response.CreateOrderResponse;
-import org.springframework.cloud.openfeign.FeignClient;
-
 /**
- * @author Spud
- * @date 2025/10/5
+ * 幂等结果回放存储抽象。
+ * 说明：接口放置于应用层包名以匹配现有引用，便于依赖注入。
  */
-@FeignClient
-public class IdempotencyStorage {
+public interface IdempotencyStorage {
 
-	public boolean exists(String idempotencyKey) {
-		return false;
-	}
+  /**
+   * 判断幂等键是否已存在成功结果。
+   */
+  boolean exists(String key);
 
-	public SubmitOrderResult getResponse(String idempotencyKey,
-		Class<CreateOrderResponse> createOrderResponseClass) {
-		return null;
-	}
+  /**
+   * 读取已存储的成功结果，并按类型转换返回；未命中或已过期返回 null。
+   */
+  <T> T getResponse(String key, Class<T> type);
 
-	public void save(String idempotencyKey, CreateOrderResponse response, int i) {
+  /**
+   * 保存成功结果用于回放，按全局或入参 TTL 进行过期管理。
+   */
+  void saveResponse(String key, Object value);
 
-	}
+  /**
+   * 主动删除某个幂等键。
+   */
+  void evict(String key);
 }

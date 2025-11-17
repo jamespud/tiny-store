@@ -6,11 +6,15 @@ import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
 import com.github.spud.tinystore.order.infrastructure.persistence.po.OrderOutboxEventPO;
 import com.github.spud.tinystore.order.infrastructure.persistence.repository.OrderOutboxEventRepository;
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.github.spud.tinystore.order.infrastructure.tenant.TenantContext;
 
 /**
  * Outbox 事件服务 实现 Outbox Pattern，确保事件的最终一致性
@@ -31,7 +35,7 @@ public class OutboxEventService {
 	@Transactional
 	public void saveEvent(OrderDomainEvent event) {
 		try {
-			String eventPayload = objectMapper.writeValueAsString(event.getPayload());
+			String eventPayload = objectMapper.writeValueAsString(buildEnvelopePayload(event));
 
 			OrderOutboxEventPO outboxEvent = new OrderOutboxEventPO()
 				.setId(event.getEventId())
@@ -156,7 +160,7 @@ public class OutboxEventService {
 	 */
 	private OrderOutboxEventPO convertToOutboxEvent(OrderDomainEvent event) {
 		try {
-			String eventPayload = objectMapper.writeValueAsString(event.getPayload());
+			String eventPayload = objectMapper.writeValueAsString(buildEnvelopePayload(event));
 
 			return new OrderOutboxEventPO()
 				.setId(event.getEventId())
@@ -172,5 +176,53 @@ public class OutboxEventService {
 				event.getEventId(), event.getEventId(), e);
 			throw new RuntimeException("Failed to convert domain event", e);
 		}
+	}
+
+	/**
+	 * 构建统一的事件载荷信封，包含版本、聚合ID、时间、租户/操作者/追踪信息与数据体
+	 */
+	@SuppressWarnings("unchecked")
+	private Map<String, Object> buildEnvelopePayload(OrderDomainEvent event) {
+		Map<String, Object> envelope = new HashMap<>();
+		envelope.put("version", "v1");
+		envelope.put("eventId", event.getEventId());
+		envelope.put("aggregateId", event.getOrderId());
+		if (event.getOccurredAt() != null) {
+			envelope.put("occurredAt", event.getOccurredAt());
+		}
+		// 上下文信息
+		String tenantId = TenantContext.getTenantId();
+		String userId = TenantContext.getUserId();
+		String traceId = event.getTraceId() != null ? event.getTraceId() : MDC.get("traceId");
+		if (tenantId != null) envelope.put("tenantId", tenantId);
+		if (traceId != null) envelope.put("traceId", traceId);
+		Map<String, Object> operator = new HashMap<>();
+		if (userId != null) {
+			operator.put("id", userId);
+			operator.put("type", "user");
+		} else {
+			operator.put("id", "system");
+			operator.put("type", "system");
+		}
+		envelope.put("operator", operator);
+
+		// 事件数据体
+		Object rawPayload = null;
+		try {
+			rawPayload = event.getPayload();
+		} catch (Exception ignore) {
+			// 某些事件未实现 getPayload，容忍为空
+		}
+		Map<String, Object> data = new HashMap<>();
+		if (rawPayload instanceof Map) {
+			//noinspection unchecked
+			data.putAll((Map<String, Object>) rawPayload);
+			Object subOrderId = ((Map<?, ?>) rawPayload).get("subOrderId");
+			if (subOrderId != null) {
+				envelope.put("subOrderId", subOrderId);
+			}
+		}
+		envelope.put("data", data);
+		return envelope;
 	}
 }

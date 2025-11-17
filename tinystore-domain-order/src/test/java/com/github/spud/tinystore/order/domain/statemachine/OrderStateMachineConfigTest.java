@@ -118,4 +118,13 @@ class OrderStateMachineConfigTest {
         send(sm, OrderEvent.USER_CANCELLED);
         assertThat(sm.getState().getId()).isEqualTo(CoreFlowStatus.COMPLETED);
     }
+
+    @Test
+    @DisplayName("user cancel in pending payment leads to cancelled")
+    void userCancel_in_pendingPayment_to_cancelled() {
+        StateMachine<CoreFlowStatus, OrderEvent> sm = factory.getStateMachine();
+        sm.startReactively().block();
+        send(sm, OrderEvent.USER_CANCELLED);
+        org.assertj.core.api.Assertions.assertThat(sm.getState().getId()).isEqualTo(CoreFlowStatus.CANCELLED);
+    }
 }
