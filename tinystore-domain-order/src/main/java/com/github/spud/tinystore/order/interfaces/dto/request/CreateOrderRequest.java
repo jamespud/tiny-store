@@ -1,11 +1,14 @@
 package com.github.spud.tinystore.order.interfaces.dto.request;
 
 import com.github.spud.tinystore.order.application.command.user.SubmitOrderCommand;
+import com.github.spud.tinystore.order.application.command.user.ConfirmOrderCommand;
+import com.github.spud.tinystore.order.interfaces.util.IdempotencyHelper;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import java.util.List;
+import java.util.stream.Collectors;
 import lombok.Data;
 
 /**
@@ -28,7 +31,24 @@ public class CreateOrderRequest {
 	private String addressId;
 
 	public SubmitOrderCommand toCommand(String currentUserId) {
-		throw new UnsupportedOperationException("Not implemented yet");
+		List<ConfirmOrderCommand.MerchantSkuDTO> merchantSkuDTOs = this.merchantSkuGroups.stream()
+			.map(group -> new ConfirmOrderCommand.MerchantSkuDTO(
+				group.getMerchantId(),
+				group.getSkuItems().stream()
+					.map(item -> new ConfirmOrderCommand.SkuItemDTO(item.getSkuId(), item.getQuantity()))
+					.collect(Collectors.toList()),
+				group.getMerchantCouponId()
+			))
+			.collect(Collectors.toList());
+
+		String idempotentKey = IdempotencyHelper.getCurrentIdempotencyKey();
+		return new SubmitOrderCommand(
+			currentUserId,
+			merchantSkuDTOs,
+			this.platformCouponId,
+			this.addressId,
+			idempotentKey
+		);
 	}
 
 	// -------------------------- 商家-SKU分组DTO（1个商家对应1个） --------------------------

@@ -11,7 +11,13 @@ import com.github.spud.tinystore.order.interfaces.dto.request.RefundSuccessReque
 import com.github.spud.tinystore.order.interfaces.dto.request.UnpaidTimeoutRequest;
 import com.github.spud.tinystore.order.interfaces.dto.response.BasicAckVO;
 import com.github.spud.tinystore.order.interfaces.util.IdempotencyHelper;
+import com.github.spud.tinystore.order.infrastructure.acl.SignatureVerifier;
+import com.github.spud.tinystore.order.interfaces.error.UnauthorizedException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -30,16 +36,31 @@ import org.springframework.web.bind.annotation.RestController;
 public class InternalOrderController {
 
 	private final OrderApplicationService applicationService;
+	private final SignatureVerifier signatureVerifier;
+	private final boolean signatureEnabled;
 
-	public InternalOrderController(OrderApplicationService applicationService) {
+	public InternalOrderController(
+		OrderApplicationService applicationService,
+		ObjectProvider<SignatureVerifier> signatureVerifierProvider,
+		@Value("${order.signature.enabled:false}") boolean signatureEnabled
+	) {
 		this.applicationService = applicationService;
+		this.signatureVerifier = signatureVerifierProvider.getIfAvailable(() -> new SignatureVerifier() {
+			@Override
+			public boolean verify(String signature, String timestamp, Object payload) {
+				return true;
+			}
+		});
+		this.signatureEnabled = signatureEnabled;
 	}
 
 	/**
 	 * 支付成功回调（支持定金、尾款、全款）
 	 */
 	@PostMapping(value = "/payment/success", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> onPaymentSuccess(@RequestBody PaymentSuccessRequest request) {
+	public Response<BasicAckVO> onPaymentSuccess(@Valid @RequestBody PaymentSuccessRequest request,
+		HttpServletRequest httpRequest) {
+		ensureSignatureIfEnabled(httpRequest, request, "payment.success");
 		// 验证幂等性键（由网关强制执行，这里仅记录）
 		IdempotencyHelper.validateIdempotencyKey(true);
 
@@ -61,8 +82,9 @@ public class InternalOrderController {
 	 * 物流揽收成功回调
 	 */
 	@PostMapping(value = "/logistics/picked", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> onLogisticsPicked(@RequestBody LogisticsPickedRequest request) {
-		// TODO: 签名校验
+	public Response<BasicAckVO> onLogisticsPicked(@Valid @RequestBody LogisticsPickedRequest request,
+		HttpServletRequest httpRequest) {
+		ensureSignatureIfEnabled(httpRequest, request, "logistics.picked");
 		// TODO: 幂等校验 (eventId)
 		// TODO: 实现物流揽收处理
 		return Response.ok(new BasicAckVO("success", "Logistics picked", request.getEventId()));
@@ -72,7 +94,9 @@ public class InternalOrderController {
 	 * 物流妥投/签收回调
 	 */
 	@PostMapping(value = "/logistics/delivered", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> onLogisticsDelivered(@RequestBody DeliveredRequest request) {
+	public Response<BasicAckVO> onLogisticsDelivered(@Valid @RequestBody DeliveredRequest request,
+		HttpServletRequest httpRequest) {
+		ensureSignatureIfEnabled(httpRequest, request, "logistics.delivered");
 		// 验证幂等性键（由网关强制执行，这里仅记录）
 		IdempotencyHelper.validateIdempotencyKey(true);
 
@@ -94,7 +118,9 @@ public class InternalOrderController {
 	 * 退款成功回调
 	 */
 	@PostMapping(value = "/refund/success", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> onRefundSuccess(@RequestBody RefundSuccessRequest request) {
+	public Response<BasicAckVO> onRefundSuccess(@Valid @RequestBody RefundSuccessRequest request,
+		HttpServletRequest httpRequest) {
+		ensureSignatureIfEnabled(httpRequest, request, "refund.success");
 		// 验证幂等性键（由网关强制执行，这里仅记录）
 		IdempotencyHelper.validateIdempotencyKey(true);
 
@@ -116,7 +142,10 @@ public class InternalOrderController {
 	 * 支付超时自动取消
 	 */
 	@PostMapping(value = "/timeout/unpaid-cancel", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> onUnpaidTimeout(@RequestBody UnpaidTimeoutRequest request) {
+	public Response<BasicAckVO> onUnpaidTimeout(@Valid @RequestBody UnpaidTimeoutRequest request,
+		HttpServletRequest httpRequest) {
+		// 系统作业触发通常无需验签；如需可开启：
+		// ensureSignatureIfEnabled(httpRequest, request, "timeout.unpaid_cancel");
 		// 验证幂等性键（由网关强制执行，这里仅记录）
 		IdempotencyHelper.validateIdempotencyKey(true);
 
@@ -138,7 +167,10 @@ public class InternalOrderController {
 	 * 签收后N天自动完成
 	 */
 	@PostMapping(value = "/auto/complete", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> autoComplete(@RequestBody AutoCompleteRequest request) {
+	public Response<BasicAckVO> autoComplete(@Valid @RequestBody AutoCompleteRequest request,
+		HttpServletRequest httpRequest) {
+		// 系统作业触发通常无需验签；如需可开启：
+		// ensureSignatureIfEnabled(httpRequest, request, "auto.complete");
 		// 验证幂等性键（由网关强制执行，这里仅记录）
 		IdempotencyHelper.validateIdempotencyKey(true);
 
@@ -160,10 +192,25 @@ public class InternalOrderController {
 	 */
 	@PostMapping(value = "/auto/await-fulfillment", consumes = MediaType.APPLICATION_JSON_VALUE)
 	public Response<BasicAckVO> moveToAwaitFulfillment(
-		@RequestBody MoveToAwaitFulfillmentRequest request) {
+		@Valid @RequestBody MoveToAwaitFulfillmentRequest request,
+		HttpServletRequest httpRequest) {
+		// 系统保障性作业，默认不验签
 		// TODO: 幂等校验 (eventId)
 		applicationService.moveToAwaitFulfillment(request.toCommand());
 		return Response.ok(
 			new BasicAckVO("success", "Moved to awaiting fulfillment", request.getEventId()));
+	}
+
+	private void ensureSignatureIfEnabled(HttpServletRequest httpRequest, Object payload, String event) {
+		if (!signatureEnabled) return;
+		String signature = httpRequest.getHeader("X-Signature");
+		String timestamp = httpRequest.getHeader("X-Timestamp");
+		if (signature == null || signature.isBlank() || timestamp == null || timestamp.isBlank()) {
+			throw new UnauthorizedException("Missing signature headers: X-Signature/X-Timestamp");
+		}
+		boolean ok = signatureVerifier.verify(signature, timestamp, payload);
+		if (!ok) {
+			throw new UnauthorizedException("Invalid signature for event: " + event);
+		}
 	}
 }

@@ -4,6 +4,7 @@ import com.github.spud.tinystore.order.application.result.ConfirmOrderResult.Ord
 import com.github.spud.tinystore.order.application.result.ConfirmOrderResult.ShopProductSnapshot;
 import com.github.spud.tinystore.order.domain.model.vo.OrderNo;
 import com.github.spud.tinystore.order.interfaces.dto.response.CreateOrderVO;
+import com.github.spud.tinystore.order.interfaces.util.IdempotencyHelper;
 import java.util.List;
 import lombok.Data;
 
@@ -25,6 +26,9 @@ public class SubmitOrderResult {
 
 	public CreateOrderVO toVO() {
 		CreateOrderVO vo = new CreateOrderVO();
+		vo.setLines(this.lines);
+		vo.setSummary(this.summary);
+		vo.setIdempotencyKey(IdempotencyHelper.getCurrentIdempotencyKey());
 		return vo;
 	}
 

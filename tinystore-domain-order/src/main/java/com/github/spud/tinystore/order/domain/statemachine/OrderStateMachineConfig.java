@@ -2,6 +2,15 @@ package com.github.spud.tinystore.order.domain.statemachine;
 
 import com.github.spud.tinystore.order.domain.statemachine.event.OrderEvent;
 import com.github.spud.tinystore.order.domain.statemachine.status.CoreFlowStatus;
+import com.github.spud.tinystore.order.domain.statemachine.guard.TerminalStateGuard;
+import com.github.spud.tinystore.order.domain.statemachine.guard.PaymentPhaseGuard;
+import com.github.spud.tinystore.order.domain.statemachine.guard.FulfillmentMutexGuard;
+import com.github.spud.tinystore.order.domain.statemachine.action.OnPaymentSucceededAction;
+import com.github.spud.tinystore.order.domain.statemachine.action.OnMerchantAcceptedAction;
+import com.github.spud.tinystore.order.domain.statemachine.action.OnFulfillmentStartedAction;
+import com.github.spud.tinystore.order.domain.statemachine.action.OnGoodsReceivedAction;
+import com.github.spud.tinystore.order.domain.statemachine.action.OnAutoReceiveTimeoutAction;
+import com.github.spud.tinystore.order.domain.statemachine.action.OnCancelledAction;
 import org.springframework.context.annotation.Bean;
 import org.springframework.statemachine.config.builders.StateMachineStateConfigurer;
 import org.springframework.statemachine.config.builders.StateMachineTransitionConfigurer;
@@ -43,82 +52,127 @@ public class OrderStateMachineConfig extends
 			.source(CoreFlowStatus.PENDING_PAYMENT)
 			.target(CoreFlowStatus.PAID)
 			.event(OrderEvent.PAYMENT_SUCCEEDED)
+			.action(onPaymentSucceededAction())
+			.guard(paymentPhaseGuard())
 			.and()
 			// PENDING_PAYMENT cancellation paths
 			.withExternal()
 			.source(CoreFlowStatus.PENDING_PAYMENT)
 			.target(CoreFlowStatus.CANCELLED)
 			.event(OrderEvent.PAYMENT_FAILED)
+			.action(onCancelledAction())
+			.guard(paymentPhaseGuard())
 			.and()
 			.withExternal()
 			.source(CoreFlowStatus.PENDING_PAYMENT)
 			.target(CoreFlowStatus.CANCELLED)
 			.event(OrderEvent.PAYMENT_TIMEOUT)
+			.action(onCancelledAction())
+			.guard(paymentPhaseGuard())
 			.and()
 			.withExternal()
 			.source(CoreFlowStatus.PENDING_PAYMENT)
 			.target(CoreFlowStatus.CANCELLED)
 			.event(OrderEvent.USER_CANCELLED)
+			.action(onCancelledAction())
+			.guard(paymentPhaseGuard())
 			.and()
 			.withExternal()
 			.source(CoreFlowStatus.PENDING_PAYMENT)
 			.target(CoreFlowStatus.CANCELLED)
 			.event(OrderEvent.SYSTEM_CANCELLED)
+			.action(onCancelledAction())
+			.guard(paymentPhaseGuard())
 			.and()
 			// PAID -> ACCEPTED
 			.withExternal()
 			.source(CoreFlowStatus.PAID)
 			.target(CoreFlowStatus.ACCEPTED)
 			.event(OrderEvent.MERCHANT_ACCEPTED)
+			.action(onMerchantAcceptedAction())
 			.and()
 			// PAID cancellation (merchant)
 			.withExternal()
 			.source(CoreFlowStatus.PAID)
 			.target(CoreFlowStatus.CANCELLED)
 			.event(OrderEvent.MERCHANT_CANCELLED)
+			.action(onCancelledAction())
 			.and()
 			// ACCEPTED -> FULFILLING
 			.withExternal()
 			.source(CoreFlowStatus.ACCEPTED)
 			.target(CoreFlowStatus.FULFILLING)
 			.event(OrderEvent.FULFILLMENT_STARTED)
+			.action(onFulfillmentStartedAction())
 			.and()
 			// FULFILLING internal progress events
 			.withInternal()
 			.source(CoreFlowStatus.FULFILLING)
 			.event(OrderEvent.GOODS_SHIPPED)
+			.guard(fulfillmentMutexGuard())
 			.and()
 			.withInternal()
 			.source(CoreFlowStatus.FULFILLING)
 			.event(OrderEvent.GOODS_DELIVERED)
+			.guard(fulfillmentMutexGuard())
 			.and()
 			// FULFILLING -> COMPLETED
 			.withExternal()
 			.source(CoreFlowStatus.FULFILLING)
 			.target(CoreFlowStatus.COMPLETED)
 			.event(OrderEvent.GOODS_RECEIVED)
+			.action(onGoodsReceivedAction())
+			.guard(fulfillmentMutexGuard())
 			.and()
 			.withExternal()
 			.source(CoreFlowStatus.FULFILLING)
 			.target(CoreFlowStatus.COMPLETED)
 			.event(OrderEvent.AUTO_RECEIVE_TIMEOUT)
+			.action(onAutoReceiveTimeoutAction())
+			.guard(fulfillmentMutexGuard())
 			.and()
 			// FULFILLING -> CANCELLED (reject / merchant / system)
 			.withExternal()
 			.source(CoreFlowStatus.FULFILLING)
 			.target(CoreFlowStatus.CANCELLED)
 			.event(OrderEvent.GOODS_REJECTED)
+			.action(onCancelledAction())
+			.guard(fulfillmentMutexGuard())
 			.and()
 			.withExternal()
 			.source(CoreFlowStatus.FULFILLING)
 			.target(CoreFlowStatus.CANCELLED)
 			.event(OrderEvent.MERCHANT_CANCELLED)
+			.action(onCancelledAction())
+			.guard(fulfillmentMutexGuard())
 			.and()
 			.withExternal()
 			.source(CoreFlowStatus.FULFILLING)
 			.target(CoreFlowStatus.CANCELLED)
-			.event(OrderEvent.SYSTEM_CANCELLED);
+			.event(OrderEvent.SYSTEM_CANCELLED)
+			.action(onCancelledAction())
+			.guard(fulfillmentMutexGuard());
+
 	}
+
+	@Bean
+	public TerminalStateGuard terminalStateGuard() { return new TerminalStateGuard(); }
+	@Bean
+	public PaymentPhaseGuard paymentPhaseGuard() { return new PaymentPhaseGuard(); }
+	@Bean
+	public FulfillmentMutexGuard fulfillmentMutexGuard() { return new FulfillmentMutexGuard(); }
+	@Bean
+	public OnPaymentSucceededAction onPaymentSucceededAction() { return new OnPaymentSucceededAction(); }
+	@Bean
+	public OnMerchantAcceptedAction onMerchantAcceptedAction() { return new OnMerchantAcceptedAction(); }
+	@Bean
+	public OnFulfillmentStartedAction onFulfillmentStartedAction() { return new OnFulfillmentStartedAction(); }
+	@Bean
+	public OnGoodsReceivedAction onGoodsReceivedAction() { return new OnGoodsReceivedAction(); }
+	@Bean
+	public OnAutoReceiveTimeoutAction onAutoReceiveTimeoutAction() { return new OnAutoReceiveTimeoutAction(); }
+	@Bean
+	public OnCancelledAction onCancelledAction() { return new OnCancelledAction(); }
 
 	@Bean
 	public StateMachineListener<CoreFlowStatus, OrderEvent> stateMachineListener() {

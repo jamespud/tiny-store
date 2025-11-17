@@ -2,6 +2,7 @@ package com.github.spud.tinystore.order.interfaces.rest;
 
 import com.github.spud.tinystore.infrastructure.service.UserIdProvider;
 import com.github.spud.tinystore.infrastructure.vo.Response;
+import com.github.spud.tinystore.order.application.service.IdempotencyStorage;
 import com.github.spud.tinystore.order.application.command.user.ConfirmOrderCommand;
 import com.github.spud.tinystore.order.application.command.user.SubmitOrderCommand;
 import com.github.spud.tinystore.order.application.service.OrderApplicationService;
@@ -17,12 +18,19 @@ import com.github.spud.tinystore.order.interfaces.util.IdempotencyHelper;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import jakarta.servlet.http.HttpServletRequest;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.slf4j.MDC;
+import org.springframework.beans.factory.ObjectProvider;
 
 /**
  * 订单控制器(消费者) 1. 创建订单 2. 取消订单 3. 确认收货 4. 订单列表查询 (TODO) 5. 订单详情查询 (TODO) 6. 申请退款/售后 (TODO)
@@ -36,34 +44,55 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserOrderController {
 
 	private final OrderApplicationService applicationService;
+	private final IdempotencyStorage idempotencyStorage;
 
-	public UserOrderController(OrderApplicationService applicationService) {
+	public UserOrderController(OrderApplicationService applicationService,
+		ObjectProvider<IdempotencyStorage> idempotencyStorageProvider) {
 		this.applicationService = applicationService;
+		this.idempotencyStorage = idempotencyStorageProvider.getIfAvailable(() -> new IdempotencyStorage() {
+			@Override public boolean exists(String key) { return false; }
+			@Override public <T> T getResponse(String key, Class<T> type) { return null; }
+			@Override public void saveResponse(String key, Object value) { }
+			@Override public void evict(String key) { }
+		});
 	}
 
 	@PostMapping(value = "/submit/preview", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<PreviewOrderVO> orderPreview(@RequestBody PreviewOrderRequest previewRequest) {
+	public Response<PreviewOrderVO> orderPreview(@Valid @RequestBody PreviewOrderRequest previewRequest, HttpServletRequest httpRequest) {
+		IdempotencyHelper.extractAndSetContext(httpRequest);
 		ConfirmOrderCommand cmd = previewRequest.toCommand(UserIdProvider.getCurrentUserId());
 		PreviewOrderVO vo = applicationService.orderPreview(cmd).toVO();
 		return Response.ok(vo);
 	}
 
 	@PostMapping(value = "/submit/apply", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<CreateOrderVO> submitOrder(@RequestBody CreateOrderRequest orderRequest)
+	public Response<CreateOrderVO> submitOrder(@Valid @RequestBody CreateOrderRequest orderRequest,
+		HttpServletRequest httpRequest)
 		throws Exception {
+		String extracted = IdempotencyHelper.extractAndSetContext(httpRequest);
+		if (extracted == null || extracted.isBlank()) {
+			String userId = UserIdProvider.getCurrentUserId();
+			String derived = deriveSubmitIdempotencyKey(userId, orderRequest);
+			MDC.put(IdempotencyHelper.MDC_IDEMPOTENCY_KEY, derived);
+			log.debug("Derived idempotency key for submit: {}", derived);
+		}
 		SubmitOrderCommand cmd = orderRequest.toCommand(UserIdProvider.getCurrentUserId());
 		CreateOrderVO vo = applicationService.submitOrder(cmd).toVO();
 		return Response.ok(vo);
 	}
 
 	@PostMapping(value = "/cancel/preview", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<Object> cancelPreview(String orderId) {
-		Object o = applicationService.cancelPreview(orderId);
+	public Response<Object> cancelPreview(@Valid @RequestBody com.github.spud.tinystore.order.interfaces.dto.request.PreviewCancelRequest request,
+		HttpServletRequest httpRequest) {
+		IdempotencyHelper.extractAndSetContext(httpRequest);
+		Object o = applicationService.cancelPreview(request.getOrderId().toString());
 		return Response.ok(o);
 	}
 
 	@PostMapping(value = "/cancel/apply", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<Object> cancelOrder(CancelRequest cancelRequest) {
+	public Response<Object> cancelOrder(@Valid @RequestBody CancelRequest cancelRequest,
+		HttpServletRequest httpRequest) {
+		IdempotencyHelper.extractAndSetContext(httpRequest);
 		Object o = applicationService.cancelOrder(cancelRequest.toCommand());
 		return Response.ok(o);
 	}
@@ -72,7 +101,18 @@ public class UserOrderController {
 	 * 确认收货
 	 */
 	@PostMapping(value = "/confirm-receipt", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> confirmReceipt(@RequestBody ConfirmReceiptRequest request) {
+	public Response<BasicAckVO> confirmReceipt(@Valid @RequestBody ConfirmReceiptRequest request,
+		HttpServletRequest httpRequest) {
+		IdempotencyHelper.extractAndSetContext(httpRequest);
+		String idempoKey = IdempotencyHelper.getCurrentIdempotencyKey();
+		if (idempoKey != null && !idempoKey.isBlank()) {
+			try {
+				BasicAckVO cached = idempotencyStorage.getResponse(idempoKey, BasicAckVO.class);
+				if (cached != null) {
+					return Response.ok(cached);
+				}
+			} catch (Exception ignored) { }
+		}
 		String userId = UserIdProvider.getCurrentUserId();
 
 		// 记录关联ID追踪日志
@@ -83,20 +123,39 @@ public class UserOrderController {
 		applicationService.confirmReceipt(request.toCommand(userId));
 
 		log.info("User confirm receipt operation completed for order: {}", request.getOrderId());
-		return Response.ok(new BasicAckVO("success", "Receipt confirmed", null));
+		BasicAckVO ack = new BasicAckVO("success", "Receipt confirmed", null);
+		if (idempoKey != null && !idempoKey.isBlank()) {
+			try { idempotencyStorage.saveResponse(idempoKey, ack); } catch (Exception ignored) { }
+		}
+		return Response.ok(ack);
 	}
 
 	/**
 	 * 申请售后（退款/退货退款/换货）
 	 */
 	@PostMapping(value = "/after-sale/apply", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<Map<String, Object>> applyAfterSale(@RequestBody AfterSaleApplyRequest request) {
+	public Response<Map<String, Object>> applyAfterSale(@RequestBody AfterSaleApplyRequest request,
+		HttpServletRequest httpRequest) {
+		IdempotencyHelper.extractAndSetContext(httpRequest);
+		String idempoKey = IdempotencyHelper.getCurrentIdempotencyKey();
+		if (idempoKey != null && !idempoKey.isBlank()) {
+			try {
+				@SuppressWarnings("unchecked")
+				Map<String, Object> cached = idempotencyStorage.getResponse(idempoKey, Map.class);
+				if (cached != null) {
+					return Response.ok(cached);
+				}
+			} catch (Exception ignored) { }
+		}
 		String userId = UserIdProvider.getCurrentUserId();
 		// TODO: 验证订单属于当前用户
 		String afterSaleId = applicationService.applyAfterSale(request.toCommand(userId));
 		Map<String, Object> result = new HashMap<>();
 		result.put("status", "success");
 		result.put("afterSaleId", afterSaleId);
+		if (idempoKey != null && !idempoKey.isBlank()) {
+			try { idempotencyStorage.saveResponse(idempoKey, result); } catch (Exception ignored) { }
+		}
 		return Response.ok(result);
 	}
 
@@ -104,7 +163,9 @@ public class UserOrderController {
 	 * 订单自动完成预览（可选）
 	 */
 	@PostMapping(value = "/complete/preview", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<Map<String, Object>> completePreview(@RequestBody Map<String, String> request) {
+	public Response<Map<String, Object>> completePreview(@RequestBody Map<String, String> request,
+		HttpServletRequest httpRequest) {
+		IdempotencyHelper.extractAndSetContext(httpRequest);
 		String orderIdStr = request.get("orderId");
 		UUID orderId = UUID.fromString(orderIdStr);
 
@@ -117,5 +178,24 @@ public class UserOrderController {
 		result.put("canComplete", true);
 		result.put("expectedCompleteAt", System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L); // 7天后
 		return Response.ok(result);
+	}
+
+	private String deriveSubmitIdempotencyKey(String userId, CreateOrderRequest request) {
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA-256");
+			String raw = userId + "|" + request.getAddressId() + "|" +
+				(request.getPlatformCouponId() == null ? "" : request.getPlatformCouponId()) + "|" +
+				request.getMerchantSkuGroups().stream()
+					.map(g -> g.getMerchantId() + ":" + g.getSkuItems().stream()
+						.map(it -> it.getSkuId() + "#" + it.getQuantity())
+						.reduce((a,b)->a+","+b).orElse(""))
+					.reduce((a,b)->a+";"+b).orElse("");
+			byte[] hash = digest.digest(raw.getBytes(StandardCharsets.UTF_8));
+			StringBuilder sb = new StringBuilder();
+			for (byte b : hash) sb.append(String.format("%02x", b));
+			return "submit:" + userId + ":" + sb;
+		} catch (NoSuchAlgorithmException e) {
+			return "submit:" + userId + ":fallback";
+		}
 	}
 }

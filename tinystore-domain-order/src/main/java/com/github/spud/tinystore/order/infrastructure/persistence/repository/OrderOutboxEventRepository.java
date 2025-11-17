@@ -65,4 +65,7 @@ public interface OrderOutboxEventRepository extends JpaRepository<OrderOutboxEve
 	@Modifying
 	@Query("DELETE FROM OrderOutboxEventPO e WHERE e.status = 'SENT' AND e.updatedAt < :cutoffTime")
 	void cleanCompletedEvents(@Param("cutoffTime") OffsetDateTime cutoffTime);
+
+	/** 统计指定状态的事件数量 */
+	long countByStatus(OrderOutboxEventPO.OutboxEventStatus status);
 }

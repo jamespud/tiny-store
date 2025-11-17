@@ -9,6 +9,8 @@ import com.github.spud.tinystore.order.interfaces.dto.request.MerchantAcceptRequ
 import com.github.spud.tinystore.order.interfaces.dto.request.ShipOrderRequest;
 import com.github.spud.tinystore.order.interfaces.dto.response.BasicAckVO;
 import com.github.spud.tinystore.order.interfaces.util.IdempotencyHelper;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,7 +39,9 @@ public class MerchantOrderController {
 	 * 商家接单
 	 */
 	@PostMapping(value = "/order/receive", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> receiveOrder(@RequestBody MerchantAcceptRequest request) {
+	public Response<BasicAckVO> receiveOrder(@Valid @RequestBody MerchantAcceptRequest request,
+		HttpServletRequest httpRequest) {
+		IdempotencyHelper.extractAndSetContext(httpRequest);
 		// 记录关联ID追踪日志
 		log.info("Merchant accepting order: {}, operator: {}, correlationId: {}",
 			request.getOrderId(), request.getOperatorId(), IdempotencyHelper.getCurrentCorrelationId());
@@ -53,7 +57,9 @@ public class MerchantOrderController {
 	 * 商家同意取消
 	 */
 	@PostMapping(value = "/cancel/approve", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> approveCancel(@RequestBody CancelApproveRequest request) {
+	public Response<BasicAckVO> approveCancel(@Valid @RequestBody CancelApproveRequest request,
+		HttpServletRequest httpRequest) {
+		IdempotencyHelper.extractAndSetContext(httpRequest);
 		// TODO: 商家身份校验
 		applicationService.approveCancelRequest(request.toCommand());
 		return Response.ok(new BasicAckVO("success", "Cancel approved", null));
@@ -63,7 +69,9 @@ public class MerchantOrderController {
 	 * 商家拒绝取消
 	 */
 	@PostMapping(value = "/cancel/reject", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> rejectCancel(@RequestBody CancelRejectRequest request) {
+	public Response<BasicAckVO> rejectCancel(@Valid @RequestBody CancelRejectRequest request,
+		HttpServletRequest httpRequest) {
+		IdempotencyHelper.extractAndSetContext(httpRequest);
 		// TODO: 商家身份校验
 		applicationService.rejectCancelRequest(request.toCommand());
 		return Response.ok(new BasicAckVO("success", "Cancel rejected", null));
@@ -73,7 +81,9 @@ public class MerchantOrderController {
 	 * 商家发货
 	 */
 	@PostMapping(value = "/ship", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> shipOrder(@RequestBody ShipOrderRequest request) {
+	public Response<BasicAckVO> shipOrder(@Valid @RequestBody ShipOrderRequest request,
+		HttpServletRequest httpRequest) {
+		IdempotencyHelper.extractAndSetContext(httpRequest);
 		// 记录关联ID追踪日志
 		log.info("Merchant shipping order: {}, operator: {}, logistics: {}, correlationId: {}",
 			request.getOrderId(), request.getOperatorId(),
@@ -90,9 +100,11 @@ public class MerchantOrderController {
 	 * 商家确认妥投（可选）
 	 */
 	@PostMapping(value = "/delivery/confirm", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> confirmDelivery(@RequestBody DeliveredRequest request) {
+	public Response<BasicAckVO> confirmDelivery(@Valid @RequestBody DeliveredRequest request,
+		HttpServletRequest httpRequest) {
+		IdempotencyHelper.extractAndSetContext(httpRequest);
 		// TODO: 商家身份校验
-		// TODO: 实现确认妥投逻辑
-		return Response.ok(new BasicAckVO("success", "Delivery confirmed", null));
+		applicationService.confirmDelivered(request.toCommand());
+		return Response.ok(new BasicAckVO("success", "Delivery confirmed", request.getEventId()));
 	}
 }
