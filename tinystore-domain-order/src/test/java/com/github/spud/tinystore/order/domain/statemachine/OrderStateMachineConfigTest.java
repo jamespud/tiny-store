@@ -13,11 +13,36 @@ import reactor.core.publisher.Mono;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(classes = {OrderStateMachineConfig.class})
+@SpringBootTest(classes = {OrderStateMachineConfig.class, OrderStateMachineConfigTest.TestBeans.class})
 class OrderStateMachineConfigTest {
 
     @Autowired
     private StateMachineFactory<CoreFlowStatus, OrderEvent> factory;
+
+    /**
+     * 提供状态机配置所需的依赖 Bean 的最小测试桩，避免 ApplicationContext 加载失败。
+     */
+    @org.springframework.boot.test.context.TestConfiguration
+    static class TestBeans {
+        @org.springframework.context.annotation.Bean
+        com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService outboxEventService() {
+            return org.mockito.Mockito.mock(com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService.class);
+        }
+        @org.springframework.context.annotation.Bean
+        com.github.spud.tinystore.order.infrastructure.metrics.OrderMetrics orderMetrics() {
+            return org.mockito.Mockito.mock(com.github.spud.tinystore.order.infrastructure.metrics.OrderMetrics.class);
+        }
+        @org.springframework.context.annotation.Bean
+        org.springframework.beans.factory.ObjectProvider<com.github.spud.tinystore.order.infrastructure.audit.AuditRecorder> auditRecorderProvider() {
+            com.github.spud.tinystore.order.infrastructure.audit.AuditRecorder mock = org.mockito.Mockito.mock(com.github.spud.tinystore.order.infrastructure.audit.AuditRecorder.class);
+            return new org.springframework.beans.factory.ObjectProvider<>() {
+                @Override public com.github.spud.tinystore.order.infrastructure.audit.AuditRecorder getObject(Object... args){ return mock; }
+                @Override public com.github.spud.tinystore.order.infrastructure.audit.AuditRecorder getIfAvailable(){ return mock; }
+                @Override public com.github.spud.tinystore.order.infrastructure.audit.AuditRecorder getIfAvailable(java.util.function.Supplier<com.github.spud.tinystore.order.infrastructure.audit.AuditRecorder> supplier){ return mock; }
+                @Override public com.github.spud.tinystore.order.infrastructure.audit.AuditRecorder getObject(){ return mock; }
+            };
+        }
+    }
 
     private void send(StateMachine<CoreFlowStatus, OrderEvent> sm, OrderEvent e) {
         sm.sendEvent(Mono.just(MessageBuilder.withPayload(e).build())).collectList().block();

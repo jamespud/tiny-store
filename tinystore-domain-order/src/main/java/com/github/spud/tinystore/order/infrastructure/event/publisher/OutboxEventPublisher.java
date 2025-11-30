@@ -3,6 +3,7 @@ package com.github.spud.tinystore.order.infrastructure.event.publisher;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.spud.tinystore.order.infrastructure.metrics.OutboxMetrics;
+import com.github.spud.tinystore.order.domain.event.OrderEventTypeConstants;
 import com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService;
 import com.github.spud.tinystore.order.infrastructure.persistence.po.OrderOutboxEventPO;
 import java.util.List;
@@ -10,6 +11,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
+import com.github.spud.tinystore.order.infrastructure.metrics.OrderMetrics;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -27,6 +30,7 @@ public class OutboxEventPublisher {
 	private final KafkaTemplate<String, String> kafkaTemplate;
 	private final ObjectMapper objectMapper;
 	private final OutboxMetrics outboxMetrics;
+	private final ObjectProvider<OrderMetrics> orderMetricsProvider;
 
 	@org.springframework.beans.factory.annotation.Value("${order.outbox.map-event-type:true}")
 	private boolean mapExternalEventType = true;
@@ -119,10 +123,14 @@ public class OutboxEventPublisher {
 			String messageJson = objectMapper.writeValueAsString(kafkaMessage);
 
 			// 发送到 Kafka
+			long startTs = System.currentTimeMillis();
 			CompletableFuture<SendResult<String, String>> future =
 				kafkaTemplate.send(topic, key, messageJson);
 
 			return future.handle((result, throwable) -> {
+				long elapsed = System.currentTimeMillis() - startTs;
+				try { OrderMetrics om = orderMetricsProvider.getIfAvailable(() -> null); if (om != null) om.recordOutboxLatency(elapsed); } catch (Exception ignored) {}
+
 				if (throwable != null) {
 					log.error("发布事件到 Kafka 失败: eventId={}, orderNo={}, topic={}",
 						event.getId(), event.getOrderId(), topic, throwable);
@@ -157,23 +165,23 @@ public class OutboxEventPublisher {
 	private String getTopicName(String externalEventType) {
 		// 标准事件名 → Topic 映射
 		switch (externalEventType) {
-			case "order.payment.succeeded":
+			case OrderEventTypeConstants.PAYMENT_SUCCEEDED:
 				return TOPIC_PREFIX + "paid";
-			case "order.fulfillment.shipped":
+			case OrderEventTypeConstants.GOODS_SHIPPED:
 				return TOPIC_PREFIX + "shipped";
-			case "order.fulfillment.delivered":
+			case OrderEventTypeConstants.GOODS_DELIVERED:
 				return TOPIC_PREFIX + "delivered";
-			case "order.received":
+			case OrderEventTypeConstants.GOODS_RECEIVED:
 				return TOPIC_PREFIX + "received";
 			case "order.completed":
 				return TOPIC_PREFIX + "completed";
-			case "order.cancelled":
+			case OrderEventTypeConstants.ORDER_CANCELLED:
 				return TOPIC_PREFIX + "cancelled";
-			case "order.refund.succeeded":
+			case OrderEventTypeConstants.REFUND_SUCCEEDED:
 				return TOPIC_PREFIX + "refund-succeeded";
 			case "order.created":
 				return TOPIC_PREFIX + "created";
-			case "order.lifecycle.changed":
+			case OrderEventTypeConstants.ORDER_LIFECYCLE_CHANGED:
 				return TOPIC_PREFIX + "status-changed";
 			default:
 				return TOPIC_PREFIX + "general";
@@ -189,13 +197,13 @@ public class OutboxEventPublisher {
 		if (rawType.startsWith("order.")) return rawType;
 		// 历史类名/枚举名映射
 		return switch (rawType) {
-			case "ORDER_PAID", "OrderPaidEvent" -> "order.payment.succeeded";
-			case "ORDER_SHIPPED", "OrderShippedEvent" -> "order.fulfillment.shipped";
+			case "ORDER_PAID", "OrderPaidEvent" -> OrderEventTypeConstants.PAYMENT_SUCCEEDED;
+			case "ORDER_SHIPPED", "OrderShippedEvent" -> OrderEventTypeConstants.GOODS_SHIPPED;
 			case "ORDER_COMPLETED", "OrderCompletedEvent" -> "order.completed";
-			case "ORDER_CANCELLED", "OrderCancelledEvent" -> "order.cancelled";
-			case "AFTERSALE_COMPLETED", "RefundSucceededEvent" -> "order.refund.succeeded";
+			case "ORDER_CANCELLED", "OrderCancelledEvent" -> OrderEventTypeConstants.ORDER_CANCELLED;
+			case "AFTERSALE_COMPLETED", "RefundSucceededEvent" -> OrderEventTypeConstants.REFUND_SUCCEEDED;
 			case "ORDER_CREATED", "OrderCreatedEvent" -> "order.created";
-			case "STATUS_CHANGED", "OrderStatusChangedEvent" -> "order.lifecycle.changed";
+			case "STATUS_CHANGED", "OrderStatusChangedEvent" -> OrderEventTypeConstants.ORDER_LIFECYCLE_CHANGED;
 			default -> "order.general";
 		};
 	}

@@ -1,180 +1,391 @@
 [MODE: PLAN]
-以下为基于审阅结论的“详细修复计划”，只包含规格与改动清单，不含任何实现代码或样例。所有路径均以 tinystore-domain-order 模块为根，保证实施无需创设性决策。
+以下为针对既有偏差的“订单模块修复与完善”技术实施计划（不含任何实现代码片段）。本计划严格列出需要增补/调整的文件、类、方法、字段、事件命名、测试用例与迁移脚本要求，使后续 EXECUTE 阶段无需再做创设性决策。末尾提供原子化可执行 CHECKLIST。
 
-一、目标与范围
-- 目标: 补齐最初 TODO 中未完成项，涵盖控制层幂等/签名、统一错误语义、提交结果回放存储、状态机 Action 原子化持久化与出箱、审计与指标、售后/取消审批用例、文档与 SQL 校验。
-- 范围: 
-  - 控制器与 DTO 层（User/Merchant/Internal）
-  - 应用服务（OrderApplicationService 及命令转换）
-  - 状态机 Guard/Action 增强
-  - 出箱发布与灰度开关配置化（已具备，完善文档与测试）
-  - 幂等存储抽象与 TTL
-  - 全局异常映射
-  - 审计与指标打点
-  - 测试与文档、SQL 迁移脚本
+一、总体目标与范围
+- 范围：tinystore-domain-order 内控制器、DTO、应用服务、状态机配置、Outbox事件构造与发布、幂等与错误体系、审计与指标、事件载荷多租户透传、文档与数据库迁移。
+- 目标：补齐之前 PLAN 与 REVIEW 中识别的缺口（全局错误映射、取消与商家端幂等回放、状态机 Guard/Action 审计与事件规范、审计与指标埋点、多租户透传、测试和文档），删除过时控制器，确保一致性与可观测性。
 
-二、控制层幂等与签名验真固化
-- 文件:
-  - `src/main/java/.../interfaces/rest/UserOrderController.java`
-  - `src/main/java/.../interfaces/rest/MerchantOrderController.java`
-  - `src/main/java/.../interfaces/rest/InternalOrderController.java`
-  - `src/main/java/.../interfaces/util/IdempotencyHelper.java`（若已存在则扩展）
-  - 新增接口与默认实现:
-    - `src/main/java/.../infrastructure/acl/SignatureVerifier.java`（接口）
-    - `src/main/java/.../infrastructure/acl/NoopSignatureVerifier.java`（默认空实现，可配置替换）
-- 约定:
-  - 从请求头读取幂等键 `X-Idempotency-Key`；不存在且为“必须幂等”的接口时返回 400。
-  - Internal 回调接口强制验签：读取 `X-Signature` 与 `X-Timestamp`；若 `SignatureVerifier` 返回失败，则 401。
-  - 幂等键算法（无头场景本地生成，若计划要求）:
-    - 用户提交: `submit:{userId}:{requestDigest}`（requestDigest=规范化请求体哈希）
-    - 用户取消: `user-cancel:{orderId}:{userId}:{reason}`
-    - 用户收货: `user-receive:{orderId}:{userId}`
-    - 售后申请: `aftersale:{orderId}:{lineId-or-ALL}:{type}:{tsBucket}`
-    - 商家接单: `merchant-accept:{orderId}:{operatorId}`
-    - 商家发货: `ship:{orderId}:{packageNo}`
-    - 商家妥投确认: `delivered:{orderId}:{packageNo-or-deliveredAt}`
-    - 支付成功: `pay:{orderNo-or-tradeNo}:{transactionId}:{amount}`
-    - 退款成功: `refund:{orderId}:{refundTransactionId}`
-    - 未支付超时: `unpaid-timeout:{orderId}:{scheduleId}`
-    - 自动完成: `auto-complete:{orderId}:{ruleId-or-graceDays}:{tsBucket}`
-    - Await-Fulfillment: `await-fulfillment:{orderId}:{eventId-or-tsBucket}`
-- 控制器改动点:
-  - 校验/提取幂等键与签名缺省处理；调用应用服务前统一通过 `IdempotencyHelper`/`IdempotencyStorage`（见下一节）进行“命中回放”短路。
-  - 统一日志字段: `actorType/actorId/event/orderId/traceId/idempotent(isReplayed)`。
+二、差异点与修复策略概述
+1. 全局错误：`GlobalExceptionHandler` 目前缺少 403/404/409/422 映射与统一错误码结构；需新增异常类与规范化错误码枚举/工具。
+2. 幂等覆盖：用户取消、商家接单/发货/妥投/取消审核等尚未落地控制器级回放；提交/收货/售后已覆盖。
+3. 商家控制器：未接入 `IdempotencyStorage` 结果回放；需与用户控制器策略统一。
+4. 状态机：Guard/Action 未完全列出对应事件+审计+Outbox；需补齐文件内动作清单与一致性执行点。
+5. 出箱事件：事件类型与载荷字段未统一版本化 schema；需明确 event_type 集合与 payload 基础字段。
+6. 审计：缺失统一 `AuditRecorder`；应用服务入口未记录结构化审计。
+7. 指标：需要 Micrometer 指标（幂等命中/冲突、状态机失败、事件发布延迟、HTTP错误分布）。
+8. 多租户与上下文：事件 payload 中需包含 `tenantId` 与操作主体（userId/operatorId）字段；当前未全面透传。
+9. 过时控制器：OrderPaymentCallbackController.java（被注释）需删除以避免混淆。
+10. 测试：需新增幂等回放测试、错误码映射测试、状态机分叉测试、事件 payload 结构验证、审计与指标调用验证。
+11. DB：若审计与扩展幂等需持久化（当前仅内存 + 可能已有仓储），需迁移脚本与索引。
+12. 文档：README 错误码、幂等键、事件 schema、指标、租户透传、删除过时接口说明。
 
-三、提交成功结果回放存储（IdempotencyStorage）
-- 新增:
-  - `src/main/java/.../infrastructure/idempotency/IdempotencyStorage.java`（接口: putSuccess/getSuccess/exists/evict）
-  - `src/main/java/.../infrastructure/idempotency/RedisIdempotencyStorage.java`（生产实现，TTL 默认 7 天，可通过 `order.idempotency.ttl-days` 配置）
-  - `src/main/java/.../infrastructure/idempotency/InMemoryIdempotencyStorage.java`（测试用）
-- 适配:
-  - `OrderApplicationService.submitOrder(...)`、取消/收货/售后等路径在成功后写入回放结果；重复提交命中则直接返回历史结果。
-  - `InternalOrderController` 侧为“回调”类操作仅记录幂等命中，不回放业务结果体（返回一致的 ACK 即可）。
+三、详细规格与文件级变更
 
-四、全局异常与 HTTP 语义映射细化
-- 文件:
-  - GlobalExceptionHandler.java（在现有基础上扩展）
-  - 新增（如需）:
-    - `src/main/java/.../domain/exception/OrderErrorCode.java`（业务错误码枚举/常量，不写实现代码）
-- 映射策略:
-  - 400: 参数错误、幂等键缺失/格式错误、签名缺失/格式错误、业务校验失败（如价格变更/库存不足/优惠券无效）
-  - 401: 验签失败/未认证
-  - 403: 鉴权失败（非订单属主/非商家操作人）
-  - 404: 资源不存在（订单/子单等）
-  - 409: 并发冲突（乐观锁冲突/重复状态跃迁）
-  - 422: 语义错误（在当前状态不允许的操作）
-  - 500: 未捕获异常
-- 错误码规范: `ORDER-4xxx/401x/403x/404x/409x/422x/500x` 分段；将现有 `OrderDomainException` 的 `errorCode` 规范化为 `ORDER-xxxx`。
+A. 全局错误与异常体系
+- 文件：`interfaces/error/GlobalExceptionHandler.java`
+  - 新增处理方法：`handleForbidden(ForbiddenException) -> HTTP 403`、`handleNotFound(ResourceNotFoundException) -> HTTP 404`、`handleConflict(DomainConflictException) -> HTTP 409`、`handleUnprocessable(UnprocessableCommandException) -> HTTP 422`。
+  - 统一返回字段：`timestamp`（ISO8601）、`errorCode`（ORDER-前缀）、`message`、`traceId`、`path`。
+- 新增异常类：
+  - `ForbiddenException`（默认码 ORDER-4030）
+  - `ResourceNotFoundException`（ORDER-4040）
+  - `DomainConflictException`（ORDER-4090 用于版本冲突/并发）
+  - `UnprocessableCommandException`（ORDER-4220 用于命令状态非法）
+- 新增错误码枚举：`interfaces/error/OrderErrorCodes.java`（静态常量/枚举：分段：400x 参数与校验、401x 认证、403x 权限、404x 资源、409x 并发冲突、422x 状态非法、500x 系统）。
+- 日志：统一在 handler 中记录 `warn`（4xx）或 `error`（5xx）并附带 `traceId`。
 
-五、状态机 Action 原子持久化与出箱
-- 文件:
-  - `src/main/java/.../domain/statemachine/action/*`（已存在类增强）
-  - `src/main/java/.../domain/model/*` 与 `.../infrastructure/persistence/repository/*`（保持现仓库结构）
-- 要求:
-  - 在以下 Action 内完成“幂等检查 → 最小必要字段更新 → 状态审计 → 写出箱事件（标准名）”的原子化操作：
-    - `OnPaymentSucceededAction`: 更新支付维度，出箱 `order.payment.succeeded`
-    - `OnMerchantAcceptedAction`: 更新接单维度，出箱 `order.lifecycle.changed`
-    - `OnFulfillmentStartedAction`: 更新履约维度（发货），出箱 `order.fulfillment.shipped`
-    - `OnGoodsReceivedAction`: 更新核心流转为 COMPLETED，出箱 `order.received`/`order.completed`（按既有定义）
-    - `OnAutoReceiveTimeoutAction`: 同上但标注来源为 SYSTEM，出箱 `order.received`
-    - `OnCancelledAction`: 更新核心流转为 CANCELLED，出箱 `order.cancelled`
-  - 持久化前校验 Guard 否决状态，避免重复写入；写入前后记录 `OrderStatusAuditRepository`。
-  - 出箱载荷使用现有 `OutboxEventService.buildEnvelopePayload` 生成；事件类型经 `OutboxEventPublisher` 标准化映射。
+B. 幂等与回放扩展
+- 用户取消：
+  - 幂等键：`cancel:{orderId}:{userId}:{reasonHash}`（reasonHash 使用内容+类型 md5 取前 8 位）。
+  - 存储：调用成功后保存简化响应 `{status:"CANCELLED", orderId, cancelAt}`。
+- 商家端：
+  - 接单：`merchant_accept:{orderId}:{operatorId}`
+  - 发货：`ship:{orderId}:{packageNo}`
+  - 妥投确认：`delivered_confirm:{orderId}:{packageNo}`
+  - 取消审批/拒绝：`merchant_cancel_decision:{orderId}:{operatorId}:{decision}`
+  - 结果回放统一使用 `BasicAckVO` 序列化。
+- 实现位置：
+  - 控制器：`MerchantOrderController` 在每个操作入口：
+    - 抽取幂等键（若无自定义头则内部派生），检查 `IdempotencyStorage.exists(key)` → 命中则返回反序列化结果。
+    - 执行成功后 `saveResponse(key, serializedAck)`。
+  - 用户取消：`UserOrderController.cancelApply()` 同步逻辑。
 
-六、审计与指标
-- 文件:
-  - `src/main/java/.../infrastructure/audit/*`（新增 `AuditRecorder` 接口与默认实现）
-  - `src/main/java/.../infrastructure/metrics/OutboxMetrics.java`（已存在引用，若文件缺失则新增接口与默认无操作实现）
-- 要求:
-  - 应用服务入口调用 `AuditRecorder.record(cmd, actor, traceId, orderId, idempotent)`。
-  - 指标补充：
-    - 幂等命中计数/比率（按操作分类）
-    - 状态机拒绝计数
-    - 控制器 4xx/5xx 计数
-    - 出箱滞留（pending 数）与发布延迟（createdAt→发送时间差）
+C. 控制器结构调整
+- 注入方式：与用户控制器一致，使用 `ObjectProvider<IdempotencyStorage>` 以兼容测试。
+- 删除文件：OrderPaymentCallbackController.java（实际物理删除，以免后续误用）。
 
-七、鉴权/租户校验
-- 文件:
-  - `src/main/java/.../infrastructure/acl/UserIdProvider.java`（如已存在则复用）
-  - `src/main/java/.../infrastructure/acl/AuthorizationService.java`（接口+默认实现）
-- 要求:
-  - 用户接口校验订单归属（userId==订单用户）失败 403。
-  - 商家接口校验操作人归属商家并允许操作；失败 403。
-  - `TenantContext` 的 `tenantId/userId` 贯穿入出箱信封 `operator/tenantId`。
+D. 应用服务层补齐
+- 文件：OrderApplicationService.java
+  - 为 `cancelOrder`, `merchantAccept`, `shipOrder`, `confirmDelivered` 等方法增加审计调用与必要异常抛出（`DomainConflictException` / `UnprocessableCommandException`）。
+  - 在这些方法返回后不直接负责幂等存储（控制器级），仅抛异常或返回成功对象。
+  - 引入：`AuditRecorder`（接口）与 `auditRecorder.record(AuditEntry)`。
 
-八、配置与灰度
-- 配置键:
-  - `order.outbox.map-event-type`（已实现，默认 true；文档化）
-  - `order.idempotency.ttl-days`（默认 7）
-  - `order.signature.enabled`（默认 false）
-- 文档: README 中给出上述开关语义与回滚策略（关闭事件名映射时的 Topic 与 `eventType` 回退说明）。
+E. 状态机 Guard 与 Action 完善
+- 文件：`domain/statemachine/OrderStateMachineConfig.java`
+  - Guard 新增：
+    - `canPay`（状态 in CREATED/UNPAID）
+    - `canShip`（状态 in AWAIT_FULFILLMENT 且未 CANCELLED/COMPLETED/FROZEN）
+    - `canConfirmDelivery`（状态 in SHIPPED）
+    - `canReceive`（状态 in DELIVERED 且未 AFTERSALE_LINE_BLOCK）
+    - `canCancel`（状态 in CREATED/UNPAID/PAID && 未 SHIPPED）
+  - Action 新增（命名）：
+    - `applyPaymentSucceeded`, `applyMerchantAccepted`, `applyGoodsShipped`, `applyGoodsDelivered`, `applyGoodsReceived`, `applyUserCancelled`, `applyTimeoutCancelled`, `applyAutoCompleted`.
+  - 每个 Action 内规范：
+    - 原子更新对应子单/主单分维状态。
+    - 构造 OutboxEvent（调用统一构造器）。
+    - 调用 `auditRecorder.record`.
+    - 不进行外部调用，不做复杂校验（由服务层提前保证）。
+- 事件映射表（文档亦需落地）：
+  - PAYMENT_SUCCEEDED -> order.payment.succeeded
+  - MERCHANT_ACCEPTED -> order.lifecycle.changed
+  - GOODS_SHIPPED -> order.fulfillment.shipped
+  - GOODS_DELIVERED -> order.fulfillment.delivered
+  - GOODS_RECEIVED -> order.received
+  - USER_CANCELLED / SYSTEM_CANCELLED -> order.cancelled
+  - PAYMENT_TIMEOUT -> order.cancelled（或保留独立类型 order.payment.timeout 若差异化）
+  - AUTO_COMPLETED -> order.lifecycle.changed
+  - REFUND_SUCCEEDED -> order.refund.succeeded
+  - AFTERSALE_APPLIED -> order.aftersale.applied
 
-九、测试补齐
-- 新增/扩展测试文件:
-  - 用户侧: `src/test/java/.../interfaces/rest/UserOrderControllerTest.java`
-    - `submit_replay_returns_previous_result`
-    - `cancel_conflict_409_when_illegal_state`
-    - `confirm_receipt_idempotent_replay_ok`
-    - `aftersale_apply_idempotent_ok`
-    - `authz_enforced_for_foreign_user_403`
-  - 商家侧: `MerchantOrderControllerTest.java`
-    - `accept_idempotent_ok`
-    - `ship_idempotent_ok`
-    - `cancel_approve_reject_idempotent_ok`
-    - `authz_enforced_for_foreign_operator_403`
-  - 内部回调: InternalOrderControllerTest.java
-    - `payment_success_signature_required_401`
-    - `refund_success_signature_required_401`
-    - `timeout_unpaid_idempotent_ok`
-    - `auto_complete_idempotent_ok`
-  - 状态机集成: `domain/statemachine/OrderStateMachineConfigTest.java`
-    - `after_paid_user_cancel_refund_branch`
-    - `after_shipped_refund_branch_guarded`
-  - 出箱契约: 现有 Outbox 测试基础上增加
-    - `publisher_eventType_gray_switch_off_fallback`
-    - `envelope_contains_tenant_operator_trace`
-- 选择性运行命令（README 已含）：模块级与按测试名过滤。
+F. 出箱事件统一构造
+- 文件：`infrastructure/event/outbox/OutboxEventService.java`
+  - 新增构造辅助：`buildEvent(String eventType, String aggregateId, @Nullable String subOrderId, String tenantId, String operatorId, Object domainData)`。
+  - 事件 payload 结构：
+    ```
+    {
+      "version":"v1",
+      "aggregateId":"ORDER-xxx",
+      "subOrderId":"SUB-xxx" | null,
+      "occurredAt":"2025-..(UTC)",
+      "tenantId":"TENANT-1",
+      "operatorId":"USER-1|MERCHANT-9|SYSTEM",
+      "traceId":"...",
+      "data":{ ... domain-specific fields ... }
+    }
+    ```
+  - 分区键：`aggregateId`
+  - 去重键：`eventId`（保持现状）+ 约束 (aggregateId + eventType + occurredAt 秒级) 说明文档化。
+- 文件：`infrastructure/event/publisher/OutboxEventPublisher.java`
+  - 增加指标上报：发布延迟(histogram)、失败计数(counter)。
+  - 增加日志字段：`eventType`, `traceId`, `partitionKey`.
 
-十、文档
-- README.md 增补:
-  - 幂等键策略表、签名/鉴权、错误语义（HTTP→错误码）、状态流转与事件契约、指标面板建议。
-- 新增（如缺失）:
-  - `docs/outbox-event-schema.md`：事件字段含义与样例（文本说明即可，实施时不写代码）。
+G. 审计记录
+- 新文件：`application/service/AuditRecorder.java`（接口：`record(AuditEntry entry)`）
+- 新文件：`application/service/AuditEntry.java`（字段：`timestamp`, `commandName`, `orderId`, `subOrderId`, `actorId`, `tenantId`, `traceId`, `status`, `errorCode`）
+- 新文件：`infrastructure/audit/DefaultAuditRecorder.java`
+  - 初期写入日志（INFO），预留扩展持久化方法 `persist(AuditEntry)`。
+- 在每个应用服务公开方法入口：
+  - 先记录开始（可选），结束时记录结果；失败捕获异常记录 errorCode。
 
-十一、数据库迁移与索引
-- `src/main/resources/db/migration/`（新增/校验）
-  - 为 `order_outbox_event` 增加索引: `(status, created_at)`, `(event_type)`, `(order_no)`。
-  - 新增 `order_idempotency` 表（如仓库无）：`key(pk), value(json), created_at, expire_at`；或确认复用现有 `OrderIdempotencyRepository` 的实体列对齐。
-  - 审计表（如选用 DB 落库）：`order_audit`（order_no, actor_type, actor_id, action, trace_id, created_at, details）可后续追加；本批仅对齐说明与可选迁移。
+H. 指标
+- 新文件：`infrastructure/metrics/OrderMetrics.java`
+  - Counter：`order_idempotency_hit_total`, `order_idempotency_miss_total`
+  - Counter：`order_state_machine_failure_total`
+  - Timer：`order_outbox_publish_latency`
+  - Counter：`order_http_error_total`（tag: statusCode）
+  - 方法：`incrementIdempotencyHit(key)`, `incrementIdempotencyMiss(key)`, `recordOutboxLatency(duration)`, `incrementHttpError(statusCode)`
+- 控制器：在错误 handler 中调用 `incrementHttpError`.
+- 出箱发布：调用 `recordOutboxLatency`.
+- 状态机失败（捕获异常回退）：调用 `order_state_machine_failure_total`.
 
-实施限制与兼容性
-- 不修改已对外暴露的 API 路径与 DTO 字段；新增行仅为内部增强（幂等/签名/鉴权）。
-- 默认配置保持当前行为（签名关闭、事件名映射开启）；灰度可控。
+I. 多租户与上下文透传
+- 假设已有 `TenantContextHolder` 或通过 SecurityPrincipal 提供：
+  - 在控制器提取：`tenantId`, `currentUserId` / `operatorId`。
+  - DTO `toCommand()` 添加：`tenantId`, `actorId`.
+  - 应用服务方法参数命令类补加对应字段（若缺失）。
+  - 出箱事件构造传入 `tenantId` 与 `operatorId`.
+  - 审计与指标均包含 `tenantId` 维度（标签可后续扩展）。
+
+J. 删除过时控制器
+- 删除：`interfaces/rest/OrderPaymentCallbackController.java`（物理删除并在 README 说明统一入口迁移）。
+- 确认无引用（grep 验证）。
+
+K. 测试新增与调整
+- 新增测试类：
+  - `UserOrderCancelIdempotencyTest`：首请求成功、重复请求回放、变更 reason 导致不同 key。
+  - `MerchantOrderIdempotencyTest`：接单/发货/妥投重复调用返回相同 ACK。
+  - `GlobalExceptionMappingTest`：模拟不同异常抛出断言 HTTP 状态与 errorCode。
+  - `OrderStateMachineForkTest`：支付->发货->取消（非法）断言 422；支付->取消 成功；发货->收货 完成。
+  - `OutboxEventPayloadSchemaTest`：断言 payload 包含 version/aggregateId/tenantId/operatorId/data。
+  - `AuditRecorderInvocationTest`：使用 spy/Mock 验证 record 调用次数与参数。
+  - `MetricsEmissionTest`：注册简单 `MeterRegistry` 验证 Counter / Timer 变化。
+- 调整现有测试：在新增幂等回放处补 assert；避免破坏已通过测试。
+- Maven 仅执行该模块：`mvn -q -pl tinystore-domain-order -am test`。
+
+L. 数据库迁移（如需要持久化审计/幂等）
+- 新增表（仅当决定持久化）：
+  - `order_audit_log`：`id`(PK), `order_id`, `sub_order_id`, `command`, `actor_id`, `tenant_id`, `trace_id`, `status`, `error_code`, `created_at`（索引：`idx_order_audit_order_id`, `idx_order_audit_trace_id`）。
+  - `order_idempotent_result`（若现有仓储不足）：`idempotent_key`(PK), `result_json`, `created_at`, `expires_at`（索引：`idx_idemp_expires`）。
+- 脚本位置：`db/main.sql` 或新增 `db/migration/Vxx__order_audit.sql` 说明；README 标注执行顺序与回滚（DROP TABLE ...）。
+
+M. 文档更新
+- README 新增章节：
+  - 幂等键策略表：字段/示例
+  - 错误码与 HTTP 状态映射
+  - 状态机事件表（命令→事件→event_type）
+  - Outbox 事件 payload schema 与示例
+  - 指标列表与含义
+  - 迁移说明（若新增表）
+  - 删除的旧支付回调控制器说明
+
+N. 日志与 MDC
+- 在控制器入口补充：`MDC.put("tenantId", tenantId)`, `MDC.put("actorId", userId/operatorId)`.
+- Action/Outbox 发布时读取 `traceId/tenantId/actorId` 注入日志。
+- 退出清理：`MDC.clear()`（在过滤器或 finally 中）。
+
+四、命令类与 DTO 必要字段补充
+- 若命令缺失：确认添加 `tenantId`, `actorId`（统一使用 String）。
+- 不修改对外请求 DTO 命名，仅内部 `toCommand()` 扩展参数。
+- 若新增字段在命令内部需保证 builder/setter 接口存在。
+
+五、命名与一致性要求
+- 事件类型蛇形加领域分段：`order.<domain>.<action>`；生命周期泛型使用 `order.lifecycle.changed`。
+- 错误码统一大写 `ORDER-XXXX` 四位数字分段；避免与其他模块冲突。
+- Metrics 前缀：`order_`，无大写。
+- 审计日志行统一 JSON（`AuditEntry` 转 JSON 字符串）以便后续采集。
+
+六、执行约束
+- 不改动已有已稳定的成功逻辑除非为接入审计/指标/幂等必要穿插。
+- 不重写已通过测试，只最小增量补测试。
+- 删除过时文件后需 grep 确认无残余引用。
+
+七、风险与回退
+- 新增异常类可能影响未捕获场景：需测试覆盖所有新增映射。
+- 出箱事件 schema 变更需确认消费者兼容（保留 version 字段可渐进迁移）。
+- 若暂不落库审计/幂等结果，迁移脚本项可延后（Checklist 中单列可选）。
 
 IMPLEMENTATION CHECKLIST:
-1. 在 `interfaces/util/IdempotencyHelper` 新增“必须幂等”校验与键提取方法；为空时抛业务异常（400）。
-2. 在 `infrastructure/idempotency` 新增 `IdempotencyStorage` 接口、`RedisIdempotencyStorage` 与 `InMemoryIdempotencyStorage`；读取 `order.idempotency.ttl-days`。
-3. 在 `interfaces/rest/InternalOrderController` 引入 `SignatureVerifier`（从 `infrastructure/acl` 注入）；读取 `X-Signature`、`X-Timestamp`；`order.signature.enabled=true` 时验签失败返回 401。
-4. 在 `interfaces/rest/UserOrderController` 为 submit/cancel/confirm-receipt/after-sale/apply 接口接入幂等键生成与 `IdempotencyStorage` 命中回放；缺头时使用定义的本地键算法。
-5. 在 `interfaces/rest/MerchantOrderController` 为 receive/ship/delivery-confirm/cancel-approve/reject 接入幂等键与 `IdempotencyStorage` 命中回放。
-6. 在 `OrderApplicationService.submitOrder/confirmOrder/confirmDelivered/timeoutCancel/autoComplete/...` 完成成功结果写入 `IdempotencyStorage`；重入命中直接回放。
-7. 在 `interfaces/error/GlobalExceptionHandler` 扩展 HTTP→错误码映射：400/401/403/404/409/422/500，并将 `OrderDomainException.errorCode` 规范化为 `ORDER-xxxx`。
-8. 在 `domain/statemachine/action/*` 的六个 Action 中补齐“幂等检查→最小字段更新→审计→出箱事件”原子逻辑；引用 `OrderStatusAuditRepository`。
-9. 在 `infrastructure/audit` 新增 `AuditRecorder` 接口与默认实现；在应用服务入口调用记录。
-10. 在 `infrastructure/metrics` 新增或完善 `OutboxMetrics` 接口/实现，补齐幂等命中/拒绝/4xx/5xx/出箱延迟等指标上报点。
-11. 在 `infrastructure/acl` 新增 `AuthorizationService` 并在 User/Merchant 控制器调用校验归属；失败返回 403。
-12. 在 `OutboxEventPublisher` 已有的 `order.outbox.map-event-type` 基础上，补充 README 配置说明与测试覆盖灰度关闭回退情形（已有一条，增加一条覆盖非标准名 rawType）。
-13. 在 `interfaces/rest/UserOrderControllerTest` 新增提交回放、取消 409、收货重放、售后申请重放、403 鉴权用例。
-14. 在 `interfaces/rest/MerchantOrderControllerTest` 新增接单/发货/取消审批幂等重放与 403 鉴权用例。
-15. 在 `interfaces/rest/InternalOrderControllerTest` 新增支付/退款 401 验签用例、超时/自动完成重放用例。
-16. 在 `domain/statemachine/OrderStateMachineConfigTest` 新增“支付后取消→退款分支”“发货后退款分支”集成用例，断言 Guard/Action 与出箱。
-17. 在 `infrastructure/event/publisher/OutboxEventPublisherTest` 增加灰度开关关闭时的 rawType 与 `tinystore.order.general` Topic 断言。
-18. 更新 README.md：幂等键策略、签名/鉴权、错误语义映射、状态图与事件契约、指标建议、配置开关说明。
-19. 在 `src/main/resources/db/migration` 新增索引/表迁移脚本（`order_outbox_event` 索引、`order_idempotency` 表，如无）；校验现有表结构一致性。
-20. 运行仅订单模块测试并修复：`mvn -q -pl tinystore-domain-order -am test`。
-21. 按需补充针对新增 Advice/Storage/ACL 的单元测试，保证分支覆盖率（>80% 针对新增类）。
-22. 提交变更并记录变更说明（灰度开关默认开启、签名默认关闭、可通过配置启用验签）。
-23. 可选：新增定时任务清理 `IdempotencyStorage` 过期键（若后端存储不自动过期），并加入指标。
+1. 新增异常类文件：`ForbiddenException.java`, `ResourceNotFoundException.java`, `DomainConflictException.java`, `UnprocessableCommandException.java` 于 `interfaces/error/`。
+2. 新增错误码枚举/常量文件：`OrderErrorCodes.java`（划分各段并定义常量）。
+3. 扩展 `GlobalExceptionHandler.java`：添加 403/404/409/422 映射方法，统一响应结构与日志记录。
+4. 在 `UserOrderController.cancelApply()` 中实现取消幂等键生成与回放逻辑（使用 IdempotencyStorage）。
+5. 在 `UserOrderController.cancelApply()` 成功路径保存取消结果 JSON（包含 status/orderId/cancelAt）。
+6. 在 `MerchantOrderController` 为接单方法添加幂等键生成与回放逻辑。
+7. 在 `MerchantOrderController` 为发货方法添加幂等键生成与回放逻辑。
+8. 在 `MerchantOrderController` 为妥投确认方法添加幂等键生成与回放逻辑。
+9. 在 `MerchantOrderController` 为取消审批与取消拒绝方法添加统一幂等键与回放逻辑。
+10. 统一 `MerchantOrderController` 构造中注入 `ObjectProvider<IdempotencyStorage>` 并实现无存储降级。
+11. 删除文件 `interfaces/rest/OrderPaymentCallbackController.java` 并确保无引用（grep 验证）。
+12. 新增接口 `AuditRecorder.java` 与实体 `AuditEntry.java` 于 `application/service/`。
+13. 新增实现 `DefaultAuditRecorder.java` 于 `infrastructure/audit/`（日志方式）。
+14. 在 `OrderApplicationService` 所有对外公开命令处理方法入口与出口调用 `auditRecorder.record(...)`（成功与失败）。
+15. 新增指标封装类 `OrderMetrics.java` 于 `infrastructure/metrics/`。
+16. 在 `GlobalExceptionHandler` 中对 4xx/5xx 调用 `OrderMetrics.incrementHttpError(statusCode)`。
+17. 在幂等回放命中路径（用户与商家控制器）调用 `OrderMetrics.incrementIdempotencyHit(key)`；未命中调用 `incrementIdempotencyMiss(key)`。
+18. 新增统一 Outbox 事件构造辅助到 `OutboxEventService.buildEvent(...)`。
+19. 修改所有 Action（状态机）调用新构造辅助以生成规范化 payload（version/aggregateId/...）。
+20. 在 `OrderStateMachineConfig` 中添加 Guard 方法：`canPay`,`canShip`,`canConfirmDelivery`,`canReceive`,`canCancel` 并关联相应转换。
+21. 在 `OrderStateMachineConfig` 中添加 Action 方法：`applyPaymentSucceeded`,`applyMerchantAccepted`,`applyGoodsShipped`,`applyGoodsDelivered`,`applyGoodsReceived`,`applyUserCancelled`,`applyTimeoutCancelled`,`applyAutoCompleted`。
+22. 为 REFUND_SUCCEEDED 与 AFTERSALE_APPLIED 事件补齐出箱 Action（若缺失）保持 schema 一致。
+23. 为每个 Action 添加审计调用（操作完成后 `auditRecorder.record`）。
+24. 为每个 Action 添加错误捕获并在失败时记录 `OrderMetrics.order_state_machine_failure_total`。
+25. 定义事件类型常量列表于 `domain/event/`（或集中在 `OrderEventTypeConstants.java`）。
+26. 修改 `PaymentSuccessRequest.toCommand()` 与其他请求 DTO `toCommand()` 增加 `tenantId`、`actorId` 来源（控制器注入）。
+27. 在控制器中提取 `tenantId` 与 `actorId` 并放入 MDC（`tenantId`,`actorId`）。
+28. 将 `tenantId` 与 `actorId` 添加到所有命令类（若不存在）并在构造时填充。
+29. 在出箱事件 payload 中注入 `tenantId` 与 `operatorId` 字段。
+30. 编写测试 `UserOrderCancelIdempotencyTest` 覆盖首次与重复取消及不同 reason 变化。
+31. 编写测试 `MerchantOrderIdempotencyTest` 覆盖接单、发货、妥投重复调用回放。
+32. 编写测试 `GlobalExceptionMappingTest` 验证 403/404/409/422 以及 errorCode 格式。
+33. 编写测试 `OrderStateMachineForkTest` 验证非法跃迁抛 422 与合法分支。
+34. 编写测试 `OutboxEventPayloadSchemaTest` 验证 payload 结构完整性与 version= v1。
+35. 编写测试 `AuditRecorderInvocationTest` 使用 mock/spies 验证调用次数与关键字段。
+36. 编写测试 `MetricsEmissionTest` 使用临时 `SimpleMeterRegistry` 验证幂等命中与错误计数。
+37. 更新或新增 README 章节：幂等键策略、错误码映射表、状态机事件表、Outbox schema、指标列表、租户透传说明、删除控制器说明。
+38. 在 README 中添加一个事件 payload 示例 JSON 与幂等键示例表格。
+39. 若决定持久化审计：新增迁移脚本 `db/migration/Vxx__create_order_audit_log.sql`。
+40. 若扩展幂等持久层：迁移脚本 `Vxx__create_order_idempotent_result.sql`。
+41. 在 `db/main.sql` 或迁移脚本中加入索引语句（审计：`idx_order_audit_order_id`,`idx_order_audit_trace_id`；幂等：`idx_idemp_expires`）。
+42. grep 验证删除控制器后无残留引用（`grep -R "OrderPaymentCallbackController"`）。
+43. 执行模块测试：`mvn -q -pl tinystore-domain-order -am test` 并确认所有新增测试通过。
+44. 如出现测试失败（非计划内逻辑差异）记录具体错误并回到 PLAN 修正（不在 EXECUTE 自行扩展计划）。
+45. 最终核对：事件类型常量、错误码常量、README 与测试断言中的命名完全一致（大小写与分隔）。
+46. 确认 MDC 清理策略（在控制器 finally 或统一过滤器中调用 `MDC.clear()`）。
+47. 记录在 TODO 列表中已完成与剩余项状态（更新任务管理）。
+48. 生成一份简短 CHANGELOG（模块内新增/删除/修改的类与风险）并放入 `tinystore-domain-order/CHANGELOG_ORDER_ENHANCEMENTS.md`。
+49. 标注已废弃命令或类（若有）在其文件头加 `@Deprecated`（仅需如仍临时保留，若无则跳过）。
+50. 复核所有新增公共类命名避免与其它模块冲突（确保前缀或路径唯一）。
 
-说明:
-- 本计划在不改变对外 API 契约的前提下增强内部稳健性；如需对外变更（例如强制验签），通过环境配置逐步灰度开启。
+请选择是否批准该 PLAN；若批准请发出 “ENTER EXECUTE MODE” 指令以进入实施阶段。  - 分区键：`aggregateId`
+  - 去重键：`eventId`（保持现状）+ 约束 (aggregateId + eventType + occurredAt 秒级) 说明文档化。
+- 文件：`infrastructure/event/publisher/OutboxEventPublisher.java`
+  - 增加指标上报：发布延迟(histogram)、失败计数(counter)。
+  - 增加日志字段：`eventType`, `traceId`, `partitionKey`.
+
+G. 审计记录
+- 新文件：`application/service/AuditRecorder.java`（接口：`record(AuditEntry entry)`）
+- 新文件：`application/service/AuditEntry.java`（字段：`timestamp`, `commandName`, `orderId`, `subOrderId`, `actorId`, `tenantId`, `traceId`, `status`, `errorCode`）
+- 新文件：`infrastructure/audit/DefaultAuditRecorder.java`
+  - 初期写入日志（INFO），预留扩展持久化方法 `persist(AuditEntry)`。
+- 在每个应用服务公开方法入口：
+  - 先记录开始（可选），结束时记录结果；失败捕获异常记录 errorCode。
+
+H. 指标
+- 新文件：`infrastructure/metrics/OrderMetrics.java`
+  - Counter：`order_idempotency_hit_total`, `order_idempotency_miss_total`
+  - Counter：`order_state_machine_failure_total`
+  - Timer：`order_outbox_publish_latency`
+  - Counter：`order_http_error_total`（tag: statusCode）
+  - 方法：`incrementIdempotencyHit(key)`, `incrementIdempotencyMiss(key)`, `recordOutboxLatency(duration)`, `incrementHttpError(statusCode)`
+- 控制器：在错误 handler 中调用 `incrementHttpError`.
+- 出箱发布：调用 `recordOutboxLatency`.
+- 状态机失败（捕获异常回退）：调用 `order_state_machine_failure_total`.
+
+I. 多租户与上下文透传
+- 假设已有 `TenantContextHolder` 或通过 SecurityPrincipal 提供：
+  - 在控制器提取：`tenantId`, `currentUserId` / `operatorId`。
+  - DTO `toCommand()` 添加：`tenantId`, `actorId`.
+  - 应用服务方法参数命令类补加对应字段（若缺失）。
+  - 出箱事件构造传入 `tenantId` 与 `operatorId`.
+  - 审计与指标均包含 `tenantId` 维度（标签可后续扩展）。
+
+J. 删除过时控制器
+- 删除：`interfaces/rest/OrderPaymentCallbackController.java`（物理删除并在 README 说明统一入口迁移）。
+- 确认无引用（grep 验证）。
+
+K. 测试新增与调整
+- 新增测试类：
+  - `UserOrderCancelIdempotencyTest`：首请求成功、重复请求回放、变更 reason 导致不同 key。
+  - `MerchantOrderIdempotencyTest`：接单/发货/妥投重复调用返回相同 ACK。
+  - `GlobalExceptionMappingTest`：模拟不同异常抛出断言 HTTP 状态与 errorCode。
+  - `OrderStateMachineForkTest`：支付->发货->取消（非法）断言 422；支付->取消 成功；发货->收货 完成。
+  - `OutboxEventPayloadSchemaTest`：断言 payload 包含 version/aggregateId/tenantId/operatorId/data。
+  - `AuditRecorderInvocationTest`：使用 spy/Mock 验证 record 调用次数与参数。
+  - `MetricsEmissionTest`：注册简单 `MeterRegistry` 验证 Counter / Timer 变化。
+- 调整现有测试：在新增幂等回放处补 assert；避免破坏已通过测试。
+- Maven 仅执行该模块：`mvn -q -pl tinystore-domain-order -am test`。
+
+L. 数据库迁移（如需要持久化审计/幂等）
+- 新增表（仅当决定持久化）：
+  - `order_audit_log`：`id`(PK), `order_id`, `sub_order_id`, `command`, `actor_id`, `tenant_id`, `trace_id`, `status`, `error_code`, `created_at`（索引：`idx_order_audit_order_id`, `idx_order_audit_trace_id`）。
+  - `order_idempotent_result`（若现有仓储不足）：`idempotent_key`(PK), `result_json`, `created_at`, `expires_at`（索引：`idx_idemp_expires`）。
+- 脚本位置：`db/main.sql` 或新增 `db/migration/Vxx__order_audit.sql` 说明；README 标注执行顺序与回滚（DROP TABLE ...）。
+
+M. 文档更新
+- README 新增章节：
+  - 幂等键策略表：字段/示例
+  - 错误码与 HTTP 状态映射
+  - 状态机事件表（命令→事件→event_type）
+  - Outbox 事件 payload schema 与示例
+  - 指标列表与含义
+  - 迁移说明（若新增表）
+  - 删除的旧支付回调控制器说明
+
+N. 日志与 MDC
+- 在控制器入口补充：`MDC.put("tenantId", tenantId)`, `MDC.put("actorId", userId/operatorId)`.
+- Action/Outbox 发布时读取 `traceId/tenantId/actorId` 注入日志。
+- 退出清理：`MDC.clear()`（在过滤器或 finally 中）。
+
+四、命令类与 DTO 必要字段补充
+- 若命令缺失：确认添加 `tenantId`, `actorId`（统一使用 String）。
+- 不修改对外请求 DTO 命名，仅内部 `toCommand()` 扩展参数。
+- 若新增字段在命令内部需保证 builder/setter 接口存在。
+
+五、命名与一致性要求
+- 事件类型蛇形加领域分段：`order.<domain>.<action>`；生命周期泛型使用 `order.lifecycle.changed`。
+- 错误码统一大写 `ORDER-XXXX` 四位数字分段；避免与其他模块冲突。
+- Metrics 前缀：`order_`，无大写。
+- 审计日志行统一 JSON（`AuditEntry` 转 JSON 字符串）以便后续采集。
+
+六、执行约束
+- 不改动已有已稳定的成功逻辑除非为接入审计/指标/幂等必要穿插。
+- 不重写已通过测试，只最小增量补测试。
+- 删除过时文件后需 grep 确认无残余引用。
+
+七、风险与回退
+- 新增异常类可能影响未捕获场景：需测试覆盖所有新增映射。
+- 出箱事件 schema 变更需确认消费者兼容（保留 version 字段可渐进迁移）。
+- 若暂不落库审计/幂等结果，迁移脚本项可延后（Checklist 中单列可选）。
+
+IMPLEMENTATION CHECKLIST:
+1. 新增异常类文件：`ForbiddenException.java`, `ResourceNotFoundException.java`, `DomainConflictException.java`, `UnprocessableCommandException.java` 于 `interfaces/error/`。
+2. 新增错误码枚举/常量文件：`OrderErrorCodes.java`（划分各段并定义常量）。
+3. 扩展 `GlobalExceptionHandler.java`：添加 403/404/409/422 映射方法，统一响应结构与日志记录。
+4. 在 `UserOrderController.cancelApply()` 中实现取消幂等键生成与回放逻辑（使用 IdempotencyStorage）。
+5. 在 `UserOrderController.cancelApply()` 成功路径保存取消结果 JSON（包含 status/orderId/cancelAt）。
+6. 在 `MerchantOrderController` 为接单方法添加幂等键生成与回放逻辑。
+7. 在 `MerchantOrderController` 为发货方法添加幂等键生成与回放逻辑。
+8. 在 `MerchantOrderController` 为妥投确认方法添加幂等键生成与回放逻辑。
+9. 在 `MerchantOrderController` 为取消审批与取消拒绝方法添加统一幂等键与回放逻辑。
+10. 统一 `MerchantOrderController` 构造中注入 `ObjectProvider<IdempotencyStorage>` 并实现无存储降级。
+11. 删除文件 `interfaces/rest/OrderPaymentCallbackController.java` 并确保无引用（grep 验证）。
+12. 新增接口 `AuditRecorder.java` 与实体 `AuditEntry.java` 于 `application/service/`。
+13. 新增实现 `DefaultAuditRecorder.java` 于 `infrastructure/audit/`（日志方式）。
+14. 在 `OrderApplicationService` 所有对外公开命令处理方法入口与出口调用 `auditRecorder.record(...)`（成功与失败）。
+15. 新增指标封装类 `OrderMetrics.java` 于 `infrastructure/metrics/`。
+16. 在 `GlobalExceptionHandler` 中对 4xx/5xx 调用 `OrderMetrics.incrementHttpError(statusCode)`。
+17. 在幂等回放命中路径（用户与商家控制器）调用 `OrderMetrics.incrementIdempotencyHit(key)`；未命中调用 `incrementIdempotencyMiss(key)`。
+18. 新增统一 Outbox 事件构造辅助到 `OutboxEventService.buildEvent(...)`。
+19. 修改所有 Action（状态机）调用新构造辅助以生成规范化 payload（version/aggregateId/...）。
+20. 在 `OrderStateMachineConfig` 中添加 Guard 方法：`canPay`,`canShip`,`canConfirmDelivery`,`canReceive`,`canCancel` 并关联相应转换。
+21. 在 `OrderStateMachineConfig` 中添加 Action 方法：`applyPaymentSucceeded`,`applyMerchantAccepted`,`applyGoodsShipped`,`applyGoodsDelivered`,`applyGoodsReceived`,`applyUserCancelled`,`applyTimeoutCancelled`,`applyAutoCompleted`。
+22. 为 REFUND_SUCCEEDED 与 AFTERSALE_APPLIED 事件补齐出箱 Action（若缺失）保持 schema 一致。
+23. 为每个 Action 添加审计调用（操作完成后 `auditRecorder.record`）。
+24. 为每个 Action 添加错误捕获并在失败时记录 `OrderMetrics.order_state_machine_failure_total`。
+25. 定义事件类型常量列表于 `domain/event/`（或集中在 `OrderEventTypeConstants.java`）。
+26. 修改 `PaymentSuccessRequest.toCommand()` 与其他请求 DTO `toCommand()` 增加 `tenantId`、`actorId` 来源（控制器注入）。
+27. 在控制器中提取 `tenantId` 与 `actorId` 并放入 MDC（`tenantId`,`actorId`）。
+28. 将 `tenantId` 与 `actorId` 添加到所有命令类（若不存在）并在构造时填充。
+29. 在出箱事件 payload 中注入 `tenantId` 与 `operatorId` 字段。
+30. 编写测试 `UserOrderCancelIdempotencyTest` 覆盖首次与重复取消及不同 reason 变化。
+31. 编写测试 `MerchantOrderIdempotencyTest` 覆盖接单、发货、妥投重复调用回放。
+32. 编写测试 `GlobalExceptionMappingTest` 验证 403/404/409/422 以及 errorCode 格式。
+33. 编写测试 `OrderStateMachineForkTest` 验证非法跃迁抛 422 与合法分支。
+34. 编写测试 `OutboxEventPayloadSchemaTest` 验证 payload 结构完整性与 version= v1。
+35. 编写测试 `AuditRecorderInvocationTest` 使用 mock/spies 验证调用次数与关键字段。
+36. 编写测试 `MetricsEmissionTest` 使用临时 `SimpleMeterRegistry` 验证幂等命中与错误计数。
+37. 更新或新增 README 章节：幂等键策略、错误码映射表、状态机事件表、Outbox schema、指标列表、租户透传说明、删除控制器说明。
+38. 在 README 中添加一个事件 payload 示例 JSON 与幂等键示例表格。
+39. 若决定持久化审计：新增迁移脚本 `db/migration/Vxx__create_order_audit_log.sql`。
+40. 若扩展幂等持久层：迁移脚本 `Vxx__create_order_idempotent_result.sql`。
+41. 在 `db/main.sql` 或迁移脚本中加入索引语句（审计：`idx_order_audit_order_id`,`idx_order_audit_trace_id`；幂等：`idx_idemp_expires`）。
+42. grep 验证删除控制器后无残留引用（`grep -R "OrderPaymentCallbackController"`）。
+43. 执行模块测试：`mvn -q -pl tinystore-domain-order -am test` 并确认所有新增测试通过。
+44. 如出现测试失败（非计划内逻辑差异）记录具体错误并回到 PLAN 修正（不在 EXECUTE 自行扩展计划）。
+45. 最终核对：事件类型常量、错误码常量、README 与测试断言中的命名完全一致（大小写与分隔）。
+46. 确认 MDC 清理策略（在控制器 finally 或统一过滤器中调用 `MDC.clear()`）。
+47. 记录在 TODO 列表中已完成与剩余项状态（更新任务管理）。
+48. 生成一份简短 CHANGELOG（模块内新增/删除/修改的类与风险）并放入 `tinystore-domain-order/CHANGELOG_ORDER_ENHANCEMENTS.md`。
+49. 标注已废弃命令或类（若有）在其文件头加 `@Deprecated`（仅需如仍临时保留，若无则跳过）。
+50. 复核所有新增公共类命名避免与其它模块冲突（确保前缀或路径唯一）。
+
+请选择是否批准该 PLAN；若批准请发出 “ENTER EXECUTE MODE” 指令以进入实施阶段。

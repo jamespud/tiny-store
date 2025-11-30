@@ -2,6 +2,7 @@ package com.github.spud.tinystore.order.infrastructure.event.publisher;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService;
+import com.github.spud.tinystore.order.infrastructure.metrics.OrderMetrics;
 import com.github.spud.tinystore.order.infrastructure.metrics.OutboxMetrics;
 import com.github.spud.tinystore.order.infrastructure.persistence.po.OrderOutboxEventPO;
 import java.time.OffsetDateTime;
@@ -15,7 +16,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 
@@ -25,6 +28,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import com.github.spud.tinystore.order.domain.event.OrderEventTypeConstants;
 
 @ExtendWith(MockitoExtension.class)
 class OutboxEventPublisherTest {
@@ -43,10 +47,20 @@ class OutboxEventPublisherTest {
   @InjectMocks
   private OutboxEventPublisher publisher;
 
+  private ObjectProvider<OrderMetrics> orderMetricsProvider;
+
   @BeforeEach
   void setup() {
     objectMapper = new ObjectMapper();
-    publisher = new OutboxEventPublisher(outboxEventService, kafkaTemplate, objectMapper, outboxMetrics);
+    // 提供一个简单的 ObjectProvider<OrderMetrics> 测试桩
+    OrderMetrics metrics = Mockito.mock(OrderMetrics.class);
+    this.orderMetricsProvider = new ObjectProvider<>() {
+      @Override public OrderMetrics getObject(Object... args) { return metrics; }
+      @Override public OrderMetrics getIfAvailable() { return metrics; }
+      @Override public OrderMetrics getIfAvailable(java.util.function.Supplier<OrderMetrics> supplier) { return metrics; }
+      @Override public OrderMetrics getObject() { return metrics; }
+    };
+    publisher = new OutboxEventPublisher(outboxEventService, kafkaTemplate, objectMapper, outboxMetrics, orderMetricsProvider);
   }
 
   @Test
@@ -62,8 +76,8 @@ class OutboxEventPublisherTest {
 
     // mock Kafka send to complete successfully
     @SuppressWarnings("unchecked")
-    SendResult<String, String> sr = (SendResult<String, String>) org.mockito.Mockito.mock(SendResult.class);
-    RecordMetadata rm = org.mockito.Mockito.mock(RecordMetadata.class);
+    SendResult<String, String> sr = (SendResult<String, String>) Mockito.mock(SendResult.class);
+    RecordMetadata rm = Mockito.mock(RecordMetadata.class);
     when(rm.partition()).thenReturn(0);
     when(rm.offset()).thenReturn(0L);
     when(sr.getRecordMetadata()).thenReturn(rm);
@@ -95,11 +109,11 @@ class OutboxEventPublisherTest {
       Map<String, Object> msg = objectMapper.readValue(payloads.get(i), Map.class);
       String et = (String) msg.get("eventType");
       switch (i) {
-        case 0 -> assertThat(et).isEqualTo("order.payment.succeeded");
-        case 1 -> assertThat(et).isEqualTo("order.payment.succeeded");
-        case 2 -> assertThat(et).isEqualTo("order.fulfillment.shipped");
-        case 3 -> assertThat(et).isEqualTo("order.lifecycle.changed");
-        case 4 -> assertThat(et).isEqualTo("order.general");
+          case 0 -> assertThat(et).isEqualTo(OrderEventTypeConstants.PAYMENT_SUCCEEDED);
+          case 1 -> assertThat(et).isEqualTo(OrderEventTypeConstants.PAYMENT_SUCCEEDED);
+          case 2 -> assertThat(et).isEqualTo(OrderEventTypeConstants.GOODS_SHIPPED);
+          case 3 -> assertThat(et).isEqualTo(OrderEventTypeConstants.ORDER_LIFECYCLE_CHANGED);
+          case 4 -> assertThat(et).isEqualTo("order.general");
       }
     }
 
@@ -114,8 +128,8 @@ class OutboxEventPublisherTest {
     when(outboxEventService.findPendingEvents(100)).thenReturn(List.of(e1));
 
     @SuppressWarnings("unchecked")
-    SendResult<String, String> sr = (SendResult<String, String>) org.mockito.Mockito.mock(SendResult.class);
-    RecordMetadata rm = org.mockito.Mockito.mock(RecordMetadata.class);
+    SendResult<String, String> sr = (SendResult<String, String>) Mockito.mock(SendResult.class);
+    RecordMetadata rm = Mockito.mock(RecordMetadata.class);
     when(rm.partition()).thenReturn(0);
     when(rm.offset()).thenReturn(0L);
     when(sr.getRecordMetadata()).thenReturn(rm);

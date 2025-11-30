@@ -49,6 +49,11 @@ import com.github.spud.tinystore.order.interfaces.dto.response.CreateOrderRespon
 import com.github.spud.tinystore.order.infrastructure.audit.AuditService;
 import com.github.spud.tinystore.order.infrastructure.metrics.OrderMetrics;
 import com.github.spud.tinystore.order.interfaces.error.OrderBusinessException;
+import com.github.spud.tinystore.order.infrastructure.audit.AuditRecorder;
+import com.github.spud.tinystore.order.infrastructure.audit.AuditEntry;
+import com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService;
+import com.github.spud.tinystore.order.domain.event.OrderEventTypeConstants;
+import org.springframework.beans.factory.ObjectProvider;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
@@ -88,7 +93,9 @@ public class OrderApplicationService {
 	private final NotifyService notifyService;
 	private final OrderNumberService orderNumberService;
 	private final AuditService auditService;
+	private final ObjectProvider<AuditRecorder> auditRecorderProvider;
 	private final OrderMetrics orderMetrics;
+    private final OutboxEventService outboxEventService;
 
 	/**
 	 * 确认订单
@@ -247,7 +254,7 @@ public class OrderApplicationService {
 
 			// TODO: 后续补齐状态机过渡
 			orderDomainService.save(order, expectedVersion);
-			orderDomainService.recordOutbox(order, "order.payment.succeeded", cmd);
+			orderDomainService.recordOutbox(order, OrderEventTypeConstants.PAYMENT_SUCCEEDED, cmd);
 			orderMetrics.processed("payment.success");
 			auditService.record(cmd.getOrderId(), "payment.success", "SYSTEM", cmd.getPaymentId(), true,
 				Map.of("deposit", cmd.isDeposit(), "final", cmd.isFinalPayment(), "amount", amountStr));
@@ -749,8 +756,8 @@ public class OrderApplicationService {
 	private String determineTopicForEvent(OrderDomainEvent event) {
 		return switch (OrderEventType.valueOf(event.getType().toString())) {
 			case ORDER_CREATED -> "order.created";
-			case ORDER_PAID -> "order.payment.succeeded";
-			case ORDER_SHIPPED -> "order.shipped";
+			case ORDER_PAID -> OrderEventTypeConstants.PAYMENT_SUCCEEDED;
+			case ORDER_SHIPPED -> OrderEventTypeConstants.GOODS_SHIPPED;
 			case ORDER_COMPLETED -> "order.completed";
 			case ORDER_CANCELLED -> "order.cancelled";
 			case AFTERSALE_REQUESTED -> "order.refund.requested";
@@ -790,13 +797,16 @@ public class OrderApplicationService {
 	}
 
 	public Object cancelOrder(CancelOrderCommand cmd) {
+		recordAudit("user.cancel", null, null, true, null);
 		// TODO: 根据订单状态取消订单
 		// TODO: (opt) 发送取消订单请求给商家, 等待商家确认
 		// TODO: (opt) 商家确认后，通过确认接口调用取消订单
 		// TODO: 发送取消订单事件
 		// TODO: 释放库存, 优惠券等
 		// TODO: (支付服务) 异步退款
-		return "待确认";
+		String result = "待确认";
+		recordAudit("user.cancel", null, null, true, null);
+		return result;
 	}
 
 	// ==================== 新增的订单主流程接口方法 ====================
@@ -808,6 +818,7 @@ public class OrderApplicationService {
 	 */
 	public void merchantAccept(MerchantAcceptCommand cmd) {
 		log.info("Merchant accepting order: {}, operator: {}", cmd.getOrderId(), cmd.getOperatorId());
+		recordAudit("merchant.accept", cmd.getOrderId(), cmd.getOperatorId(), true, null);
 
 		// 1. 加载订单 (load-for-update with version)
 		OrderItem order = orderDomainService.loadForUpdate(cmd.getOrderId());
@@ -832,6 +843,7 @@ public class OrderApplicationService {
 		orderDomainService.recordOutbox(order, "merchant.accept", cmd);
 		orderMetrics.processed("merchant.accept");
 		auditService.record(cmd.getOrderId(), "merchant.accept", "MERCHANT", cmd.getOperatorId(), true, Map.of());
+		recordAudit("merchant.accept", cmd.getOrderId(), cmd.getOperatorId(), true, null);
 
 		log.info("Merchant accept processed for order: {}", cmd.getOrderId());
 	}
@@ -842,6 +854,7 @@ public class OrderApplicationService {
 	public void shipOrder(ShipOrderCommand cmd) {
 		log.info("Shipping order: {}, operator: {}, logistics: {}",
 			cmd.getOrderId(), cmd.getOperatorId(), cmd.getLogistics().getCompanyName());
+		recordAudit("order.ship", cmd.getOrderId(), cmd.getOperatorId(), true, null);
 
 		// 1. 加载订单 (load-for-update with version)
 		OrderItem order = orderDomainService.loadForUpdate(cmd.getOrderId());
@@ -867,6 +880,7 @@ public class OrderApplicationService {
 		orderMetrics.processed("order.ship");
 		auditService.record(cmd.getOrderId(), "order.ship", "MERCHANT", cmd.getOperatorId(), true,
 			Map.of("company", cmd.getLogistics().getCompanyName()));
+		recordAudit("order.ship", cmd.getOrderId(), cmd.getOperatorId(), true, null);
 
 		log.info("Ship order processed for order: {}", cmd.getOrderId());
 	}
@@ -932,6 +946,7 @@ public class OrderApplicationService {
 	 */
 	public void confirmDelivered(DeliveredCommand cmd) {
 		log.info("Merchant confirming delivery for order: {}, trackingNo: {}", cmd.getOrderId(), cmd.getTrackingNo());
+		recordAudit("merchant.delivery_confirm", cmd.getOrderId(), cmd.getSource(), true, null);
 		String timestamp = cmd.getDeliveredAt() != null ? String.valueOf(cmd.getDeliveredAt()) : cmd.getEventId();
 		String idempotencyKey = IdempotencyRepository.IdempotencyKeyGenerator
 			.forLogisticsCallback(cmd.getOrderId(), "DELIVERED", timestamp);
@@ -951,12 +966,14 @@ public class OrderApplicationService {
 			orderMetrics.processed("merchant.delivery_confirm");
 			auditService.record(cmd.getOrderId(), "merchant.delivery_confirm", "MERCHANT", cmd.getSource(), true,
 				Map.of("trackingNo", cmd.getTrackingNo(), "deliveredAt", cmd.getDeliveredAt()));
+			recordAudit("merchant.delivery_confirm", cmd.getOrderId(), cmd.getSource(), true, null);
 			log.info("Merchant delivery confirm processed for order: {}", cmd.getOrderId());
 		} catch (Exception e) {
 			idempotencyRepository.release(idempotencyKey, "order-service");
 			orderMetrics.failure("merchant.delivery_confirm");
 			auditService.record(cmd.getOrderId(), "merchant.delivery_confirm", "MERCHANT", cmd.getSource(), false,
 				Map.of("error", e.getMessage()));
+			recordAudit("merchant.delivery_confirm", cmd.getOrderId(), cmd.getSource(), false, e.getMessage());
 			throw e;
 		}
 	}
@@ -966,6 +983,7 @@ public class OrderApplicationService {
 	 */
 	public void confirmReceipt(ConfirmReceiptCommand cmd) {
 		log.info("User confirming receipt for order: {}, user: {}", cmd.getOrderId(), cmd.getUserId());
+		recordAudit("user.confirm_receipt", cmd.getOrderId(), cmd.getUserId(), true, null);
 
 		// 1. 加载订单 (load-for-update with version)
 		OrderItem order = orderDomainService.loadForUpdate(cmd.getOrderId());
@@ -983,10 +1001,21 @@ public class OrderApplicationService {
 		// orderDomainService.appendStatusLog(order.getId(), currentStatus, newStatus,
 		//	"User confirmed receipt", cmd.getUserId(), cmd.getRequestId());
 
-		// 6. 记录 Outbox 事件
-		orderDomainService.recordOutbox(order, "user.confirm_receipt", cmd);
+		// 6. 记录 Outbox 事件（统一v1载荷）
+		String tenantId = org.slf4j.MDC.get("tenantId");
+		String operatorId = cmd.getUserId();
+		java.util.Map<String, Object> payload = outboxEventService.buildEvent(
+			"user.confirm_receipt",
+			cmd.getOrderId(),
+			null,
+			tenantId,
+			operatorId,
+			java.util.Map.of()
+		);
+		orderDomainService.recordOutbox(order, "user.confirm_receipt", payload);
 		orderMetrics.processed("user.confirm_receipt");
 		auditService.record(cmd.getOrderId(), "user.confirm_receipt", "USER", cmd.getUserId(), true, Map.of());
+		recordAudit("user.confirm_receipt", cmd.getOrderId(), cmd.getUserId(), true, null);
 
 		log.info("User receipt confirmation processed for order: {}", cmd.getOrderId());
 	}
@@ -999,7 +1028,20 @@ public class OrderApplicationService {
 		// TODO: 调用状态机 requestAfterSale 方法
 		// TODO: 创建售后单
 		log.info("Applying after-sale for order: {}, type: {}", cmd.getOrderId(), cmd.getType());
-		return UUID.randomUUID().toString(); // 返回售后单ID
+		recordAudit("user.apply_aftersale", String.valueOf(cmd.getOrderId()), cmd.getUserId(), true, null);
+		String ticketId = UUID.randomUUID().toString();
+		recordAudit("user.apply_aftersale", String.valueOf(cmd.getOrderId()), cmd.getUserId(), true, null);
+		return ticketId; // 返回售后单ID
+	}
+
+	private void recordAudit(String commandName, String orderId, String actorId, boolean success, String errorCode) {
+		AuditRecorder rec = auditRecorderProvider != null ? auditRecorderProvider.getIfAvailable(() -> null) : null;
+		if (rec == null) return;
+		String traceId = org.slf4j.MDC.get("traceId");
+		String tenantId = org.slf4j.MDC.get("tenantId");
+		AuditEntry entry = new AuditEntry(System.currentTimeMillis(), commandName, orderId, actorId,
+			tenantId, traceId, success, errorCode);
+		try { rec.record(entry); } catch (Exception ignored) {}
 	}
 
 	/**
@@ -1063,7 +1105,7 @@ public class OrderApplicationService {
 			long expectedVersion = order.getVersion();
 			// 占位：状态机与资源释放逻辑待补齐
 			orderDomainService.save(order, expectedVersion);
-			orderDomainService.recordOutbox(order, "order.cancelled", Map.of("reason", "PAYMENT_TIMEOUT"));
+			orderDomainService.recordOutbox(order, OrderEventTypeConstants.ORDER_CANCELLED, Map.of("reason", "PAYMENT_TIMEOUT"));
 			orderMetrics.processed("timeout.unpaid_cancel");
 			auditService.record(String.valueOf(cmd.getOrderId()), "timeout.unpaid_cancel", "SYSTEM", "scheduler", true,
 				Map.of("scheduleId", cmd.getScheduleId()));
@@ -1095,7 +1137,7 @@ public class OrderApplicationService {
 			long expectedVersion = order.getVersion();
 			// 占位：状态机推进到待履约态
 			orderDomainService.save(order, expectedVersion);
-			orderDomainService.recordOutbox(order, "order.lifecycle.changed", Map.of("to", "AWAIT_FULFILLMENT"));
+			orderDomainService.recordOutbox(order, OrderEventTypeConstants.ORDER_LIFECYCLE_CHANGED, Map.of("to", "AWAIT_FULFILLMENT"));
 			orderMetrics.processed("auto.await_fulfillment");
 			auditService.record(String.valueOf(cmd.getOrderId()), "auto.await_fulfillment", "SYSTEM", "scheduler", true,
 				Map.of("eventId", cmd.getEventId()));
