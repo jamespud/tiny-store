@@ -225,4 +225,48 @@ public class OutboxEventService {
 		envelope.put("data", data);
 		return envelope;
 	}
+
+	/**
+	 * 统一构造事件载荷（不依赖 OrderDomainEvent），用于状态机 Action 等场景。
+	 */
+	public Map<String, Object> buildEvent(String eventType,
+	                                     String aggregateId,
+	                                     String subOrderId,
+	                                     String tenantId,
+	                                     String operatorId,
+	                                     Object domainData) {
+		Map<String, Object> envelope = new HashMap<>();
+		envelope.put("version", "v1");
+		envelope.put("eventType", eventType);
+		envelope.put("aggregateId", aggregateId);
+		if (subOrderId != null && !subOrderId.isBlank()) {
+			envelope.put("subOrderId", subOrderId);
+		}
+		envelope.put("occurredAt", OffsetDateTime.now().toString());
+		String traceId = MDC.get("traceId");
+		if (tenantId != null && !tenantId.isBlank()) envelope.put("tenantId", tenantId);
+		if (operatorId != null && !operatorId.isBlank()) envelope.put("operatorId", operatorId);
+		if (traceId != null && !traceId.isBlank()) envelope.put("traceId", traceId);
+
+		Map<String, Object> data = new HashMap<>();
+		if (domainData instanceof Map<?, ?> m) {
+			for (Map.Entry<?, ?> e : m.entrySet()) {
+				if (e.getKey() != null) data.put(String.valueOf(e.getKey()), e.getValue());
+			}
+		} else if (domainData != null) {
+			try {
+				// 尝试将对象转 Map（best-effort）
+				String json = objectMapper.writeValueAsString(domainData);
+				//noinspection unchecked
+				Map<?, ?> tmp = objectMapper.readValue(json, Map.class);
+				for (Map.Entry<?, ?> e : tmp.entrySet()) {
+					if (e.getKey() != null) data.put(String.valueOf(e.getKey()), e.getValue());
+				}
+			} catch (Exception ignored) {
+				data.put("value", String.valueOf(domainData));
+			}
+		}
+		envelope.put("data", data);
+		return envelope;
+	}
 }
