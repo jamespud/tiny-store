@@ -1,0 +1,89 @@
+server:
+  port: 9001
+spring:
+  application:
+    name: tinystore-domain-account
+  datasource:
+    url: jdbc:postgresql://localhost:5432/tinystore?currentSchema=tinystore_account
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  cloud:
+    loadbalancer:
+      ribbon:
+        enabled: false
+
+# Eureka配置
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.cloud.client.ip-address}:${server.port}
+
+# Actuator配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+  endpoint:
+    health:
+      show-details: always
+
+# Spring Cloud Stream配置
+spring:
+  cloud:
+    stream:
+      bindings:
+        userCreated-out-0:
+          destination: user-created
+          content-type: application/json
+        userUpdated-out-0:
+          destination: user-updated
+          content-type: application/json
+        userStatusChanged-out-0:
+          destination: user-status-changed
+          content-type: application/json
+      rabbit:
+        bindings:
+          userCreated-out-0:
+            producer:
+              transacted: true
+          userUpdated-out-0:
+            producer:
+              transacted: true
+          userStatusChanged-out-0:
+            producer:
+              transacted: true
+
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+  datasource:
+    url: jdbc:postgresql://localhost:5432/tinystore_test?currentSchema=tinystore_account
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: jdbc:postgresql://prod-db:5432/tinystore?currentSchema=tinystore_account
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
