@@ -74,6 +74,53 @@ tinystore:
       enabled: true
       require-token: true
 
+# Eureka配置
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.cloud.client.ip-address}:${server.port}
+
+# Spring Cloud Stream配置
+spring:
+  cloud:
+    stream:
+      bindings:
+        userCreated-in-0:
+          destination: user-created
+          content-type: application/json
+        userUpdated-in-0:
+          destination: user-updated
+          content-type: application/json
+        userStatusChanged-in-0:
+          destination: user-status-changed
+          content-type: application/json
+      rabbit:
+        bindings:
+          userCreated-in-0:
+            consumer:
+              auto-bind-dlq: true
+              republish-to-dlq: true
+          userUpdated-in-0:
+            consumer:
+              auto-bind-dlq: true
+              republish-to-dlq: true
+          userStatusChanged-in-0:
+            consumer:
+              auto-bind-dlq: true
+              republish-to-dlq: true
+  cache:
+    type: redis
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: 
+
 ---
 spring:
   config:

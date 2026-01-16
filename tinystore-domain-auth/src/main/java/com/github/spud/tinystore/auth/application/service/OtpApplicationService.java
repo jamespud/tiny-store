@@ -38,7 +38,7 @@ public class OtpApplicationService implements OtpUseCase {
   private static final String OTP_BLOCK_KEY_PREFIX = "auth:otp:block:";
   private static final String OTP_REQUEST_KEY_PREFIX = "auth:otp:req:";
 
-  private final UserRepository userRepository;
+  private final UserService userService;
   private final OtpRepositoryPort otpRepository;
   private final SmsSenderPort smsSenderPort;
   private final OtpGenerationService otpGenerationService;
@@ -46,14 +46,14 @@ public class OtpApplicationService implements OtpUseCase {
   private final LockAndRateLimitPort lockAndRateLimitPort;
   private final OtpProperties otpProperties;
 
-  public OtpApplicationService(UserRepository userRepository,
+  public OtpApplicationService(UserService userService,
       OtpRepositoryPort otpRepository,
       SmsSenderPort smsSenderPort,
       OtpGenerationService otpGenerationService,
       AuditLogPort auditLogPort,
       LockAndRateLimitPort lockAndRateLimitPort,
       OtpProperties otpProperties) {
-    this.userRepository = userRepository;
+    this.userService = userService;
     this.otpRepository = otpRepository;
     this.smsSenderPort = smsSenderPort;
     this.otpGenerationService = otpGenerationService;
@@ -94,14 +94,7 @@ public class OtpApplicationService implements OtpUseCase {
         });
     otpGenerationService.verify(otp, code);
     otpRepository.markUsed(otp);
-    Optional<MallUser> existing = userRepository.findByPhone(phone);
-    MallUser user = existing.orElseGet(() -> {
-      MallUser created = userRepository.save(createUser(phone));
-      auditLogPort.append(
-          AuditEvent.success(created.getId().value(), created.getPhone().value(), null,
-              ACTION_USER_REGISTER, Set.of(), null, null, "auto_register"));
-      return created;
-    });
+    MallUser user = userService.getOrCreateByPhone(phone.value());
     try {
       user.ensureActive();
     } catch (RuntimeException ex) {
