@@ -6,6 +6,8 @@ import com.github.spud.tinystore.auth.domain.primitives.RtVersion;
 import com.github.spud.tinystore.auth.domain.primitives.UserId;
 import java.util.Collection;
 import java.util.Objects;
+
+import lombok.Builder;
 import lombok.Getter;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;

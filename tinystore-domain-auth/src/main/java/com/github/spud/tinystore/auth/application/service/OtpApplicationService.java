@@ -10,7 +10,7 @@ import com.github.spud.tinystore.auth.application.port.out.AuditLogPort;
 import com.github.spud.tinystore.auth.application.port.out.LockAndRateLimitPort;
 import com.github.spud.tinystore.auth.application.port.out.OtpRepositoryPort;
 import com.github.spud.tinystore.auth.application.port.out.SmsSenderPort;
-import com.github.spud.tinystore.auth.application.port.out.UserRepository;
+import com.github.spud.tinystore.auth.domain.service.UserService;
 import com.github.spud.tinystore.auth.domain.audit.AuditEvent;
 import com.github.spud.tinystore.auth.domain.exception.OtpInvalidException;
 import com.github.spud.tinystore.auth.domain.exception.OtpRateLimitExceededException;
@@ -106,7 +106,7 @@ public class OtpApplicationService implements OtpUseCase {
 
     auditLogPort.append(
         AuditEvent.success(user.getId().value(), user.getPhone().value(), null, ACTION_OTP_VERIFY,
-            Set.of(), null, null, existing.isPresent() ? "existing_user" : "new_user"));
+            Set.of(), null, null, "otp_verified"));
     return new AuthResult(user);
   }
 

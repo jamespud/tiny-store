@@ -10,6 +10,12 @@ spring:
     driver-class-name: org.postgresql.Driver
   flyway:
     enabled: true
+    locations: classpath:db/migration
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
   data:
     redis:
       host: localhost

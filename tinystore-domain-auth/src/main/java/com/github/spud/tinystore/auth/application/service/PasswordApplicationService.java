@@ -7,7 +7,10 @@ import com.github.spud.tinystore.auth.application.port.out.AuditLogPort;
 import com.github.spud.tinystore.auth.domain.audit.AuditEvent;
 import com.github.spud.tinystore.auth.domain.exception.UserFrozenException;
 import com.github.spud.tinystore.auth.domain.model.user.MallUser;
+import com.github.spud.tinystore.auth.domain.model.user.MallUserStatus;
 import com.github.spud.tinystore.auth.domain.primitives.PhoneNumber;
+import com.github.spud.tinystore.auth.domain.primitives.RtVersion;
+import com.github.spud.tinystore.auth.domain.primitives.UserId;
 import com.github.spud.tinystore.auth.infrastructure.feign.AccountServiceFeignClient;
 import java.util.Set;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -33,44 +36,41 @@ public class PasswordApplicationService implements PasswordUserCase {
   @Transactional(readOnly = true)
   public AuthResult verifyPassword(VerifyPasswordCommand command) {
     PhoneNumber phone = PhoneNumber.of(command.phone());
-    return accountServiceFeignClient.getUserByPhone(phone.value())
-        .map(userCoreDto -> {
-          try {
-            // 验证密码
-            if (!passwordEncoder.matches(command.password(), userCoreDto.password())) {
-              auditLogPort.append(AuditEvent.failure(null, phone.value(), null,
-                  "PASSWORD_LOGIN", Set.of(), null, null, "invalid_credentials"));
-              throw new IllegalArgumentException("invalid credentials");
-            }
+    AccountServiceFeignClient.UserCoreDto userCoreDto = accountServiceFeignClient.getUserByPhone(phone.value());
+    
+    if (userCoreDto == null) {
+      auditLogPort.append(AuditEvent.failure(null, phone.value(), null,
+          "PASSWORD_LOGIN", Set.of(), null, null, "user not found"));
+      throw new IllegalArgumentException("user not found");
+    }
+    
+    // 验证密码
+    if (!passwordEncoder.matches(command.password(), userCoreDto.password())) {
+      auditLogPort.append(AuditEvent.failure(null, phone.value(), null,
+          "PASSWORD_LOGIN", Set.of(), null, null, "invalid_credentials"));
+      throw new IllegalArgumentException("invalid credentials");
+    }
 
-            // 检查用户状态
-            if (userCoreDto.accountStatus() != 1) {
-              auditLogPort.append(AuditEvent.failure(null, phone.value(), null,
-                  "PASSWORD_LOGIN", Set.of(), null, null, "user_frozen"));
-              throw new UserFrozenException("user is frozen");
-            }
+    // 检查用户状态
+    if (userCoreDto.accountStatus() != 1) {
+      auditLogPort.append(AuditEvent.failure(null, phone.value(), null,
+          "PASSWORD_LOGIN", Set.of(), null, null, "user_frozen"));
+      throw new UserFrozenException("user is frozen");
+    }
 
-            // 转换为MallUser对象
-            MallUser user = MallUser.builder()
-                .id(com.github.spud.tinystore.auth.domain.primitives.UserId.of(userCoreDto.userId().toString()))
-                .phone(phone)
-                .username(userCoreDto.account())
-                .nickname(userCoreDto.nickname())
-                .avatar(userCoreDto.avatarUrl())
-                .enabled(userCoreDto.accountStatus() == 1)
-                .build();
+    // 转换为MallUser对象
+    MallUser user = MallUser.restore(
+        UserId.of(String.valueOf(userCoreDto.userId())),
+        phone,
+        userCoreDto.nickname(),
+        userCoreDto.avatarUrl(),
+        userCoreDto.password(),
+        userCoreDto.accountStatus() == 1 ? MallUserStatus.ACTIVE : MallUserStatus.FROZEN,
+        RtVersion.of(1)
+    );
 
-            auditLogPort.append(AuditEvent.success(user.getId().value(), user.getPhone().value(), null,
-                "PASSWORD_LOGIN", Set.of(), null, null, null));
-            return new AuthResult(user);
-          } catch (RuntimeException ex) {
-            throw ex;
-          }
-        })
-        .orElseThrow(() -> {
-          auditLogPort.append(AuditEvent.failure(null, phone.value(), null,
-              "PASSWORD_LOGIN", Set.of(), null, null, "user not found"));
-          return new IllegalArgumentException("user not found");
-        });
+    auditLogPort.append(AuditEvent.success(user.getId().value(), user.getPhone().value(), null,
+        "PASSWORD_LOGIN", Set.of(), null, null, null));
+    return new AuthResult(user);
   }
 }
