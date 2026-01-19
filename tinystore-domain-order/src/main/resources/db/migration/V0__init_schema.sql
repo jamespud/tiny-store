@@ -1,0 +1,4 @@
+CREATE SCHEMA IF NOT EXISTS tinystore_order;
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+

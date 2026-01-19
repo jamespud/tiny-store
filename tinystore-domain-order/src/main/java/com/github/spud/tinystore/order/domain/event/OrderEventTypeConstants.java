@@ -6,6 +6,12 @@ package com.github.spud.tinystore.order.domain.event;
 public final class OrderEventTypeConstants {
     private OrderEventTypeConstants() {}
 
+    public static final String ORDER_CREATED = "order.created";
+    public static final String ORDER_ACCEPTED = "order.accepted";
+    public static final String ORDER_SHIPPED = "order.shipped";
+    public static final String ORDER_DELIVERED = "order.delivered";
+    public static final String ORDER_RECEIVED = "order.received";
+
     public static final String PAYMENT_SUCCEEDED = "order.payment.succeeded";
     public static final String MERCHANT_ACCEPTED_LIFECYCLE = "order.lifecycle.changed";
     public static final String GOODS_SHIPPED = "order.fulfillment.shipped";

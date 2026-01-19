@@ -111,7 +111,7 @@ class OutboxEventPublisherTest {
       switch (i) {
           case 0 -> assertThat(et).isEqualTo(OrderEventTypeConstants.PAYMENT_SUCCEEDED);
           case 1 -> assertThat(et).isEqualTo(OrderEventTypeConstants.PAYMENT_SUCCEEDED);
-          case 2 -> assertThat(et).isEqualTo(OrderEventTypeConstants.GOODS_SHIPPED);
+          case 2 -> assertThat(et).isEqualTo(OrderEventTypeConstants.ORDER_SHIPPED);
           case 3 -> assertThat(et).isEqualTo(OrderEventTypeConstants.ORDER_LIFECYCLE_CHANGED);
           case 4 -> assertThat(et).isEqualTo("order.general");
       }

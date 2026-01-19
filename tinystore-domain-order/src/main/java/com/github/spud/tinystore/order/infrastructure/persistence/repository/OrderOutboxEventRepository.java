@@ -3,6 +3,7 @@ package com.github.spud.tinystore.order.infrastructure.persistence.repository;
 import com.github.spud.tinystore.order.infrastructure.persistence.po.OrderOutboxEventPO;
 import java.time.OffsetDateTime;
 import java.util.List;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -24,8 +25,8 @@ public interface OrderOutboxEventRepository extends JpaRepository<OrderOutboxEve
 	/**
 	 * 查询待发送的事件 (分页)
 	 */
-	@Query("SELECT e FROM OrderOutboxEventPO e WHERE e.status = 'PENDING' ORDER BY e.createdAt ASC LIMIT :limit")
-	List<OrderOutboxEventPO> findPendingEvents(@Param("limit") int limit);
+	List<OrderOutboxEventPO> findByStatusOrderByCreatedAtAsc(OrderOutboxEventPO.OutboxEventStatus status,
+		Pageable pageable);
 
 	/**
 	 * 查询重试失败的事件

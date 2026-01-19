@@ -165,22 +165,28 @@ public class OutboxEventPublisher {
 	private String getTopicName(String externalEventType) {
 		// 标准事件名 → Topic 映射
 		switch (externalEventType) {
+			case OrderEventTypeConstants.ORDER_CREATED:
+				return TOPIC_PREFIX + "created";
 			case OrderEventTypeConstants.PAYMENT_SUCCEEDED:
 				return TOPIC_PREFIX + "paid";
+			case OrderEventTypeConstants.ORDER_ACCEPTED:
+				return TOPIC_PREFIX + "accepted";
+			case OrderEventTypeConstants.ORDER_SHIPPED:
+				return TOPIC_PREFIX + "shipped";
+			case OrderEventTypeConstants.ORDER_DELIVERED:
+				return TOPIC_PREFIX + "delivered";
+			case OrderEventTypeConstants.ORDER_RECEIVED:
+				return TOPIC_PREFIX + "received";
 			case OrderEventTypeConstants.GOODS_SHIPPED:
 				return TOPIC_PREFIX + "shipped";
 			case OrderEventTypeConstants.GOODS_DELIVERED:
 				return TOPIC_PREFIX + "delivered";
-			case OrderEventTypeConstants.GOODS_RECEIVED:
-				return TOPIC_PREFIX + "received";
 			case "order.completed":
 				return TOPIC_PREFIX + "completed";
 			case OrderEventTypeConstants.ORDER_CANCELLED:
 				return TOPIC_PREFIX + "cancelled";
 			case OrderEventTypeConstants.REFUND_SUCCEEDED:
 				return TOPIC_PREFIX + "refund-succeeded";
-			case "order.created":
-				return TOPIC_PREFIX + "created";
 			case OrderEventTypeConstants.ORDER_LIFECYCLE_CHANGED:
 				return TOPIC_PREFIX + "status-changed";
 			default:
@@ -198,11 +204,14 @@ public class OutboxEventPublisher {
 		// 历史类名/枚举名映射
 		return switch (rawType) {
 			case "ORDER_PAID", "OrderPaidEvent" -> OrderEventTypeConstants.PAYMENT_SUCCEEDED;
-			case "ORDER_SHIPPED", "OrderShippedEvent" -> OrderEventTypeConstants.GOODS_SHIPPED;
+			case "ORDER_ACCEPTED", "OrderAcceptedEvent" -> OrderEventTypeConstants.ORDER_ACCEPTED;
+			case "ORDER_SHIPPED", "OrderShippedEvent" -> OrderEventTypeConstants.ORDER_SHIPPED;
+			case "ORDER_DELIVERED", "OrderDeliveredEvent" -> OrderEventTypeConstants.ORDER_DELIVERED;
+			case "ORDER_RECEIVED", "OrderReceivedEvent" -> OrderEventTypeConstants.ORDER_RECEIVED;
 			case "ORDER_COMPLETED", "OrderCompletedEvent" -> "order.completed";
 			case "ORDER_CANCELLED", "OrderCancelledEvent" -> OrderEventTypeConstants.ORDER_CANCELLED;
 			case "AFTERSALE_COMPLETED", "RefundSucceededEvent" -> OrderEventTypeConstants.REFUND_SUCCEEDED;
-			case "ORDER_CREATED", "OrderCreatedEvent" -> "order.created";
+			case "ORDER_CREATED", "OrderCreatedEvent" -> OrderEventTypeConstants.ORDER_CREATED;
 			case "STATUS_CHANGED", "OrderStatusChangedEvent" -> OrderEventTypeConstants.ORDER_LIFECYCLE_CHANGED;
 			default -> "order.general";
 		};

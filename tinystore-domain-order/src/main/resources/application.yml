@@ -1,4 +1,19 @@
 spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/tinystore?currentSchema=tinystore_order
+    username: postgres
+    password: postgres
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: localhost:9092
   security:
     oauth2:
       resourceserver:

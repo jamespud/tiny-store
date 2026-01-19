@@ -12,6 +12,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.github.spud.tinystore.order.infrastructure.tenant.TenantContext;
@@ -86,7 +87,11 @@ public class OutboxEventService {
 	 */
 	@Transactional(readOnly = true)
 	public List<OrderOutboxEventPO> findPendingEvents(int limit) {
-		return outboxEventRepository.findPendingEvents(limit);
+		int size = limit <= 0 ? 1 : limit;
+		return outboxEventRepository.findByStatusOrderByCreatedAtAsc(
+			OrderOutboxEventPO.OutboxEventStatus.PENDING,
+			PageRequest.of(0, size)
+		);
 	}
 
 	/**
