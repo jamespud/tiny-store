@@ -43,6 +43,11 @@ import com.github.spud.tinystore.order.domain.service.ProductService.SkuDTO;
 import com.github.spud.tinystore.order.domain.service.PromotionService;
 import com.github.spud.tinystore.order.domain.service.RiskControlService;
 import com.github.spud.tinystore.order.domain.service.RiskControlService.SkuRiskDTO;
+import com.github.spud.tinystore.order.domain.statemachine.status.AfterSaleStatus;
+import com.github.spud.tinystore.order.domain.statemachine.status.CoreFlowStatus;
+import com.github.spud.tinystore.order.domain.statemachine.status.FulfillmentStatus;
+import com.github.spud.tinystore.order.domain.statemachine.status.OrderStatus;
+import com.github.spud.tinystore.order.domain.statemachine.status.PaymentStatus;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.MerchantInfo;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.PreUseCouponResponse;
 import com.github.spud.tinystore.order.interfaces.dto.response.CreateOrderResponse;
@@ -53,7 +58,19 @@ import com.github.spud.tinystore.order.infrastructure.audit.AuditRecorder;
 import com.github.spud.tinystore.order.infrastructure.audit.AuditEntry;
 import com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService;
 import com.github.spud.tinystore.order.domain.event.OrderEventTypeConstants;
+import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.OrderItemEntity;
+import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.OrderMainEntity;
+import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.OrderSubEntity;
+import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.OrderItemJpaRepository;
+import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.OrderMainJpaRepository;
+import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.OrderSubJpaRepository;
+import com.github.spud.tinystore.order.infrastructure.tenant.TenantContext;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.transaction.annotation.Transactional;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
@@ -65,7 +82,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Order Application Service - Enhanced with Rich Aggregate Pattern
@@ -96,6 +112,9 @@ public class OrderApplicationService {
 	private final ObjectProvider<AuditRecorder> auditRecorderProvider;
 	private final OrderMetrics orderMetrics;
     private final OutboxEventService outboxEventService;
+	private final OrderMainJpaRepository orderMainJpaRepository;
+	private final OrderSubJpaRepository orderSubJpaRepository;
+	private final OrderItemJpaRepository orderItemJpaRepository;
 
 	/**
 	 * 确认订单
@@ -106,7 +125,7 @@ public class OrderApplicationService {
 		// Minimal preview implementation: gather SKU prices and assemble a lightweight preview
 		var skuResp = productService.batchGetSkuInfo(command.getSkuIds());
 		java.util.Map<String, com.github.spud.tinystore.order.domain.service.ProductService.SkuDTO> skuMap =
-			skuResp != null ? skuResp.getSkuMap() : java.util.Collections.<String, com.github.spud.tinystore.order.domain.service.ProductService.SkuDTO>emptyMap();
+			skuResp != null ? skuResp.getSkuMap() : java.util.Collections.emptyMap();
 
 		java.util.List<ConfirmOrderResult.ShopProductSnapshot> shopLines = new java.util.ArrayList<>();
 		com.github.spud.tinystore.order.domain.model.Money total = com.github.spud.tinystore.order.domain.model.Money.of(0);
@@ -142,6 +161,7 @@ public class OrderApplicationService {
 	/**
 	 * 提交订单
 	 */
+	@Transactional(rollbackFor = Exception.class)
 	public SubmitOrderResult submitOrder(SubmitOrderCommand cmd) throws Exception {
 		log.info("Submitting order for user: {} idempotency={}", cmd.getUserId(), cmd.getIdempotentKey());
 
@@ -169,7 +189,7 @@ public class OrderApplicationService {
 		// Minimal checks and build preview-like order then persist a lightweight MainOrder
 		var skuResp = productService.batchGetSkuInfo(cmd.getSkuIds());
 		java.util.Map<String, com.github.spud.tinystore.order.domain.service.ProductService.SkuDTO> skuMap =
-			skuResp != null ? skuResp.getSkuMap() : java.util.Collections.<String, com.github.spud.tinystore.order.domain.service.ProductService.SkuDTO>emptyMap();
+			skuResp != null ? skuResp.getSkuMap() : java.util.Collections.emptyMap();
 
 		java.util.List<com.github.spud.tinystore.order.application.result.ConfirmOrderResult.ShopProductSnapshot> shopLines = new java.util.ArrayList<>();
 		com.github.spud.tinystore.order.domain.model.Money total = com.github.spud.tinystore.order.domain.model.Money.of(0);
@@ -190,23 +210,102 @@ public class OrderApplicationService {
 			total = total.add(shopTotal);
 		}
 
-		// build & persist lightweight MainOrder
+		String tenantId = TenantContext.getTenantId();
+		if (tenantId == null || tenantId.isBlank()) {
+			tenantId = "default";
+		}
+
 		String mainOrderNo = orderNumberService.generateOrderNumber(cmd.getUserId());
 		com.github.spud.tinystore.order.domain.model.vo.OrderNo ono = com.github.spud.tinystore.order.domain.model.vo.OrderNo.of(mainOrderNo);
-		com.github.spud.tinystore.order.domain.model.MainOrder mainOrder = com.github.spud.tinystore.order.domain.model.MainOrder.builder()
-			.orderNo(ono)
-			.userId(cmd.getUserId())
-			.subOrders(java.util.List.of())
-			.discounts(java.util.List.of())
-			.pricingSummary(null)
-			.mainStatus(com.github.spud.tinystore.order.domain.enums.MainOrderStatus.CREATED)
-			.payExpireTime(System.currentTimeMillis() + java.time.Duration.ofMinutes(30).toMillis())
-			.build();
 
-		orderRepository.save(mainOrder);
+		OrderMainEntity mainEntity = new OrderMainEntity()
+			.setOrderNo(mainOrderNo)
+			.setTenantId(tenantId)
+			.setUserId(cmd.getUserId())
+			.setCoreFlowStatus(CoreFlowStatus.PENDING_PAYMENT.name())
+			.setPaymentStatus(PaymentStatus.CREATED.name())
+			.setFulfillmentStatus(FulfillmentStatus.NONE.name())
+			.setAfterSaleStatus(AfterSaleStatus.NONE.name())
+			.setTotalAmount(total.amount())
+			.setDiscountAmount(0L)
+			.setPayableAmount(total.amount())
+			.setCurrency(total.currency());
+		orderMainJpaRepository.save(mainEntity);
 
-		// publish domain event via domainEventPublisher (outbox will be handled by repository implementations)
-		domainEventPublisher.publish(new com.github.spud.tinystore.order.domain.event.MultiShopOrderCreatedEvent(mainOrderNo, cmd.getUserId(), java.util.List.of()));
+		Map<String, String> merchantSubOrderNo = new HashMap<>();
+		List<OrderSubEntity> subEntities = new ArrayList<>();
+		int subIndex = 1;
+		for (var merchantSkus : cmd.getMerchantSkus()) {
+			String subOrderNo = generateSubOrderNo(mainOrderNo, subIndex++);
+			merchantSubOrderNo.put(merchantSkus.merchantId(), subOrderNo);
+			subEntities.add(new OrderSubEntity()
+				.setSubOrderNo(subOrderNo)
+				.setMainOrderNo(mainOrderNo)
+				.setTenantId(tenantId)
+				.setMerchantId(merchantSkus.merchantId())
+				.setMerchantName(null)
+				.setCoreFlowStatus(CoreFlowStatus.PENDING_PAYMENT.name())
+				.setPaymentStatus(PaymentStatus.CREATED.name())
+				.setFulfillmentStatus(FulfillmentStatus.NONE.name())
+				.setAfterSaleStatus(AfterSaleStatus.NONE.name())
+			);
+		}
+		orderSubJpaRepository.saveAll(subEntities);
+
+		List<OrderItemEntity> itemEntities = new ArrayList<>();
+		int lineNo = 1;
+		for (var merchantSkus : cmd.getMerchantSkus()) {
+			String subOrderNo = merchantSubOrderNo.get(merchantSkus.merchantId());
+			for (var item : merchantSkus.skuItems()) {
+				SkuDTO sku = skuMap.get(item.skuId());
+				long unit = sku != null ? sku.getUnitPrice() : 0L;
+				int qty = item.quantity() != null ? item.quantity() : 0;
+				long lineTotal = unit * (long) qty;
+				Map<String, Object> snapshot = new HashMap<>();
+				snapshot.put("skuId", item.skuId());
+				snapshot.put("merchantId", merchantSkus.merchantId());
+				snapshot.put("title", sku != null && sku.getSkuName() != null ? sku.getSkuName() : item.skuId());
+				snapshot.put("specJson", sku != null ? sku.getSecJson() : null);
+				snapshot.put("unitPriceCents", unit);
+				snapshot.put("currency", total.currency());
+				snapshot.put("snapshotTime", Instant.now().toString());
+				String snapshotJson = objectMapper.writeValueAsString(snapshot);
+				itemEntities.add(new OrderItemEntity()
+					.setMainOrderNo(mainOrderNo)
+					.setSubOrderNo(subOrderNo)
+					.setLineNo(lineNo++)
+					.setSkuId(item.skuId())
+					.setQuantity(qty)
+					.setUnitPriceAmount(unit)
+					.setLineTotalAmount(lineTotal)
+					.setLineDiscountAmount(0L)
+					.setLinePayableAmount(lineTotal)
+					.setCurrency(total.currency())
+					.setSkuSnapshot(snapshotJson)
+				);
+			}
+		}
+		orderItemJpaRepository.saveAll(itemEntities);
+
+		OrderItem agg = new OrderItem();
+		agg.setOrderNo(mainOrderNo);
+		agg.setTenantId(tenantId);
+		agg.setUserId(cmd.getUserId());
+		agg.setOrderStatus(new OrderStatus(
+			CoreFlowStatus.PENDING_PAYMENT,
+			PaymentStatus.CREATED,
+			FulfillmentStatus.NONE,
+			AfterSaleStatus.NONE
+		));
+		agg.setTotal(total);
+		agg.setPayable(total);
+		agg.setVersion(0);
+		orderDomainService.recordOutbox(agg, OrderEventTypeConstants.ORDER_CREATED, Map.of(
+			"mainOrderNo", mainOrderNo,
+			"userId", cmd.getUserId(),
+			"merchantCount", cmd.getMerchantSkus() != null ? cmd.getMerchantSkus().size() : 0,
+			"lineCount", itemEntities.size()
+		));
 
 		SubmitOrderResult result = new SubmitOrderResult();
 		// set main order no into result
@@ -220,8 +319,8 @@ public class OrderApplicationService {
 				com.github.spud.tinystore.order.interfaces.dto.response.CreateOrderResponse resp = new com.github.spud.tinystore.order.interfaces.dto.response.CreateOrderResponse();
 				resp.setMainOrderNo(ono.value());
 				idempotencyStorage.saveResponse(cmd.getIdempotentKey(), resp);
-			} catch (Exception ignored) {
-				log.debug("Failed to save idempotency result: {}", ignored.getMessage());
+			} catch (Exception e) {
+				log.debug("Failed to save idempotency result: {}", e.getMessage());
 			}
 		}
 
@@ -251,8 +350,14 @@ public class OrderApplicationService {
 
 			OrderItem order = orderDomainService.loadForUpdate(cmd.getOrderId());
 			long expectedVersion = order.getVersion();
-
-			// TODO: 后续补齐状态机过渡
+			OrderStatus cur = order.getOrderStatus();
+			OrderStatus next = new OrderStatus(
+				CoreFlowStatus.PAID,
+				PaymentStatus.PAID,
+				cur != null ? cur.getFulfillmentStatus() : FulfillmentStatus.NONE,
+				cur != null ? cur.getAfterSaleStatus() : AfterSaleStatus.NONE
+			);
+			order.setOrderStatus(next);
 			orderDomainService.save(order, expectedVersion);
 			orderDomainService.recordOutbox(order, OrderEventTypeConstants.PAYMENT_SUCCEEDED, cmd);
 			orderMetrics.processed("payment.success");
@@ -268,314 +373,6 @@ public class OrderApplicationService {
 			throw e;
 		}
 	}
-	/*
-			throw OrderBusinessException.riskBlocked(riskResponse.getReason());
-		}
-
-		// 2.2 批量查询所有SKU信息（含所属商家ID，校验“请求商家ID与SKU实际商家ID一致”）
-		Set<String> skuIds = cmd.getSkuIds();
-		SkuBatchQueryResponse skuBatchResponse = productService.batchGetSkuInfo(skuIds);
-		Map<String, SkuDTO> skuMap = skuBatchResponse.getSkuMap();
-
-		// 2.3 校验SKU合法性+商家一致性（请求的商家ID必须与SKU实际商家ID一致）
-		this.validateSkuAndMerchantConsistency(cmd.getMerchantSkus(), skuMap);
-
-		// 2.4 批量查询商家信息（名称、运费政策，用于子订单构建）
-		List<String> merchantIds = cmd.getMerchantSkus().stream()
-			.map(MerchantSkuDTO::merchantId)
-			.toList();
-		Map<String, MerchantInfo> merchantMap = promotionService.batchGetMerchantInfo(merchantIds);
-
-		// 生成订单号
-		String orderNumber = orderNumberService.generateOrderNumber(cmd.getUserId());
-
-		// -------------------------- 3. 优惠预核销（平台优惠券+商家优惠券） --------------------------
-		// 3.1 平台优惠券预核销（跨店可用，仅1张）
-		PreUseCouponResponse platformCouponResp = null;
-		Money platformDiscountTotal = Money.of(0);
-		if (StringUtils.hasText(cmd.getPlatformCouponId())) {
-			platformCouponResp = promotionService.preUsePlatformCoupon(
-				PreUsePlatformCouponRequest.builder()
-					.userId(userId)
-					.couponId(cmd.getPlatformCouponId())
-					.skus(cmd.getMerchantSkus().stream()
-						.flatMap(merchantSkus -> merchantSkus.skuItems().stream())
-						.map(item -> new PromotionClient.SkuDetail(
-							item.skuId(),
-							item.quantity()
-						))
-						.toList()
-					)
-					.build()
-			);
-			if (!platformCouponResp.isValid()) {
-				throw new OrderBusinessException(
-					"平台优惠券不可用：" + platformCouponResp.getInvalidReason(), "ORDER-4004",
-					HttpStatus.BAD_REQUEST
-				);
-			}
-			platformDiscountTotal = Money.of(platformCouponResp.getTotalDiscount());
-		}
-
-		// 3.2 商家优惠券预核销
-		Map<String, PreUseCouponResponse> merchantCouponMap = new HashMap<>();
-		for (MerchantSkuDTO merchantSkus : cmd.getMerchantSkus()) {
-			String merchantId = merchantSkus.merchantId();
-			String merchantCouponId = merchantSkus.merchantCouponId();
-			if (!StringUtils.hasText(merchantCouponId)) {
-				continue;
-			}
-
-			List<SkuDTO> merchantSkuList = merchantSkus.skuItems().stream()
-				.map(item -> new SkuDTO(
-					item.skuId(),
-					item.quantity(),
-					skuMap.get(item.skuId()).getUnitPrice()
-				))
-				.toList();
-
-			PreUseCouponResponse merchantCouponResp = promotionService.preUseMerchantCoupon(
-				PreUseMerchantCouponRequest.builder()
-					.userId(userId)
-					.merchantId(merchantSkus.merchantId())
-					.couponId(merchantCouponId)
-					.skus(merchantSkus.skuItems().stream()
-						.map(item -> new PromotionClient.SkuDetail(
-								item.skuId(),
-								item.quantity()
-							)
-						).toList()
-					)
-					.build()
-			);
-			if (!merchantCouponResp.isValid()) {
-				// 商家优惠券核销失败，回滚已核销的平台优惠券
-				if (platformCouponResp != null) {
-					promotionService.rollbackCouponUse(platformCouponResp.getLockId());
-				}
-				throw new OrderBusinessException(
-					"商家[" + merchantId + "]优惠券不可用：" + merchantCouponResp.getInvalidReason(),
-					"ORDER-4005",
-					org.springframework.http.HttpStatus.BAD_REQUEST
-				);
-			}
-			merchantCouponMap.put(merchantId, merchantCouponResp);
-		}
-
-		// -------------------------- 4. 库存预占（批量预占所有商家的SKU，按商家分组记录预占ID） --------------------------
-		// 4.1 构建所有SKU的库存预占请求
-		List<StockPreOccupyRequest> allPreOccupyList = cmd.getMerchantSkus().stream()
-			.flatMap(skus -> skus.skuItems().stream())
-			.map(item -> new StockPreOccupyRequest(
-				item.skuId(),
-				item.quantity()
-			))
-			.toList();
-
-	
-				Money subMerchantDiscount = merchantCouponResp != null ?
-					Money.of(merchantCouponResp.getTotalDiscount()) : Money.of(0);
-
-				// 计算子订单运费（调用物流服务，传入商家地址、SKU重量）
-				Money subFreight = this.calculateMerchantFreight(merchantSkus, subItemList, skuMap,
-					merchantInfo);
-
-				// 5.3 暂存子订单基础信息（平台优惠分摊后续统一处理）
-				subOrderList.add(
-					SubOrder.builder()
-						.mainOrderNo(OrderNo.of(orderNumber))
-						// TODO: 填充参数
-						.build()
-				);
-			}
-
-			// -------------------------- 6. 平台优惠分摊（按子订单商品总价占比拆分） --------------------------
-			List<SubOrder> subOrdersWithDiscount = promotionService.allocatePlatformDiscount(subOrderList,
-				platformDiscountTotal);
-
-			// -------------------------- 7. 构建主订单 --------------------------
-
-			// 7.1 生成主订单号
-			// TODO: 可替换为更优雅的订单号生成策略（如雪花算法、Redis等）
-			String mainOrderNo =
-				"DO_M_" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 8);
-
-			// 7.2 关联主订单号到所有子订单
-//			subOrdersWithDiscount.forEach(sub -> sub.setMainOrderNo(mainOrderNo));
-
-			// 7.3 计算主订单总实付金额（所有子订单实付金额之和）
-			Money totalPayAmount = subOrdersWithDiscount.stream()
-				.map(SubOrder::getPricingSummary)
-				.map(PricingSummary::payable)
-				.reduce(Money.of(0), Money::add);
-
-			// 7.4 构建主订单实体
-			MainOrder mainOrder = MainOrder.builder()
-				.subOrders(subOrdersWithDiscount)
-				// TODO: 填充参数
-				.build();
-
-			// -------------------------- 8. 数据落库（主订单+子订单+明细） --------------------------
-			orderRepository.save(mainOrder);
-			log.info("多店铺订单数据落库成功：mainOrderNo={}, 子订单数={}", mainOrderNo,
-				subOrdersWithDiscount.size());
-
-			// -------------------------- 9. 保存订单创建事件（支付、通知等） --------------------------
-			domainEventPublisher.publish(
-				new MultiShopOrderCreatedEvent(
-					mainOrderNo,
-					userId,
-					subOrdersWithDiscount.stream()
-						.map(sub -> new MultiShopOrderCreatedEvent.SubOrderRef(
-							sub.getOrderNo().value(),
-							sub.getMerchantId(),
-							sub.getStockPreOccupyIds(),
-							sub.getCouponLockId()
-						))
-						.collect(Collectors.toList())
-				)
-			);
-
-			SubmitOrderResult result = this.buildSubmitOrderResult(mainOrder);
-
-			// -------------------------- 10. 发送用户通知（合并下单成功） --------------------------
-			notifyService.sendOrderCreateNotice(
-				userId,
-				mainOrderNo,
-				totalPayAmount.amount(),
-				subOrdersWithDiscount.size()
-			);
-
-			log.info("订单创建完成：mainOrderNo={}, totalPayAmount={}, 子订单数={}",
-				mainOrderNo, totalPayAmount.amount(), subOrdersWithDiscount.size());
-			return result;
-		} catch (Exception e) {
-			// 异常回滚：释放库存+释放所有优惠券
-			log.error("创建多店铺订单异常，触发全局回滚：userId={}, error={}", userId, e.getMessage(), e);
-			// 回滚库存预占
-			inventoryService.rollbackPreOccupy(stockResp.getPreOccupyIds());
-			// 回滚所有优惠券
-			this.rollbackAllCoupons(platformCouponResp, merchantCouponMap);
-			throw e;
-		}
-	}
-
-*/
-
-	/**
-	 * Handle payment success callback (with idempotency)
-	 */
-//	@Transactional
-//	public void handlePaymentSucceeded(PaymentSucceededCommand cmd) {
-//		String idempotencyKey = IdempotencyRepository.IdempotencyKeyGenerator
-//			.forPaymentCallback(cmd.getPaymentId(), cmd.getOrderId(), cmd.getAmount().toString());
-//
-//		if (!idempotencyRepository.tryAcquire(idempotencyKey, "order-service", Duration.ofHours(1))) {
-//			log.info("Payment callback already processed: {}", idempotencyKey);
-//			return; // Already processed
-//		}
-//
-//		try {
-//			log.info("Processing payment success for order: {}", cmd.getOrderId());
-//
-//			OrderItem order = orderRepository.findById(cmd.getOrderId())
-//				.orElseThrow(() -> new IllegalArgumentException("Order not found: " + cmd.getOrderId()));
-//
-//			order.onPaymentSuccess(OrderAggregate.PaymentSuccessArgs.builder()
-//				.paymentId(cmd.getPaymentId())
-//				.amount(cmd.getAmount())
-//				.isDeposit(cmd.isDeposit())
-//				.isFinalPayment(cmd.isFinalPayment())
-//				.build());
-//
-//			List<OrderDomainEvent> events = order.pullDomainEvents();
-//			List<OutboxEventEnvelope> envelopes = mapToOutboxEnvelopes(events);
-//			orderRepository.saveWithOutbox(order, envelopes);
-//
-//			log.info("Payment success processed for order: {}", cmd.getOrderId());
-//		} catch (Exception e) {
-//			idempotencyRepository.release(idempotencyKey, "order-service");
-//			throw e;
-//		}
-//	}
-
-	/**
-	 * Merchant receives order
-	 */
-//	@Transactional
-//	public void merchantAcceptOrder(AcceptOrderCommand cmd) {
-//		log.info("Merchant receiving order: {}", cmd.getOrderId());
-//
-//		OrderItem order = orderRepository.findById(cmd.getOrderId())
-//			.orElseThrow(() -> new IllegalArgumentException("Order not found: " + cmd.getOrderId()));
-//
-//		order.onMerchantAccept();
-//
-//		List<OrderDomainEvent> events = order.pullDomainEvents();
-//		List<OutboxEventEnvelope> envelopes = mapToOutboxEnvelopes(events);
-//		orderRepository.saveWithOutbox(order, envelopes);
-//
-//		log.info("Merchant receive processed for order: {}", cmd.getOrderId());
-//	}
-
-	/**
-	 * Ship order
-	 */
-//	@Transactional
-//	public void ship(ShipOrderCommand cmd) {
-//		log.info("Shipping order: {}", cmd.getOrderId());
-//
-//		OrderItem order = orderRepository.findById(cmd.getOrderId())
-//			.orElseThrow(() -> new IllegalArgumentException("Order not found: " + cmd.getOrderId()));
-//
-//		// TODO: 
-//		order.onShip(OrderAggregate.ShipArgs.builder()
-//			.subOrderId(cmd.getOrderId())
-//			.shipmentInfo(cmd.getLogistics().getTrackingNo())
-//			.build());
-//
-//		List<OrderDomainEvent> events = order.pullDomainEvents();
-//		List<OutboxEventEnvelope> envelopes = mapToOutboxEnvelopes(events);
-//		orderRepository.saveWithOutbox(order, envelopes);
-//
-//		log.info("Ship processed for order: {}", cmd.getOrderId());
-//	}
-
-	/**
-	 * Handle delivery callback (with idempotency)
-	 */
-//	@Transactional
-//	public void handleDelivered(DeliveredCommand cmd) {
-//		String idempotencyKey = IdempotencyRepository.IdempotencyKeyGenerator
-//			.forLogisticsCallback(cmd.getOrderId(), "DELIVERED", cmd.getIdempotencyKey());
-//
-//		if (!idempotencyRepository.tryAcquire(idempotencyKey, "order-service", Duration.ofHours(1))) {
-//			log.info("Delivery callback already processed: {}", idempotencyKey);
-//			return;
-//		}
-//
-//		try {
-//			log.info("Processing delivery for order: {}", cmd.getOrderId());
-//
-//			OrderItem order = orderRepository.findById(cmd.getOrderId())
-//				.orElseThrow(() -> new IllegalArgumentException("Order not found: " + cmd.getOrderId()));
-//
-//			// TODO: 
-//			order.onDelivered(OrderAggregate.DeliveredArgs.builder()
-//				.shipmentInfo(cmd.getTrackingNo())
-//				.afterSaleWindowOpen(false)
-//				.build());
-//
-//			List<OrderDomainEvent> events = order.pullDomainEvents();
-//			List<OutboxEventEnvelope> envelopes = mapToOutboxEnvelopes(events);
-//			orderRepository.saveWithOutbox(order, envelopes);
-//
-//			log.info("Delivery processed for order: {}", cmd.getOrderId());
-//		} catch (Exception e) {
-//			idempotencyRepository.release(idempotencyKey, "order-service");
-//			throw e;
-//		}
-//	}
 
 	/**
 	 * Auto complete order
@@ -779,7 +576,7 @@ public class OrderApplicationService {
 	/**
 	 * 订单预览 验证商品是否下架，计算价格，缓存预览结果
 	 *
-	 * @param cmd
+	 * @param cmd 
 	 * @return
 	 */
 	public ConfirmOrderResult orderPreview(ConfirmOrderCommand cmd) {
@@ -824,23 +621,21 @@ public class OrderApplicationService {
 		OrderItem order = orderDomainService.loadForUpdate(cmd.getOrderId());
 		long expectedVersion = order.getVersion();
 
-		// 2. 转换当前状态到 CoreFlowStatus (待实现 - Order 需要添加状态字段)
-		// CoreFlowStatus currentStatus = orderStatusTranslator.toCore(order.getCurrentStatus());
-		// 临时使用占位符
-//		CoreFlowStatus currentStatus = CoreFlowStatus.PAID_CONFIRMED;
-
-		// 3. 应用状态机过渡
-
-		// 4. 持久化 (save with optimistic lock) - 待实现 Order.setStatus
-		// order.setStatus(orderStatusTranslator.toLegacy(newStatus));
+		OrderStatus cur = order.getOrderStatus();
+		OrderStatus next = new OrderStatus(
+			CoreFlowStatus.ACCEPTED,
+			cur != null ? cur.getPaymentStatus() : PaymentStatus.PAID,
+			cur != null ? cur.getFulfillmentStatus() : FulfillmentStatus.NONE,
+			cur != null ? cur.getAfterSaleStatus() : AfterSaleStatus.NONE
+		);
+		order.setOrderStatus(next);
 		orderDomainService.save(order, expectedVersion);
 
 		// 5. 追加状态日志 - 待实现 Order.getId()
 		// orderDomainService.appendStatusLog(order.getId(), currentStatus, newStatus,
 		//	"Merchant accepted", cmd.getOperatorId(), cmd.getRequestId());
 
-		// 6. 记录 Outbox 事件
-		orderDomainService.recordOutbox(order, "merchant.accept", cmd);
+		orderDomainService.recordOutbox(order, OrderEventTypeConstants.ORDER_ACCEPTED, cmd);
 		orderMetrics.processed("merchant.accept");
 		auditService.record(cmd.getOrderId(), "merchant.accept", "MERCHANT", cmd.getOperatorId(), true, Map.of());
 		recordAudit("merchant.accept", cmd.getOrderId(), cmd.getOperatorId(), true, null);
@@ -860,23 +655,37 @@ public class OrderApplicationService {
 		OrderItem order = orderDomainService.loadForUpdate(cmd.getOrderId());
 		long expectedVersion = order.getVersion();
 
-		// 2. 转换当前状态到 CoreFlowStatus (待实现 - Order 需要添加状态字段)
-		// CoreFlowStatus currentStatus = orderStatusTranslator.toCore(order.getCurrentStatus());
-		// 临时使用占位符
-//		CoreFlowStatus currentStatus = CoreFlowStatus.AWAITING_FULFILLMENT;
-
-		// 3. 应用状态机过渡
-
-		// 4. 持久化 (save with optimistic lock) - 待实现 Order.setStatus
-		// order.setStatus(orderStatusTranslator.toLegacy(newStatus));
+		OrderStatus cur = order.getOrderStatus();
+		OrderStatus next = new OrderStatus(
+			CoreFlowStatus.FULFILLING,
+			cur != null ? cur.getPaymentStatus() : PaymentStatus.PAID,
+			FulfillmentStatus.SHIPPED,
+			cur != null ? cur.getAfterSaleStatus() : AfterSaleStatus.NONE
+		);
+		order.setOrderStatus(next);
+		String mainOrderNo = order.getOrderNo();
+		List<OrderSubEntity> subs = orderSubJpaRepository.findByMainOrderNo(mainOrderNo);
+		OffsetDateTime shippedAt = OffsetDateTime.now();
+		for (OrderSubEntity s : subs) {
+			s.setLogisticsCompanyCode(cmd.getLogistics().getCompanyCode());
+			s.setLogisticsCompanyName(cmd.getLogistics().getCompanyName());
+			s.setTrackingNo(cmd.getLogistics().getTrackingNo());
+			s.setShippedAt(shippedAt);
+			s.setFulfillmentStatus(FulfillmentStatus.SHIPPED.name());
+			s.setCoreFlowStatus(CoreFlowStatus.FULFILLING.name());
+			s.setPaymentStatus(next.getPaymentStatus().name());
+			s.setAfterSaleStatus(next.getAfterSaleStatus().name());
+		}
+		if (!subs.isEmpty()) {
+			orderSubJpaRepository.saveAll(subs);
+		}
 		orderDomainService.save(order, expectedVersion);
 
 		// 5. 追加状态日志 - 待实现 Order.getId()
 		// orderDomainService.appendStatusLog(order.getId(), currentStatus, newStatus,
 		//	"Order shipped", cmd.getOperatorId(), cmd.getRequestId());
 
-		// 6. 记录 Outbox 事件
-		orderDomainService.recordOutbox(order, "order.shipped", cmd);
+		orderDomainService.recordOutbox(order, OrderEventTypeConstants.ORDER_SHIPPED, cmd);
 		orderMetrics.processed("order.ship");
 		auditService.record(cmd.getOrderId(), "order.ship", "MERCHANT", cmd.getOperatorId(), true,
 			Map.of("company", cmd.getLogistics().getCompanyName()));
@@ -925,9 +734,35 @@ public class OrderApplicationService {
 		try {
 			OrderItem order = orderDomainService.loadForUpdate(cmd.getOrderId());
 			long expectedVersion = order.getVersion();
-			// 占位：后续补齐状态机过渡
+			OrderStatus cur = order.getOrderStatus();
+			OrderStatus next = new OrderStatus(
+				CoreFlowStatus.FULFILLING,
+				cur != null ? cur.getPaymentStatus() : PaymentStatus.PAID,
+				FulfillmentStatus.DELIVERED,
+				cur != null ? cur.getAfterSaleStatus() : AfterSaleStatus.NONE
+			);
+			order.setOrderStatus(next);
+			String mainOrderNo = order.getOrderNo();
+			List<OrderSubEntity> subs = orderSubJpaRepository.findByMainOrderNo(mainOrderNo);
+			OffsetDateTime deliveredAt = cmd.getDeliveredAt() != null
+				? OffsetDateTime.ofInstant(Instant.ofEpochMilli(cmd.getDeliveredAt()), ZoneOffset.UTC)
+				: OffsetDateTime.now();
+			for (OrderSubEntity s : subs) {
+				if (cmd.getTrackingNo() != null && !cmd.getTrackingNo().isBlank() && s.getTrackingNo() != null
+					&& !cmd.getTrackingNo().equals(s.getTrackingNo())) {
+					continue;
+				}
+				s.setDeliveredAt(deliveredAt);
+				s.setFulfillmentStatus(FulfillmentStatus.DELIVERED.name());
+				s.setCoreFlowStatus(CoreFlowStatus.FULFILLING.name());
+				s.setPaymentStatus(next.getPaymentStatus().name());
+				s.setAfterSaleStatus(next.getAfterSaleStatus().name());
+			}
+			if (!subs.isEmpty()) {
+				orderSubJpaRepository.saveAll(subs);
+			}
 			orderDomainService.save(order, expectedVersion);
-			orderDomainService.recordOutbox(order, "order.delivered", cmd);
+			orderDomainService.recordOutbox(order, OrderEventTypeConstants.ORDER_DELIVERED, cmd);
 			orderMetrics.processed("logistics.delivered");
 			auditService.record(cmd.getOrderId(), "logistics.delivered", "SYSTEM", cmd.getSource(), true,
 				Map.of("trackingNo", cmd.getTrackingNo(), "deliveredAt", cmd.getDeliveredAt()));
@@ -960,9 +795,35 @@ public class OrderApplicationService {
 		try {
 			OrderItem order = orderDomainService.loadForUpdate(cmd.getOrderId());
 			long expectedVersion = order.getVersion();
-			// 占位：后续补齐状态机过渡
+			OrderStatus cur = order.getOrderStatus();
+			OrderStatus next = new OrderStatus(
+				CoreFlowStatus.FULFILLING,
+				cur != null ? cur.getPaymentStatus() : PaymentStatus.PAID,
+				FulfillmentStatus.DELIVERED,
+				cur != null ? cur.getAfterSaleStatus() : AfterSaleStatus.NONE
+			);
+			order.setOrderStatus(next);
+			String mainOrderNo = order.getOrderNo();
+			List<OrderSubEntity> subs = orderSubJpaRepository.findByMainOrderNo(mainOrderNo);
+			OffsetDateTime deliveredAt = cmd.getDeliveredAt() != null
+				? OffsetDateTime.ofInstant(Instant.ofEpochMilli(cmd.getDeliveredAt()), ZoneOffset.UTC)
+				: OffsetDateTime.now();
+			for (OrderSubEntity s : subs) {
+				if (cmd.getTrackingNo() != null && !cmd.getTrackingNo().isBlank() && s.getTrackingNo() != null
+					&& !cmd.getTrackingNo().equals(s.getTrackingNo())) {
+					continue;
+				}
+				s.setDeliveredAt(deliveredAt);
+				s.setFulfillmentStatus(FulfillmentStatus.DELIVERED.name());
+				s.setCoreFlowStatus(CoreFlowStatus.FULFILLING.name());
+				s.setPaymentStatus(next.getPaymentStatus().name());
+				s.setAfterSaleStatus(next.getAfterSaleStatus().name());
+			}
+			if (!subs.isEmpty()) {
+				orderSubJpaRepository.saveAll(subs);
+			}
 			orderDomainService.save(order, expectedVersion);
-			orderDomainService.recordOutbox(order, "order.delivered", cmd);
+			orderDomainService.recordOutbox(order, OrderEventTypeConstants.ORDER_DELIVERED, cmd);
 			orderMetrics.processed("merchant.delivery_confirm");
 			auditService.record(cmd.getOrderId(), "merchant.delivery_confirm", "MERCHANT", cmd.getSource(), true,
 				Map.of("trackingNo", cmd.getTrackingNo(), "deliveredAt", cmd.getDeliveredAt()));
@@ -989,30 +850,29 @@ public class OrderApplicationService {
 		OrderItem order = orderDomainService.loadForUpdate(cmd.getOrderId());
 		long expectedVersion = order.getVersion();
 
-		// 2. 转换当前状态到 CoreFlowStatus (待实现 - Order 需要添加状态字段)
-		// CoreFlowStatus currentStatus = orderStatusTranslator.toCore(order.getCurrentStatus());
-		// TODO: 应用状态机过渡 (用户确认收货，不开启售后观察期)
-
-		// 4. 持久化 (save with optimistic lock) - 待实现 Order.setStatus
-		// order.setStatus(orderStatusTranslator.toLegacy(newStatus));
-		orderDomainService.save(order, expectedVersion);
-
-		// 5. 追加状态日志 - 待实现 Order.getId()
-		// orderDomainService.appendStatusLog(order.getId(), currentStatus, newStatus,
-		//	"User confirmed receipt", cmd.getUserId(), cmd.getRequestId());
-
-		// 6. 记录 Outbox 事件（统一v1载荷）
-		String tenantId = org.slf4j.MDC.get("tenantId");
-		String operatorId = cmd.getUserId();
-		java.util.Map<String, Object> payload = outboxEventService.buildEvent(
-			"user.confirm_receipt",
-			cmd.getOrderId(),
-			null,
-			tenantId,
-			operatorId,
-			java.util.Map.of()
+		OrderStatus cur = order.getOrderStatus();
+		OrderStatus next = new OrderStatus(
+			CoreFlowStatus.COMPLETED,
+			cur != null ? cur.getPaymentStatus() : PaymentStatus.PAID,
+			FulfillmentStatus.RECEIVED,
+			cur != null ? cur.getAfterSaleStatus() : AfterSaleStatus.NONE
 		);
-		orderDomainService.recordOutbox(order, "user.confirm_receipt", payload);
+		order.setOrderStatus(next);
+		String mainOrderNo = order.getOrderNo();
+		List<OrderSubEntity> subs = orderSubJpaRepository.findByMainOrderNo(mainOrderNo);
+		OffsetDateTime receivedAt = OffsetDateTime.now();
+		for (OrderSubEntity s : subs) {
+			s.setReceivedAt(receivedAt);
+			s.setFulfillmentStatus(FulfillmentStatus.RECEIVED.name());
+			s.setCoreFlowStatus(CoreFlowStatus.COMPLETED.name());
+			s.setPaymentStatus(next.getPaymentStatus().name());
+			s.setAfterSaleStatus(next.getAfterSaleStatus().name());
+		}
+		if (!subs.isEmpty()) {
+			orderSubJpaRepository.saveAll(subs);
+		}
+		orderDomainService.save(order, expectedVersion);
+		orderDomainService.recordOutbox(order, OrderEventTypeConstants.ORDER_RECEIVED, cmd);
 		orderMetrics.processed("user.confirm_receipt");
 		auditService.record(cmd.getOrderId(), "user.confirm_receipt", "USER", cmd.getUserId(), true, Map.of());
 		recordAudit("user.confirm_receipt", cmd.getOrderId(), cmd.getUserId(), true, null);
@@ -1042,6 +902,23 @@ public class OrderApplicationService {
 		AuditEntry entry = new AuditEntry(System.currentTimeMillis(), commandName, orderId, actorId,
 			tenantId, traceId, success, errorCode);
 		try { rec.record(entry); } catch (Exception ignored) {}
+	}
+
+	private String generateSubOrderNo(String mainOrderNo, int index) {
+		String suffix = UUID.randomUUID().toString().replace("-", "");
+		suffix = suffix.substring(0, 8);
+		String base = mainOrderNo;
+		if (base == null) {
+			base = "";
+		}
+		if (base.length() > 30) {
+			base = base.substring(base.length() - 30);
+		}
+		String no = "SUB-" + base + "-" + index + "-" + suffix;
+		if (no.length() > 64) {
+			no = no.substring(0, 64);
+		}
+		return no;
 	}
 
 	/**
@@ -1272,46 +1149,7 @@ public class OrderApplicationService {
 		MainOrder mainOrder) {
 		List<SubOrder> subOrders = mainOrder.getSubOrders();
 		CreateOrderResponse response = new CreateOrderResponse();
-//		response.setMainOrderNo(mainOrder.getOrderNo().value());
-//		response.setMainOrderStatus(mainOrder.getMainStatus());
-//		response.setTotalPayAmount(mainOrder.getTotalPayAmount());
-////		response.setMergePayUrl(mergePayResponse.getMergePayUrl());
-//		response.setPlatformDiscount(mainOrder.getPlatformDiscount());
-//
-//		// 构建子订单响应列表
-//		List<CreateOrderResponse.SubOrderResponseDTO> subRespList = subOrders.stream()
-//			.map(sub -> {
-//				CreateOrderResponse.SubOrderResponseDTO subResp = new CreateOrderResponse.SubOrderResponseDTO();
-//				subResp.setSubOrderNo(sub.getOrderNo().value());
-//				subResp.setMerchantId(sub.getMerchantId());
-//				subResp.setMerchantName(sub.getMerchantName());
-//				subResp.setSubPayAmount(sub.getSubPayAmount());
-////				subResp.setSubOrderStatus(sub.getStatus());
-//				subResp.setMerchantDiscount(sub.getSubMerchantDiscount());
-//				subResp.setSubPlatformDiscount(sub.getSubPlatformDiscount());
-//				subResp.setSubFreight(sub.getSubFreight());
-//
-//				// 构建子订单SKU明细响应
-//				List<CreateOrderResponse.SubOrderItemResponseDTO> itemRespList = sub.getSubItems()
-//					.stream()
-//					.map(item -> {
-//						CreateOrderResponse.SubOrderItemResponseDTO itemResp = new CreateOrderResponse.SubOrderItemResponseDTO();
-//						itemResp.setSkuId(item.getSkuId());
-//						itemResp.setSkuName(item.getSkuName());
-//						itemResp.setSkuImage(item.getSkuImage());
-//						itemResp.setSpecCombination(item.getSpecCombination());
-//						itemResp.setUnitPrice(item.getUnitPrice());
-//						itemResp.setQuantity(item.getQuantity());
-//						itemResp.setItemTotalPrice(item.getItemTotalPrice());
-//						itemResp.setItemPlatformDiscount(item.getItemPlatformDiscount());
-//						return itemResp;
-//					})
-//					.collect(Collectors.toList());
-//				subResp.setSubItemList(itemRespList);
-//				return subResp;
-//			})
-//			.collect(Collectors.toList());
-//		response.setSubOrderList(subRespList);
+		// TOOD: 填充 response 字段
 		return response;
 	}
 }

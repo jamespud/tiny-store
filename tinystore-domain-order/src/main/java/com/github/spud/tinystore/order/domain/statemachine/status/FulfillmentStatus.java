@@ -12,6 +12,8 @@ public enum FulfillmentStatus {
 	
 	SHIPPED("SHIPPED", "已发货"),
 	
+	DELIVERED("DELIVERED", "已妥投"),
+	
 	RECEIVED("RECEIVED", "已确认收货"),
 	
 	REJECTED("REJECTED", "已拒收");

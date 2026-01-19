@@ -52,7 +52,5 @@ public interface OrderStatusAuditRepository extends JpaRepository<OrderStatusAud
 	/**
 	 * 查询订单的最后一次状态变更
 	 */
-	@Query("SELECT a FROM OrderStatusAuditPO a WHERE a.orderNo = :orderNo " +
-		"ORDER BY a.createdAt DESC LIMIT 1")
-	OrderStatusAuditPO findLastStatusChange(@Param("orderNo") String orderNo);
+	OrderStatusAuditPO findFirstByOrderNoOrderByCreatedAtDesc(String orderNo);
 }

@@ -159,7 +159,7 @@ public class OrderStatusAuditService {
 	 */
 	@Transactional(readOnly = true)
 	public OrderStatusAuditPO getLastStatusChange(String orderNo) {
-		return auditRepository.findLastStatusChange(orderNo);
+		return auditRepository.findFirstByOrderNoOrderByCreatedAtDesc(orderNo);
 	}
 
 	/**
