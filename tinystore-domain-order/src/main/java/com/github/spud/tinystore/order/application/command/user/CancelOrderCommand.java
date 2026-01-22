@@ -2,12 +2,14 @@ package com.github.spud.tinystore.order.application.command.user;
 
 import java.util.UUID;
 import lombok.AllArgsConstructor;
+import lombok.Data;
 
 /**
  * @author Spud
  * @date 2025/9/6
  */
 @AllArgsConstructor
+@Data
 public class CancelOrderCommand {
 
 	/**

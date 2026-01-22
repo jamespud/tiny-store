@@ -8,6 +8,12 @@ import com.github.spud.tinystore.order.domain.model.SubOrder;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CalculateFreightResponse;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CalculateMerchantFreightRequest;
+import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CheckoutCommitRequest;
+import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CheckoutCommitResponse;
+import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CheckoutQuoteRequest;
+import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CheckoutQuoteResponse;
+import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CheckoutReleaseRequest;
+import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CheckoutReleaseResponse;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.MerchantInfo;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.PreUseCouponResponse;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.PreUseMerchantCouponRequest;
@@ -60,7 +66,22 @@ public class PromotionService {
 	}
 
 	public void rollbackCouponUse(String lockId) {
+		CheckoutReleaseRequest req = new CheckoutReleaseRequest();
+		req.setQuoteId(lockId);
+		req.setReason("rollback");
+		promotionClient.checkoutRelease("order:promotion:release:" + lockId, req);
+	}
 
+	public CheckoutQuoteResponse checkoutQuote(String idempotencyKey, CheckoutQuoteRequest request) {
+		return promotionClient.checkoutQuote(idempotencyKey, request);
+	}
+
+	public CheckoutCommitResponse checkoutCommit(String idempotencyKey, CheckoutCommitRequest request) {
+		return promotionClient.checkoutCommit(idempotencyKey, request);
+	}
+
+	public CheckoutReleaseResponse checkoutRelease(String idempotencyKey, CheckoutReleaseRequest request) {
+		return promotionClient.checkoutRelease(idempotencyKey, request);
 	}
 
 	public List<SubOrder> allocatePlatformDiscount(List<SubOrder> subOrderList,
@@ -74,5 +95,4 @@ public class PromotionService {
 		return null;
 	}
 }
-
 

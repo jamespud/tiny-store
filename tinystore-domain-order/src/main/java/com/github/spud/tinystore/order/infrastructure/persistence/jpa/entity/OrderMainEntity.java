@@ -66,6 +66,12 @@ public class OrderMainEntity {
 	@Column(name = "address_snapshot", columnDefinition = "jsonb")
 	private String addressSnapshot;
 
+	@Column(name = "promotion_quote_id", length = 64)
+	private String promotionQuoteId;
+
+	@Column(name = "promotion_input_hash", length = 64)
+	private String promotionInputHash;
+
 	@Version
 	@Column(name = "version", nullable = false)
 	private Long version = 0L;
@@ -98,4 +104,3 @@ public class OrderMainEntity {
 		if (this.version == null) this.version = 0L;
 	}
 }
-
