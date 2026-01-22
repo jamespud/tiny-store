@@ -48,6 +48,11 @@ import com.github.spud.tinystore.order.domain.statemachine.status.CoreFlowStatus
 import com.github.spud.tinystore.order.domain.statemachine.status.FulfillmentStatus;
 import com.github.spud.tinystore.order.domain.statemachine.status.OrderStatus;
 import com.github.spud.tinystore.order.domain.statemachine.status.PaymentStatus;
+import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CheckoutCommitRequest;
+import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CheckoutCommitResponse;
+import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CheckoutQuoteRequest;
+import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CheckoutQuoteResponse;
+import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CheckoutReleaseRequest;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.MerchantInfo;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.PreUseCouponResponse;
 import com.github.spud.tinystore.order.interfaces.dto.response.CreateOrderResponse;
@@ -191,25 +196,6 @@ public class OrderApplicationService {
 		java.util.Map<String, com.github.spud.tinystore.order.domain.service.ProductService.SkuDTO> skuMap =
 			skuResp != null ? skuResp.getSkuMap() : java.util.Collections.emptyMap();
 
-		java.util.List<com.github.spud.tinystore.order.application.result.ConfirmOrderResult.ShopProductSnapshot> shopLines = new java.util.ArrayList<>();
-		com.github.spud.tinystore.order.domain.model.Money total = com.github.spud.tinystore.order.domain.model.Money.of(0);
-
-		for (var merchantSkus : cmd.getMerchantSkus()) {
-			java.util.List<com.github.spud.tinystore.order.application.result.ConfirmOrderResult.ProductSnapshot> products = new java.util.ArrayList<>();
-			com.github.spud.tinystore.order.domain.model.Money shopTotal = com.github.spud.tinystore.order.domain.model.Money.of(0);
-			for (var item : merchantSkus.skuItems()) {
-				var sku = skuMap.get(item.skuId());
-				long unit = sku != null ? sku.getUnitPrice() : 0L;
-				int qty = item.quantity() != null ? item.quantity() : 0;
-				com.github.spud.tinystore.order.domain.model.Money unitMoney = com.github.spud.tinystore.order.domain.model.Money.of(unit);
-				com.github.spud.tinystore.order.domain.model.Money payable = unitMoney.multiply(qty);
-				products.add(new com.github.spud.tinystore.order.application.result.ConfirmOrderResult.ProductSnapshot(item.skuId(), unitMoney, payable, qty));
-				shopTotal = shopTotal.add(payable);
-			}
-			shopLines.add(new com.github.spud.tinystore.order.application.result.ConfirmOrderResult.ShopProductSnapshot(merchantSkus.merchantId(), products, shopTotal));
-			total = total.add(shopTotal);
-		}
-
 		String tenantId = TenantContext.getTenantId();
 		if (tenantId == null || tenantId.isBlank()) {
 			tenantId = "default";
@@ -217,6 +203,24 @@ public class OrderApplicationService {
 
 		String mainOrderNo = orderNumberService.generateOrderNumber(cmd.getUserId());
 		com.github.spud.tinystore.order.domain.model.vo.OrderNo ono = com.github.spud.tinystore.order.domain.model.vo.OrderNo.of(mainOrderNo);
+
+		CheckoutQuoteResponse quoteResp = promotionService.checkoutQuote(
+			buildPromotionIdempotencyKey(cmd.getIdempotentKey(), "quote", mainOrderNo),
+			buildCheckoutQuoteRequest(cmd, skuMap)
+		);
+		if (quoteResp == null || quoteResp.getSnapshot() == null || quoteResp.getStatus() == null
+			|| !quoteResp.getStatus().name().startsWith("OK")) {
+			throw new IllegalStateException("promotion quote failed");
+		}
+		var snapshot = quoteResp.getSnapshot();
+		long totalAmountCents = snapshot.getItemsTotalCents() + snapshot.getShippingFeeCents();
+		long discountAmountCents = snapshot.getPromotionDiscountTotalCents() + snapshot.getCouponDiscountTotalCents();
+		long payableAmountCents = snapshot.getPayableCents();
+		Money total = Money.of(totalAmountCents);
+		Money payable = Money.of(payableAmountCents);
+
+		java.util.List<com.github.spud.tinystore.order.application.result.ConfirmOrderResult.ShopProductSnapshot> shopLines =
+			buildShopLines(cmd.getMerchantSkus(), snapshot, total.currency());
 
 		OrderMainEntity mainEntity = new OrderMainEntity()
 			.setOrderNo(mainOrderNo)
@@ -226,10 +230,13 @@ public class OrderApplicationService {
 			.setPaymentStatus(PaymentStatus.CREATED.name())
 			.setFulfillmentStatus(FulfillmentStatus.NONE.name())
 			.setAfterSaleStatus(AfterSaleStatus.NONE.name())
-			.setTotalAmount(total.amount())
-			.setDiscountAmount(0L)
-			.setPayableAmount(total.amount())
+			.setTotalAmount(totalAmountCents)
+			.setDiscountAmount(discountAmountCents)
+			.setPayableAmount(payableAmountCents)
 			.setCurrency(total.currency());
+		mainEntity.setAddressId(cmd.getAddressId());
+		mainEntity.setPromotionQuoteId(quoteResp.getQuoteId());
+		mainEntity.setPromotionInputHash(snapshot.getVersion() != null ? snapshot.getVersion().getInputHash() : null);
 		orderMainJpaRepository.save(mainEntity);
 
 		Map<String, String> merchantSubOrderNo = new HashMap<>();
@@ -257,19 +264,22 @@ public class OrderApplicationService {
 		for (var merchantSkus : cmd.getMerchantSkus()) {
 			String subOrderNo = merchantSubOrderNo.get(merchantSkus.merchantId());
 			for (var item : merchantSkus.skuItems()) {
-				SkuDTO sku = skuMap.get(item.skuId());
-				long unit = sku != null ? sku.getUnitPrice() : 0L;
 				int qty = item.quantity() != null ? item.quantity() : 0;
-				long lineTotal = unit * (long) qty;
-				Map<String, Object> snapshot = new HashMap<>();
-				snapshot.put("skuId", item.skuId());
-				snapshot.put("merchantId", merchantSkus.merchantId());
-				snapshot.put("title", sku != null && sku.getSkuName() != null ? sku.getSkuName() : item.skuId());
-				snapshot.put("specJson", sku != null ? sku.getSecJson() : null);
-				snapshot.put("unitPriceCents", unit);
-				snapshot.put("currency", total.currency());
-				snapshot.put("snapshotTime", Instant.now().toString());
-				String snapshotJson = objectMapper.writeValueAsString(snapshot);
+				var priced = findSnapshotLine(snapshot, merchantSkus.merchantId(), item.skuId());
+				long unit = priced != null ? priced.getFinalUnitPriceCents() : 0L;
+				long lineTotal = priced != null ? priced.getLineSubtotalCents() : unit * (long) qty;
+				long lineDiscount = priced != null ? priced.getLineDiscountAllocatedCents() : 0L;
+				long linePayable = priced != null ? priced.getLinePayableCents() : (lineTotal - lineDiscount);
+				Map<String, Object> skuSnapshot = new HashMap<>();
+				skuSnapshot.put("skuId", item.skuId());
+				skuSnapshot.put("merchantId", merchantSkus.merchantId());
+				SkuDTO sku = skuMap.get(item.skuId());
+				skuSnapshot.put("title", sku != null && sku.getSkuName() != null ? sku.getSkuName() : item.skuId());
+				skuSnapshot.put("specJson", sku != null ? sku.getSecJson() : null);
+				skuSnapshot.put("unitPriceCents", unit);
+				skuSnapshot.put("currency", total.currency());
+				skuSnapshot.put("snapshotTime", Instant.now().toString());
+				String snapshotJson = objectMapper.writeValueAsString(skuSnapshot);
 				itemEntities.add(new OrderItemEntity()
 					.setMainOrderNo(mainOrderNo)
 					.setSubOrderNo(subOrderNo)
@@ -278,8 +288,8 @@ public class OrderApplicationService {
 					.setQuantity(qty)
 					.setUnitPriceAmount(unit)
 					.setLineTotalAmount(lineTotal)
-					.setLineDiscountAmount(0L)
-					.setLinePayableAmount(lineTotal)
+					.setLineDiscountAmount(lineDiscount)
+					.setLinePayableAmount(linePayable)
 					.setCurrency(total.currency())
 					.setSkuSnapshot(snapshotJson)
 				);
@@ -298,7 +308,7 @@ public class OrderApplicationService {
 			AfterSaleStatus.NONE
 		));
 		agg.setTotal(total);
-		agg.setPayable(total);
+		agg.setPayable(payable);
 		agg.setVersion(0);
 		orderDomainService.recordOutbox(agg, OrderEventTypeConstants.ORDER_CREATED, Map.of(
 			"mainOrderNo", mainOrderNo,
@@ -311,7 +321,7 @@ public class OrderApplicationService {
 		// set main order no into result
 		result.setMainOrderNo(ono);
 		result.setLines(shopLines);
-		result.setSummary(new com.github.spud.tinystore.order.application.result.ConfirmOrderResult.OrderSummary(total, total, java.util.List.of(), java.util.List.of(), java.util.List.of()));
+		result.setSummary(new com.github.spud.tinystore.order.application.result.ConfirmOrderResult.OrderSummary(total, payable, java.util.List.of(), java.util.List.of(), java.util.List.of()));
 
 		// save idempotency result if key provided (best-effort)
 		if (cmd.getIdempotentKey() != null && !cmd.getIdempotentKey().isBlank()) {
@@ -350,6 +360,33 @@ public class OrderApplicationService {
 
 			OrderItem order = orderDomainService.loadForUpdate(cmd.getOrderId());
 			long expectedVersion = order.getVersion();
+
+			OrderMainEntity main = orderMainJpaRepository.findForUpdateByOrderNo(order.getOrderNo()).orElse(null);
+			if (main != null && main.getPromotionQuoteId() != null && !main.getPromotionQuoteId().isBlank()) {
+				CheckoutCommitRequest commitReq = new CheckoutCommitRequest();
+				commitReq.setQuoteId(main.getPromotionQuoteId());
+				commitReq.setOrderNo(main.getOrderNo());
+				commitReq.setInputHash(main.getPromotionInputHash());
+				commitReq.setPayNo(cmd.getPaymentId());
+				CheckoutCommitResponse commitResp = promotionService.checkoutCommit(
+					buildPromotionIdempotencyKey(idempotencyKey, "commit", main.getOrderNo()),
+					commitReq
+				);
+				if (commitResp == null || commitResp.getStatus() == null) {
+					throw new IllegalStateException("promotion commit failed");
+				}
+				if (commitResp.getStatus().name().startsWith("REQUOTE")) {
+					throw new IllegalStateException("promotion requote required after payment");
+				}
+				if (commitResp.getSnapshot() != null) {
+					long expectedPayable = commitResp.getSnapshot().getPayableCents();
+					long paid = cmd.getAmount() != null ? cmd.getAmount().amount() : 0L;
+					if (expectedPayable != paid) {
+						throw new IllegalStateException("paid amount mismatch with promotion snapshot");
+					}
+					applyPromotionSnapshotToOrder(main, commitResp);
+				}
+			}
 			OrderStatus cur = order.getOrderStatus();
 			OrderStatus next = new OrderStatus(
 				CoreFlowStatus.PAID,
@@ -595,12 +632,10 @@ public class OrderApplicationService {
 
 	public Object cancelOrder(CancelOrderCommand cmd) {
 		recordAudit("user.cancel", null, null, true, null);
-		// TODO: 根据订单状态取消订单
-		// TODO: (opt) 发送取消订单请求给商家, 等待商家确认
-		// TODO: (opt) 商家确认后，通过确认接口调用取消订单
-		// TODO: 发送取消订单事件
-		// TODO: 释放库存, 优惠券等
-		// TODO: (支付服务) 异步退款
+		if (cmd != null && cmd.getOrderId() != null) {
+			OrderItem order = orderDomainService.loadForUpdate(String.valueOf(cmd.getOrderId()));
+			releasePromotionIfPresent(cmd.getIdempotencyKey(), order.getOrderNo(), cmd.getReasonCode());
+		}
 		String result = "待确认";
 		recordAudit("user.cancel", null, null, true, null);
 		return result;
@@ -980,6 +1015,7 @@ public class OrderApplicationService {
 			log.info("Timeout cancelling order: {}, schedule: {}", cmd.getOrderId(), cmd.getScheduleId());
 			OrderItem order = orderDomainService.loadForUpdate(String.valueOf(cmd.getOrderId()));
 			long expectedVersion = order.getVersion();
+			releasePromotionIfPresent(idempotencyKey, order.getOrderNo(), "PAYMENT_TIMEOUT");
 			// 占位：状态机与资源释放逻辑待补齐
 			orderDomainService.save(order, expectedVersion);
 			orderDomainService.recordOutbox(order, OrderEventTypeConstants.ORDER_CANCELLED, Map.of("reason", "PAYMENT_TIMEOUT"));
@@ -1034,6 +1070,148 @@ public class OrderApplicationService {
 	}
 
 	// -------------------------- 工具方法 --------------------------
+	private String buildPromotionIdempotencyKey(String base, String operation, String stableId) {
+		String op = operation == null ? "op" : operation;
+		if (base == null || base.isBlank()) {
+			return "order:promotion:" + op + ":" + stableId;
+		}
+		return base + ":promotion:" + op;
+	}
+
+	private CheckoutQuoteRequest buildCheckoutQuoteRequest(SubmitOrderCommand cmd, Map<String, SkuDTO> skuMap) {
+		CheckoutQuoteRequest req = new CheckoutQuoteRequest();
+		req.setUserId(cmd.getUserId());
+		req.setTraceId(null);
+		req.setAddressId(cmd.getAddressId());
+
+		List<CheckoutQuoteRequest.Line> lines = new ArrayList<>();
+		Map<String, List<String>> shopCoupons = new HashMap<>();
+		for (MerchantSkuDTO g : cmd.getMerchantSkus()) {
+			if (g.merchantCouponId() != null && !g.merchantCouponId().isBlank()) {
+				shopCoupons.put(g.merchantId(), List.of(g.merchantCouponId()));
+			}
+			for (ConfirmOrderCommand.SkuItemDTO it : g.skuItems()) {
+				SkuDTO sku = skuMap.get(it.skuId());
+				CheckoutQuoteRequest.Line l = new CheckoutQuoteRequest.Line();
+				l.setSkuId(it.skuId());
+				l.setShopId(g.merchantId());
+				l.setQuantity(it.quantity());
+				l.setBaseUnitPriceCents(sku != null ? sku.getUnitPrice() : 0L);
+				l.setWeightGrams(sku != null ? kgToGrams(sku.getWeight()) : 0L);
+				lines.add(l);
+			}
+		}
+		req.setLines(lines);
+
+		CheckoutQuoteRequest.AppliedIntent intent = new CheckoutQuoteRequest.AppliedIntent();
+		if (cmd.getPlatformCouponId() != null && !cmd.getPlatformCouponId().isBlank()) {
+			intent.setPlatformCouponIds(List.of(cmd.getPlatformCouponId()));
+		} else {
+			intent.setPlatformCouponIds(List.of());
+		}
+		intent.setShopCouponIdsByShop(shopCoupons);
+		req.setAppliedIntent(intent);
+		return req;
+	}
+
+	private List<ConfirmOrderResult.ShopProductSnapshot> buildShopLines(List<MerchantSkuDTO> merchantSkus,
+		com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.PricingSnapshot snapshot, String currency) {
+		List<ConfirmOrderResult.ShopProductSnapshot> shopLines = new ArrayList<>();
+		for (MerchantSkuDTO g : merchantSkus) {
+			List<ConfirmOrderResult.ProductSnapshot> products = new ArrayList<>();
+			Money shopTotal = Money.ofCents(0L, currency);
+			for (com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.PricingSnapshot.PricedLine l : snapshot.getLines()) {
+				if (!g.merchantId().equals(l.getShopId())) {
+					continue;
+				}
+				Money unit = Money.ofCents(l.getFinalUnitPriceCents(), currency);
+				Money linePayable = Money.ofCents(l.getLinePayableCents(), currency);
+				products.add(new ConfirmOrderResult.ProductSnapshot(l.getSkuId(), unit, linePayable, l.getQuantity()));
+				shopTotal = shopTotal.add(linePayable);
+			}
+			shopLines.add(new ConfirmOrderResult.ShopProductSnapshot(g.merchantId(), products, shopTotal));
+		}
+		return shopLines;
+	}
+
+	private com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.PricingSnapshot.PricedLine findSnapshotLine(
+		com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.PricingSnapshot snapshot, String shopId,
+		String skuId) {
+		if (snapshot == null || snapshot.getLines() == null) {
+			return null;
+		}
+		for (com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.PricingSnapshot.PricedLine l : snapshot.getLines()) {
+			if (shopId.equals(l.getShopId()) && skuId.equals(l.getSkuId())) {
+				return l;
+			}
+		}
+		return null;
+	}
+
+	private void applyPromotionSnapshotToOrder(OrderMainEntity main, CheckoutCommitResponse commitResp) {
+		com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.PricingSnapshot snapshot = commitResp.getSnapshot();
+		if (snapshot == null) {
+			return;
+		}
+		main.setPromotionQuoteId(commitResp.getFinalQuoteId());
+		main.setPromotionInputHash(snapshot.getVersion() != null ? snapshot.getVersion().getInputHash() : null);
+		main.setTotalAmount(snapshot.getItemsTotalCents() + snapshot.getShippingFeeCents());
+		main.setDiscountAmount(snapshot.getPromotionDiscountTotalCents() + snapshot.getCouponDiscountTotalCents());
+		main.setPayableAmount(snapshot.getPayableCents());
+		orderMainJpaRepository.save(main);
+
+		Map<String, String> subToMerchant = new HashMap<>();
+		for (OrderSubEntity s : orderSubJpaRepository.findByMainOrderNo(main.getOrderNo())) {
+			if (s.getSubOrderNo() != null && s.getMerchantId() != null) {
+				subToMerchant.put(s.getSubOrderNo(), s.getMerchantId());
+			}
+		}
+		List<OrderItemEntity> items = orderItemJpaRepository.findByMainOrderNoOrderByLineNoAsc(main.getOrderNo());
+		for (OrderItemEntity it : items) {
+			String shopId = subToMerchant.get(it.getSubOrderNo());
+			if (shopId == null) {
+				continue;
+			}
+			com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.PricingSnapshot.PricedLine pl = null;
+			for (com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.PricingSnapshot.PricedLine l : snapshot.getLines()) {
+				if (shopId.equals(l.getShopId()) && it.getSkuId().equals(l.getSkuId())) {
+					pl = l;
+					break;
+				}
+			}
+			if (pl == null) {
+				continue;
+			}
+			it.setUnitPriceAmount(pl.getFinalUnitPriceCents());
+			it.setLineTotalAmount(pl.getLineSubtotalCents());
+			it.setLineDiscountAmount(pl.getLineDiscountAllocatedCents());
+			it.setLinePayableAmount(pl.getLinePayableCents());
+		}
+		if (!items.isEmpty()) {
+			orderItemJpaRepository.saveAll(items);
+		}
+	}
+
+	private void releasePromotionIfPresent(String idempotencyKey, String orderNo, String reason) {
+		if (orderNo == null || orderNo.isBlank()) {
+			return;
+		}
+		OrderMainEntity main = orderMainJpaRepository.findForUpdateByOrderNo(orderNo).orElse(null);
+		if (main == null || main.getPromotionQuoteId() == null || main.getPromotionQuoteId().isBlank()) {
+			return;
+		}
+		CheckoutReleaseRequest req = new CheckoutReleaseRequest();
+		req.setQuoteId(main.getPromotionQuoteId());
+		req.setOrderNo(orderNo);
+		req.setReason(reason);
+		promotionService.checkoutRelease(buildPromotionIdempotencyKey(idempotencyKey, "release", orderNo), req);
+	}
+
+	private long kgToGrams(double kg) {
+		long g = Math.round(kg * 1000.0d);
+		return Math.max(0L, g);
+	}
+
 	private void validateSkuAndMerchantConsistency(
 		List<MerchantSkuDTO> merchantSkus,
 		Map<String, SkuDTO> skuMap

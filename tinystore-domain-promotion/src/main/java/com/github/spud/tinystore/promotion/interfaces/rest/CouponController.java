@@ -10,6 +10,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.github.spud.tinystore.promotion.application.service.ConfirmUseAppService;
+import com.github.spud.tinystore.promotion.application.service.PreUseAppService;
+import com.github.spud.tinystore.promotion.application.service.RollbackAppService;
 import com.github.spud.tinystore.promotion.interfaces.dto.ConfirmUseRequest;
 import com.github.spud.tinystore.promotion.interfaces.dto.ConfirmUseResponse;
 import com.github.spud.tinystore.promotion.interfaces.dto.CouponListResponse;
@@ -25,6 +28,17 @@ import com.github.spud.tinystore.promotion.interfaces.dto.RollbackResponse;
 @Validated
 public class CouponController {
 
+	private final PreUseAppService preUseAppService;
+	private final ConfirmUseAppService confirmUseAppService;
+	private final RollbackAppService rollbackAppService;
+
+	public CouponController(PreUseAppService preUseAppService, ConfirmUseAppService confirmUseAppService,
+		RollbackAppService rollbackAppService) {
+		this.preUseAppService = preUseAppService;
+		this.confirmUseAppService = confirmUseAppService;
+		this.rollbackAppService = rollbackAppService;
+	}
+
 	@PostMapping("/receive")
 	public ResponseEntity<ReceiveCouponResponse> receiveCoupon(
 		@RequestHeader("Idempotency-Key") String idempotencyKey,
@@ -37,24 +51,21 @@ public class CouponController {
 	public ResponseEntity<PreUseResponse> preUse(
 		@RequestHeader("Idempotency-Key") String idempotencyKey,
 		@RequestBody @Validated PreUseRequest request) {
-		// TODO: Delegate to PreUseAppService.
-		return ResponseEntity.ok(new PreUseResponse());
+		return ResponseEntity.ok(preUseAppService.preUse(idempotencyKey, request));
 	}
 
 	@PostMapping("/confirm-use")
 	public ResponseEntity<ConfirmUseResponse> confirmUse(
 		@RequestHeader("Idempotency-Key") String idempotencyKey,
 		@RequestBody @Validated ConfirmUseRequest request) {
-		// TODO: Delegate to ConfirmUseAppService.
-		return ResponseEntity.ok(new ConfirmUseResponse());
+		return ResponseEntity.ok(confirmUseAppService.confirm(idempotencyKey, request));
 	}
 
 	@PostMapping("/rollback")
 	public ResponseEntity<RollbackResponse> rollback(
 		@RequestHeader("Idempotency-Key") String idempotencyKey,
 		@RequestBody @Validated RollbackRequest request) {
-		// TODO: Delegate to RollbackAppService.
-		return ResponseEntity.ok(RollbackResponse.success("pending"));
+		return ResponseEntity.ok(rollbackAppService.rollback(idempotencyKey, request));
 	}
 
 	@GetMapping("/list")
