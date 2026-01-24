@@ -30,7 +30,6 @@ import org.springframework.context.annotation.Configuration;
 			Product Service provides comprehensive product management capabilities including:
 			- Product CRUD operations (create, update, publish, archive)
 			- SKU management with dynamic specifications and attributes
-			- Dynamic pricing with rule-based calculation engine
 			- Multi-tenant isolation with tenant-scoped data access
 			- Event-driven architecture with outbox pattern
 			
@@ -63,8 +62,7 @@ import org.springframework.context.annotation.Configuration;
 	security = @SecurityRequirement(name = "bearerAuth"),
 	tags = {
 		@Tag(name = "Products", description = "Product lifecycle management - create, update, publish, archive"),
-		@Tag(name = "SKUs", description = "SKU management - specifications, attributes, inventory references"),
-		@Tag(name = "Pricing", description = "Dynamic pricing calculation based on rules and context")
+		@Tag(name = "SKUs", description = "SKU management - specifications, attributes, inventory references")
 	}
 )
 @SecurityScheme(

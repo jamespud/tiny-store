@@ -54,6 +54,20 @@ public class Product {
 		this.updateTime = LocalDateTime.now();
 	}
 
+	private Product(ProductId productId, String name, ProductCategory category,
+		Brand brand, ProductType type, List<ProductAttribute> baseAttributes,
+		ProductStatus status, LocalDateTime createTime, LocalDateTime updateTime) {
+		this.productId = productId;
+		this.name = name;
+		this.category = category;
+		this.brand = brand;
+		this.type = type;
+		this.baseAttributes = baseAttributes;
+		this.status = status != null ? status : ProductStatus.DRAFT;
+		this.createTime = createTime != null ? createTime : LocalDateTime.now();
+		this.updateTime = updateTime != null ? updateTime : this.createTime;
+	}
+
 	// 工厂方法（封装创建规则）
 	public static Product create(ProductId productId, String name, ProductCategory category,
 		Brand brand, ProductType type, List<ProductAttribute> baseAttributes) {
@@ -64,6 +78,13 @@ public class Product {
 		return new Product(productId, name, category, brand, type, baseAttributes);
 	}
 
+	public static Product rehydrate(ProductId productId, String name, ProductCategory category,
+		Brand brand, ProductType type, List<ProductAttribute> baseAttributes,
+		ProductStatus status, LocalDateTime createTime, LocalDateTime updateTime) {
+		return new Product(productId, name, category, brand, type, baseAttributes, status, createTime,
+			updateTime);
+	}
+
 	// 领域行为：更新基础属性
 	public void updateAttributes(List<ProductAttribute> newAttributes) {
 		if (!isModifiableStatus()) {
@@ -71,6 +92,14 @@ public class Product {
 		}
 		validateAttributes(newAttributes, this.category);
 		this.baseAttributes = newAttributes;
+		this.updateTime = LocalDateTime.now();
+	}
+
+	public void publish() {
+		if (this.status != ProductStatus.DRAFT) {
+			throw new IllegalArgumentException("Only DRAFT products can be published");
+		}
+		this.status = ProductStatus.ONLINE;
 		this.updateTime = LocalDateTime.now();
 	}
 

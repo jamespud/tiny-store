@@ -22,7 +22,7 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
  * CacheConfig - Redis cache configuration for Product Service
  * <p>
  * Configures distributed caching with Redis for: - Product entities (30 min TTL) - SKU entities (30
- * min TTL) - Pricing calculation results (10 min TTL)
+	 * min TTL)
  * <p>
  * Features: - JSON serialization with Jackson for human-readable cache values - Dynamic TTL
  * configuration via application properties - Cache key prefixing for multi-service deployment -
@@ -41,9 +41,6 @@ public class CacheConfig {
 
 	@Value("${tinystore.product.cache.ttl.sku:1800}")
 	private long skuCacheTtlSeconds;
-
-	@Value("${tinystore.product.cache.ttl.pricing:600}")
-	private long pricingCacheTtlSeconds;
 
 	@Value("${tinystore.product.cache.key-prefix:product-service}")
 	private String cacheKeyPrefix;
@@ -91,12 +88,6 @@ public class CacheConfig {
 		// SKU cache: 30 minutes (or configured value)
 		cacheConfigurations.put("skus",
 			defaultConfig.entryTtl(Duration.ofSeconds(skuCacheTtlSeconds))
-		);
-
-		// Pricing results cache: 10 minutes (or configured value)
-		// Shorter TTL for pricing due to frequent rule changes
-		cacheConfigurations.put("pricing-results",
-			defaultConfig.entryTtl(Duration.ofSeconds(pricingCacheTtlSeconds))
 		);
 
 		// Build cache manager

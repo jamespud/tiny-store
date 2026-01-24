@@ -1,6 +1,5 @@
 package com.github.spud.tinystore.product.infrastructure.cache;
 
-import com.github.spud.tinystore.product.domain.event.PriceChangedEvent;
 import com.github.spud.tinystore.product.domain.event.ProductCreatedEvent;
 import com.github.spud.tinystore.product.domain.event.ProductPublishedEvent;
 import org.slf4j.Logger;
@@ -14,8 +13,7 @@ import org.springframework.stereotype.Component;
  * <p>
  * Listens to domain events and invalidates corresponding cache entries: - ProductCreatedEvent,
  * ProductUpdatedEvent -> Invalidate product:{tenantId}:{productId} - SkuCreatedEvent,
- * SkuUpdatedEvent -> Invalidate sku:{tenantId}:{skuId} - PricingRuleChangedEvent -> Invalidate
- * pricing:rules:{tenantId}:{productId}
+	 * SkuUpdatedEvent -> Invalidate sku:{tenantId}:{skuId}
  * <p>
  * Cache invalidation strategy: 1. Event-driven (immediate invalidation on domain changes) 2.
  * TTL-based expiration (fallback for missed events)
@@ -47,17 +45,6 @@ public class ProductEventCacheInvalidationListener {
 		// String cacheKey = CacheKeyUtil.productKey(tenantId, productId);
 		// evictCache("product", cacheKey);
 		logger.info("ProductCreatedEvent received, cache invalidation placeholder");
-	}
-
-	/**
-	 * Handle PriceChangedEvent - invalidate SKU and pricing caches
-	 *
-	 * @param event PriceChangedEvent
-	 */
-	@EventListener
-	public void onPriceChanged(PriceChangedEvent event) {
-		// TODO: Invalidate SKU cache and pricing rules cache
-		logger.info("PriceChangedEvent received, cache invalidation placeholder");
 	}
 
 	/**

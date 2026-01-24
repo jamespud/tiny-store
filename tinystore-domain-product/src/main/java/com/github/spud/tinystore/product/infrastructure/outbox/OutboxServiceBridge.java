@@ -1,6 +1,5 @@
 package com.github.spud.tinystore.product.infrastructure.outbox;
 
-import com.github.spud.tinystore.product.domain.event.PriceChangedEvent;
 import com.github.spud.tinystore.product.domain.event.ProductCreatedEvent;
 import com.github.spud.tinystore.product.domain.event.ProductPublishedEvent;
 import org.springframework.stereotype.Component;
@@ -47,15 +46,6 @@ public class OutboxServiceBridge {
 	 * @param event ProductCreatedEvent
 	 */
 	public void publish(ProductCreatedEvent event) {
-		publish((Object) event);
-	}
-
-	/**
-	 * Publish PriceChangedEvent
-	 *
-	 * @param event PriceChangedEvent
-	 */
-	public void publish(PriceChangedEvent event) {
 		publish((Object) event);
 	}
 

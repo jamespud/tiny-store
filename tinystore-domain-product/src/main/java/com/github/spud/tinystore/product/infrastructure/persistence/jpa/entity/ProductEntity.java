@@ -34,6 +34,9 @@ public class ProductEntity {
 	@Column(name = "tenant_id", nullable = false)
 	private String tenantId;
 
+	@Column(name = "product_id", nullable = false)
+	private String productId;
+
 	@Column(name = "name", nullable = false)
 	private String name;
 

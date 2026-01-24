@@ -37,6 +37,10 @@ public class ProductRepositoryAdapter implements ProductRepository {
 	public Product save(Product product) {
 		String tenantId = tenantContext.getTenantId();
 		ProductEntity entity = mapper.toEntity(product, tenantId);
+		if (entity.getProductId() != null) {
+			jpaRepository.findByProductIdAndTenantId(entity.getProductId(), tenantId)
+				.ifPresent(existing -> entity.setId(existing.getId()));
+		}
 		ProductEntity saved = jpaRepository.save(entity);
 		return mapper.toDomain(saved);
 	}

@@ -1,8 +1,11 @@
 package com.github.spud.tinystore.product.infrastructure.persistence.jpa.mapper;
 
 import com.github.spud.tinystore.product.domain.model.aggregate.Sku;
+import com.github.spud.tinystore.product.domain.model.value.Money;
+import com.github.spud.tinystore.product.domain.model.valueobject.SpecificationCombination;
 import com.github.spud.tinystore.product.domain.model.valueobject.SkuStatus;
 import com.github.spud.tinystore.product.infrastructure.persistence.jpa.entity.SkuEntity;
+import java.math.BigDecimal;
 import org.springframework.stereotype.Component;
 
 /**
@@ -30,6 +33,7 @@ public class SkuMapper {
 		SkuEntity entity = new SkuEntity();
 		entity.setTenantId(tenantId);
 		entity.setProductId(sku.getProductId());
+		entity.setSkuId(sku.getSkuId());
 		entity.setBarCode(sku.getBarCode());
 		entity.setStatus(sku.getStatus() != null ? sku.getStatus().name() : SkuStatus.AVAILABLE.name());
 
@@ -51,16 +55,21 @@ public class SkuMapper {
 		if (entity == null) {
 			return null;
 		}
-
-		// Simplified: Use Sku factory method to create domain object
-		// TODO: Parse spec combination properly based on SpecificationCombination API
-		return Sku.create(
-			String.valueOf(entity.getId()),
+		SpecificationCombination specs = new SpecificationCombination(entity.getSpecCombination());
+		Sku sku = Sku.create(
+			entity.getSkuId(),
 			entity.getProductId(),
-			null, // Placeholder for specs parsing
+			specs,
 			entity.getBarCode()
 		);
+		if (entity.getStatus() != null) {
+			sku.setStatus(SkuStatus.valueOf(entity.getStatus()));
+		}
+		if (entity.getUnitPriceCents() != null) {
+			sku.setBasePrice(Money.of(BigDecimal.valueOf(entity.getUnitPriceCents(), 2)));
+		}
+		sku.setCreateTime(entity.getCreatedAt());
+		return sku;
 	}
 }
-
 

@@ -3,8 +3,8 @@ package com.github.spud.tinystore.product.application.service;
 import com.github.spud.tinystore.product.domain.model.aggregate.Product;
 import com.github.spud.tinystore.product.domain.model.valueobject.ProductStatus;
 import com.github.spud.tinystore.product.domain.model.valueobject.ProductId;
-import com.github.spud.tinystore.product.domain.model.aggregate.ProductStatusFlow;
 import com.github.spud.tinystore.product.infrastructure.persistence.jpa.adapter.ProductRepositoryAdapter;
+import com.github.spud.tinystore.product.infrastructure.persistence.jpa.config.TenantRepositoryConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,8 +13,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Instant;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -30,9 +28,9 @@ class ProductServiceTest {
     
     @Mock
     private ProductRepositoryAdapter productRepository;
-    
-    @Mock
-    private ProductStatusFlow productStatusFlow;
+
+	@Mock
+	private TenantRepositoryConfig.TenantContext tenantContext;
     
     @InjectMocks
     private ProductService productService;
@@ -43,10 +41,8 @@ class ProductServiceTest {
     @BeforeEach
     void setUp() {
         testProduct = mock(Product.class);
-        testProductId = mock(ProductId.class);
-        
-        when(testProduct.getProductId()).thenReturn(testProductId);
-        when(testProductId.getId()).thenReturn("prod-123");
+		testProductId = ProductId.of("prod-123");
+		when(tenantContext.getTenantId()).thenReturn("tenant-1");
     }
     
     @Test
@@ -68,6 +64,7 @@ class ProductServiceTest {
     void updateProduct_Success() {
         // Given
         when(productRepository.findById(testProductId)).thenReturn(Optional.of(testProduct));
+		when(testProduct.getStatus()).thenReturn(ProductStatus.DRAFT);
         when(productRepository.save(any(Product.class))).thenReturn(testProduct);
         
         Product updateData = mock(Product.class);
@@ -90,7 +87,7 @@ class ProductServiceTest {
         Product updateData = mock(Product.class);
         
         // When & Then
-        assertThrows(NoSuchElementException.class, () -> {
+		assertThrows(IllegalArgumentException.class, () -> {
             productService.updateProduct(testProductId, updateData);
         });
         
@@ -103,15 +100,14 @@ class ProductServiceTest {
     void publishProduct_Success() {
         // Given
         when(productRepository.findById(testProductId)).thenReturn(Optional.of(testProduct));
-        when(testProduct.getStatus()).thenReturn(ProductStatus.DRAFT);
-        // Skip status flow validation for this simplified test
-        when(productRepository.save(any(Product.class))).thenReturn(testProduct);
+		when(productRepository.save(any(Product.class))).thenReturn(testProduct);
         
         // When
         Product result = productService.publishProduct(testProductId);
         
         // Then
         assertNotNull(result);
+		verify(testProduct).publish();
         verify(productRepository).save(testProduct);
     }
     

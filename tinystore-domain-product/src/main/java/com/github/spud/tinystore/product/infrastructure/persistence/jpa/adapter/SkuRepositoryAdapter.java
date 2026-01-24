@@ -42,16 +42,15 @@ public class SkuRepositoryAdapter implements SkuRepository {
 
 	@Override
 	public Optional<Sku> findById(SkuId skuId) {
-		// TODO: Convert SkuId to entity ID and implement lookup
-		return Optional.empty();
+		String tenantId = tenantContext.getTenantId();
+		return jpaRepository.findByTenantIdAndSkuId(tenantId, skuId.getId()).map(mapper::toDomain);
 	}
 
 	@Override
 	public List<Sku> findByProductId(ProductId productId) {
 		String tenantId = tenantContext.getTenantId();
-		// TODO: Convert ProductId to string and implement lookup
 		List<SkuEntity> entities = jpaRepository.findByTenantIdAndProductId(tenantId,
-			productId.toString());
+			productId.getId());
 		return entities.stream()
 			.map(mapper::toDomain)
 			.collect(Collectors.toList());
@@ -59,8 +58,7 @@ public class SkuRepositoryAdapter implements SkuRepository {
 
 	@Override
 	public void delete(SkuId skuId) {
-		// TODO: Implement delete logic
-		throw new UnsupportedOperationException("Delete not yet implemented");
+		String tenantId = tenantContext.getTenantId();
+		jpaRepository.findByTenantIdAndSkuId(tenantId, skuId.getId()).ifPresent(jpaRepository::delete);
 	}
 }
-

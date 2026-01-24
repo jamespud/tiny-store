@@ -134,8 +134,6 @@ public class GlobalExceptionHandler {
 		if (e.getMessage() != null) {
 			if (e.getMessage().contains("uk_product_spec")) {
 				message = "SKU with this specification combination already exists";
-			} else if (e.getMessage().contains("uk_tenant_rule_code")) {
-				message = "Pricing rule with this code already exists";
 			} else if (e.getMessage().contains("duplicate")) {
 				message = "Duplicate entry detected";
 			}

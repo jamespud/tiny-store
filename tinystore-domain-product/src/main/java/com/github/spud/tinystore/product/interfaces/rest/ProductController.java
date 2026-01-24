@@ -93,7 +93,7 @@ public class ProductController {
 	@PutMapping("/{id}")
 	@PreAuthorize("hasAnyRole('MERCHANT_ADMIN', 'PLATFORM_ADMIN')")
 	public ResponseEntity<ProductResponseDTO> updateProduct(
-		@PathVariable String id,
+		@PathVariable("id") String id,
 		@Valid @RequestBody ProductUpdateDTO request,
 		@RequestHeader("X-Tenant-Id") String tenantId,
 		@RequestHeader("Idempotency-Key") String idempotencyKey) {
@@ -123,7 +123,7 @@ public class ProductController {
 	@PostMapping("/{id}/publish")
 	@PreAuthorize("hasRole('MERCHANT_ADMIN')")
 	public ResponseEntity<ProductResponseDTO> publishProduct(
-		@PathVariable String id,
+		@PathVariable("id") String id,
 		@RequestHeader("X-Tenant-Id") String tenantId) {
 
 		log.info("Publishing product: {} for tenant: {}", id, tenantId);
@@ -149,7 +149,7 @@ public class ProductController {
 	@PostMapping("/{id}/archive")
 	@PreAuthorize("hasRole('MERCHANT_ADMIN')")
 	public ResponseEntity<Void> archiveProduct(
-		@PathVariable String id,
+		@PathVariable("id") String id,
 		@RequestHeader("X-Tenant-Id") String tenantId) {
 
 		log.info("Archiving product: {} for tenant: {}", id, tenantId);
@@ -171,7 +171,7 @@ public class ProductController {
 	 */
 	@GetMapping("/{id}")
 	public ResponseEntity<ProductResponseDTO> getProduct(
-		@PathVariable String id,
+		@PathVariable("id") String id,
 		@RequestHeader("X-Tenant-Id") String tenantId) {
 
 		log.debug("Getting product: {} for tenant: {}", id, tenantId);
@@ -202,7 +202,7 @@ public class ProductController {
 	@PutMapping("/{id}/tags")
 	@PreAuthorize("hasRole('MERCHANT_ADMIN')")
 	public ResponseEntity<ProductResponseDTO> updateTags(
-		@PathVariable String id,
+		@PathVariable("id") String id,
 		@Valid @RequestBody ProductTagUpdateDTO request,
 		@RequestHeader("X-Tenant-Id") String tenantId) {
 
