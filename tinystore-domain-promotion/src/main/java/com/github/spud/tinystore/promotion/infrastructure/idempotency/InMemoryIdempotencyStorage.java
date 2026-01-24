@@ -23,21 +23,7 @@ public class InMemoryIdempotencyStorage implements IdempotencyStorage {
 	}
 
 	@Override
-	public boolean exists(String key) {
-		Entry e = store.get(key);
-		if (e == null) {
-			return false;
-		}
-		if (e.expireAt < Instant.now().getEpochSecond()) {
-			store.remove(key);
-			return false;
-		}
-		return true;
-	}
-
-	@SuppressWarnings("unchecked")
-	@Override
-	public <T> T getResponse(String key, Class<T> type) {
+	public StoredValue get(String key) {
 		Entry e = store.get(key);
 		if (e == null) {
 			return null;
@@ -46,21 +32,15 @@ public class InMemoryIdempotencyStorage implements IdempotencyStorage {
 			store.remove(key);
 			return null;
 		}
-		Object v = e.value;
-		if (v == null) {
-			return null;
-		}
-		if (type.isInstance(v)) {
-			return (T) v;
-		}
-		return null;
+		return new StoredValue(e.requestHash, e.value);
 	}
 
 	@Override
-	public void saveResponse(String key, Object value) {
+	public void put(String key, String requestHash, Object value) {
 		Objects.requireNonNull(key, "idempotency key must not be null");
+		Objects.requireNonNull(requestHash, "request hash must not be null");
 		long expireAt = Instant.now().getEpochSecond() + ttlSeconds;
-		store.put(key, new Entry(value, expireAt));
+		store.put(key, new Entry(requestHash, value, expireAt));
 	}
 
 	@Override
@@ -68,7 +48,6 @@ public class InMemoryIdempotencyStorage implements IdempotencyStorage {
 		store.remove(key);
 	}
 
-	private record Entry(Object value, long expireAt) {
+	private record Entry(String requestHash, Object value, long expireAt) {
 	}
 }
-

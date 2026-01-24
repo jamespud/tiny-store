@@ -84,21 +84,48 @@ public class CheckoutAppService {
 	@Transactional
 	public CheckoutQuoteResponse quote(String idempotencyKey, CheckoutQuoteRequest request) {
 		String key = "promotion:checkout:quote:" + idempotencyKey;
-		CheckoutQuoteResponse cached = idempotencyStorage.getResponse(key, CheckoutQuoteResponse.class);
-		if (cached != null) {
-			return cached;
+		String requestHash = computeInputHash(request);
+		IdempotencyStorage.StoredValue stored = idempotencyStorage.get(key);
+		if (stored != null) {
+			if (!Objects.equals(requestHash, stored.requestHash())) {
+				CheckoutQuoteResponse conflict = new CheckoutQuoteResponse();
+				conflict.setStatus(CheckoutResultStatus.REQUOTE_REQUIRED);
+				conflict.setQuoteId(null);
+				conflict.setExpiresAtEpochMs(0L);
+				conflict.setSnapshot(null);
+				conflict.setChangeReasons(List.of(ChangeReason.of("IDEMPOTENCY_CONFLICT", null)));
+				return conflict;
+			}
+			Object v = stored.value();
+			if (v instanceof CheckoutQuoteResponse r) {
+				return r;
+			}
 		}
 		CheckoutQuoteResponse resp = createQuote(request);
-		idempotencyStorage.saveResponse(key, resp);
+		idempotencyStorage.put(key, requestHash, resp);
 		return resp;
 	}
 
 	@Transactional
 	public CheckoutCommitResponse commit(String idempotencyKey, CheckoutCommitRequest request) {
 		String key = "promotion:checkout:commit:" + idempotencyKey;
-		CheckoutCommitResponse cached = idempotencyStorage.getResponse(key, CheckoutCommitResponse.class);
-		if (cached != null) {
-			return cached;
+		String requestHash = sha256(String.valueOf(request.getQuoteId()) + "|" + String.valueOf(request.getOrderNo()) + "|"
+			+ String.valueOf(request.getInputHash()) + "|" + String.valueOf(request.getPayNo()) + "|" + String.valueOf(request.getPaidAt()));
+		IdempotencyStorage.StoredValue stored = idempotencyStorage.get(key);
+		if (stored != null) {
+			if (!Objects.equals(requestHash, stored.requestHash())) {
+				CheckoutCommitResponse conflict = new CheckoutCommitResponse();
+				conflict.setStatus(CheckoutResultStatus.REQUOTE_REQUIRED);
+				conflict.setFinalQuoteId(null);
+				conflict.setSnapshot(null);
+				conflict.setChangeReasons(List.of(ChangeReason.of("IDEMPOTENCY_CONFLICT", null)));
+				conflict.setMessage("IDEMPOTENCY_CONFLICT");
+				return conflict;
+			}
+			Object v = stored.value();
+			if (v instanceof CheckoutCommitResponse r) {
+				return r;
+			}
 		}
 
 		CheckoutCommitResponse resp = new CheckoutCommitResponse();
@@ -111,7 +138,7 @@ public class CheckoutAppService {
 			resp.setSnapshot(null);
 			resp.setChangeReasons(List.of(ChangeReason.of("QUOTE_NOT_FOUND", null)));
 			resp.setMessage("需要重新报价");
-			idempotencyStorage.saveResponse(key, resp);
+			idempotencyStorage.put(key, requestHash, resp);
 			return resp;
 		}
 
@@ -122,7 +149,7 @@ public class CheckoutAppService {
 			resp.setSnapshot(null);
 			resp.setChangeReasons(List.of(ChangeReason.of("QUOTE_NOT_FOUND", null)));
 			resp.setMessage("需要重新报价");
-			idempotencyStorage.saveResponse(key, resp);
+			idempotencyStorage.put(key, requestHash, resp);
 			return resp;
 		}
 		CheckoutQuoteEntity entity = opt.get();
@@ -138,7 +165,7 @@ public class CheckoutAppService {
 			resp.setSnapshot(newQuote.getSnapshot());
 			resp.setChangeReasons(List.of(ChangeReason.of("QUOTE_EXPIRED", null)));
 			resp.setMessage("需要重新报价");
-			idempotencyStorage.saveResponse(key, resp);
+			idempotencyStorage.put(key, requestHash, resp);
 			return resp;
 		}
 
@@ -150,7 +177,7 @@ public class CheckoutAppService {
 			resp.setSnapshot(newQuote.getSnapshot());
 			resp.setChangeReasons(List.of(ChangeReason.of("INPUT_CHANGED", null)));
 			resp.setMessage("需要重新报价");
-			idempotencyStorage.saveResponse(key, resp);
+			idempotencyStorage.put(key, requestHash, resp);
 			return resp;
 		}
 
@@ -163,7 +190,7 @@ public class CheckoutAppService {
 			resp.setSnapshot(newQuote.getSnapshot());
 			resp.setChangeReasons(List.of(ChangeReason.of("SECKILL_PRICE_CHANGED", null)));
 			resp.setMessage("需要重新报价");
-			idempotencyStorage.saveResponse(key, resp);
+			idempotencyStorage.put(key, requestHash, resp);
 			return resp;
 		}
 		if (!Objects.equals(currentShippingVersion, snapshot.getVersion().getShippingRulesVersion())) {
@@ -173,7 +200,7 @@ public class CheckoutAppService {
 			resp.setSnapshot(newQuote.getSnapshot());
 			resp.setChangeReasons(List.of(ChangeReason.of("SHIPPING_INPUT_CHANGED", null)));
 			resp.setMessage("需要重新报价");
-			idempotencyStorage.saveResponse(key, resp);
+			idempotencyStorage.put(key, requestHash, resp);
 			return resp;
 		}
 
@@ -191,16 +218,23 @@ public class CheckoutAppService {
 		resp.setSnapshot(payload.getSnapshot());
 		resp.setChangeReasons(changes);
 		resp.setMessage(changes.isEmpty() ? "成功" : "已降级/部分优惠失效");
-		idempotencyStorage.saveResponse(key, resp);
+		idempotencyStorage.put(key, requestHash, resp);
 		return resp;
 	}
 
 	@Transactional
 	public CheckoutReleaseResponse release(String idempotencyKey, CheckoutReleaseRequest request) {
 		String key = "promotion:checkout:release:" + idempotencyKey;
-		CheckoutReleaseResponse cached = idempotencyStorage.getResponse(key, CheckoutReleaseResponse.class);
-		if (cached != null) {
-			return cached;
+		String requestHash = sha256(String.valueOf(request.getQuoteId()) + "|" + String.valueOf(request.getOrderNo()) + "|" + String.valueOf(request.getReason()));
+		IdempotencyStorage.StoredValue stored = idempotencyStorage.get(key);
+		if (stored != null) {
+			if (!Objects.equals(requestHash, stored.requestHash())) {
+				return CheckoutReleaseResponse.of(false, "IDEMPOTENCY_CONFLICT");
+			}
+			Object v = stored.value();
+			if (v instanceof CheckoutReleaseResponse r) {
+				return r;
+			}
 		}
 		LocalDateTime now = LocalDateTime.now();
 		UUID quoteId;
@@ -208,7 +242,7 @@ public class CheckoutAppService {
 			quoteId = UUID.fromString(request.getQuoteId());
 		} catch (Exception e) {
 			CheckoutReleaseResponse resp = CheckoutReleaseResponse.of(true, "released");
-			idempotencyStorage.saveResponse(key, resp);
+			idempotencyStorage.put(key, requestHash, resp);
 			return resp;
 		}
 
@@ -222,7 +256,7 @@ public class CheckoutAppService {
 			}
 		}
 		CheckoutReleaseResponse resp = CheckoutReleaseResponse.of(true, "released");
-		idempotencyStorage.saveResponse(key, resp);
+		idempotencyStorage.put(key, requestHash, resp);
 		return resp;
 	}
 
@@ -823,22 +857,19 @@ public class CheckoutAppService {
 	}
 
 	private String computePricingRulesVersion(LocalDateTime now) {
-		StringBuilder sb = new StringBuilder();
-		for (SeckillPriceRuleEntity r : seckillPriceRuleRepository.findActive(now)) {
-			sb.append(r.getId()).append(':').append(r.getVersion()).append(';');
-		}
-		for (FullReductionCampaignEntity c : fullReductionCampaignRepository.findActive(now)) {
-			sb.append(c.getId()).append(';');
-		}
-		return sha256(sb.toString());
+		long seckillV = seckillPriceRuleRepository.findActive(now).stream().mapToLong(SeckillPriceRuleEntity::getVersion).max().orElse(0L);
+		long fullReductionV = fullReductionCampaignRepository.findActive(now).stream().map(FullReductionCampaignEntity::getUpdatedAt)
+			.filter(Objects::nonNull)
+			.mapToLong(t -> t.toInstant(ZoneOffset.UTC).toEpochMilli())
+			.max().orElse(0L);
+		String couponPolicyV = "mutexGroup-v1";
+		return "seckill:" + seckillV + "|fullReduction:" + fullReductionV + "|couponPolicy:" + couponPolicyV;
 	}
 
 	private String computeShippingRulesVersion() {
-		StringBuilder sb = new StringBuilder();
-		for (ShippingRuleEntity r : shippingRuleRepository.findByStatusOrderByVersionDesc("ACTIVE")) {
-			sb.append(r.getId()).append(':').append(r.getVersion()).append(';');
-		}
-		return sha256(sb.toString());
+		List<ShippingRuleEntity> rules = shippingRuleRepository.findByStatusOrderByVersionDesc("ACTIVE");
+		long shippingV = rules.isEmpty() ? 0L : rules.get(0).getVersion();
+		return "shipping:" + shippingV;
 	}
 
 	private String sha256(String s) {

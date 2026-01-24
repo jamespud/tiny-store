@@ -2,7 +2,9 @@ package com.github.spud.tinystore.promotion.infrastructure.scheduler;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
+import org.slf4j.MDC;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,19 +33,24 @@ public class QuoteExpiryTask {
 	@Transactional
 	@Scheduled(fixedDelayString = "PT5M")
 	public void expireQuotes() {
-		LocalDateTime now = LocalDateTime.now();
-		List<CheckoutQuoteEntity> expired = checkoutQuoteRepository.findExpiredQuoted(now);
-		for (CheckoutQuoteEntity q : expired) {
-			CheckoutQuotePayload payload = readPayload(q.getSnapshot());
-			PricingSnapshot snapshot = payload.getSnapshot();
-			if (snapshot != null && snapshot.getAppliedBenefits() != null) {
-				for (PricingSnapshot.AppliedBenefit b : snapshot.getAppliedBenefits()) {
-					if (b.getLockId() != null) {
-						userCouponRepository.unlockByLockId(b.getLockId(), now);
+		MDC.put("traceId", UUID.randomUUID().toString());
+		try {
+			LocalDateTime now = LocalDateTime.now();
+			List<CheckoutQuoteEntity> expired = checkoutQuoteRepository.findExpiredQuoted(now);
+			for (CheckoutQuoteEntity q : expired) {
+				CheckoutQuotePayload payload = readPayload(q.getSnapshot());
+				PricingSnapshot snapshot = payload.getSnapshot();
+				if (snapshot != null && snapshot.getAppliedBenefits() != null) {
+					for (PricingSnapshot.AppliedBenefit b : snapshot.getAppliedBenefits()) {
+						if (b.getLockId() != null) {
+							userCouponRepository.unlockByLockId(b.getLockId(), now);
+						}
 					}
 				}
+				checkoutQuoteRepository.updateStatus(q.getId(), "QUOTED", "EXPIRED", now);
 			}
-			checkoutQuoteRepository.updateStatus(q.getId(), "QUOTED", "EXPIRED", now);
+		} finally {
+			MDC.clear();
 		}
 	}
 
@@ -55,4 +62,3 @@ public class QuoteExpiryTask {
 		}
 	}
 }
-
