@@ -57,7 +57,7 @@ public class SkuController {
 	@PostMapping("/products/{productId}/skus")
 	@PreAuthorize("hasRole('MERCHANT_ADMIN')")
 	public ResponseEntity<SkuResponseDTO> createSku(
-		@PathVariable String productId,
+		@PathVariable("productId") String productId,
 		@Valid @RequestBody SkuCreateDTO request,
 		@RequestHeader("X-Tenant-Id") String tenantId,
 		@RequestHeader("Idempotency-Key") String idempotencyKey) {
@@ -92,7 +92,7 @@ public class SkuController {
 	@PutMapping("/skus/{id}")
 	@PreAuthorize("hasRole('MERCHANT_ADMIN')")
 	public ResponseEntity<SkuResponseDTO> updateSku(
-		@PathVariable String id,
+		@PathVariable("id") String id,
 		@Valid @RequestBody SkuUpdateDTO request,
 		@RequestHeader("X-Tenant-Id") String tenantId,
 		@RequestHeader("Idempotency-Key") String idempotencyKey) {
@@ -130,7 +130,7 @@ public class SkuController {
 	 */
 	@GetMapping("/skus/{id}")
 	public ResponseEntity<SkuResponseDTO> getSku(
-		@PathVariable String id,
+		@PathVariable("id") String id,
 		@RequestHeader("X-Tenant-Id") String tenantId) {
 
 		log.debug("Getting SKU: {} for tenant: {}", id, tenantId);
@@ -161,7 +161,7 @@ public class SkuController {
 	@PutMapping("/skus/{id}/attributes")
 	@PreAuthorize("hasRole('MERCHANT_ADMIN')")
 	public ResponseEntity<SkuResponseDTO> updateAttributes(
-		@PathVariable String id,
+		@PathVariable("id") String id,
 		@Valid @RequestBody SkuAttributeUpdateDTO request,
 		@RequestHeader("X-Tenant-Id") String tenantId) {
 

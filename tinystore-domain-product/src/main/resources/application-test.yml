@@ -23,8 +23,6 @@ tinystore:
   feature:
     outbox:
       enabled: true  # Test outbox functionality
-    pricing-rule:
-      enabled: true
       
 logging:
   level:

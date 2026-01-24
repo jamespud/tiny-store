@@ -1,6 +1,6 @@
 spring:
   application:
-    name: tinystore-product-service
+    name: product-service
     
   # Database configuration (PostgreSQL)
   datasource:
@@ -57,8 +57,6 @@ tinystore:
   feature:
     outbox:
       enabled: ${FEATURE_OUTBOX_ENABLED:false}
-    pricing-rule:
-      enabled: ${FEATURE_PRICING_RULE_ENABLED:true}
       
   # Cache TTL configuration (in seconds)
   product:
@@ -66,7 +64,6 @@ tinystore:
       ttl:
         product: ${CACHE_TTL_PRODUCT:3600}      # 1 hour
         sku: ${CACHE_TTL_SKU:3600}              # 1 hour
-        pricing: ${CACHE_TTL_PRICING:1800}      # 30 minutes
         channel: ${CACHE_TTL_CHANNEL:600}       # 10 minutes
         
   # Kafka topics
@@ -74,7 +71,6 @@ tinystore:
     topics:
       product-events: ${KAFKA_TOPIC_PRODUCT:tinystore.product.events}
       sku-events: ${KAFKA_TOPIC_SKU:tinystore.sku.events}
-      pricing-events: ${KAFKA_TOPIC_PRICING:tinystore.pricing.events}
       category-events: ${KAFKA_TOPIC_CATEGORY:tinystore.category.events}
       
 # OpenTelemetry configuration
@@ -100,4 +96,3 @@ logging:
     org.springframework.data.jpa: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
-

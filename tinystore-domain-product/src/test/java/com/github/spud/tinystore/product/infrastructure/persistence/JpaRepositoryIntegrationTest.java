@@ -20,7 +20,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * Uses Testcontainers to spin up real PostgreSQL instance
  */
 @SpringBootTest
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("test")
 public class JpaRepositoryIntegrationTest {
     

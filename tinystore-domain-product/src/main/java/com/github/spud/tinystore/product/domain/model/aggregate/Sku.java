@@ -1,6 +1,5 @@
 package com.github.spud.tinystore.product.domain.model.aggregate;
 
-import com.github.spud.tinystore.product.domain.event.SkuDisabledEvent;
 import com.github.spud.tinystore.product.domain.model.value.Money;
 import com.github.spud.tinystore.product.domain.model.valueobject.SkuAttributePack;
 import com.github.spud.tinystore.product.domain.model.valueobject.SkuStatus;
@@ -49,6 +48,5 @@ public class Sku {
 	// 领域行为：禁用SKU（触发事件，通知库存/搜索服务）
 	public void disable() {
 		this.status = SkuStatus.DISABLED;
-		DomainEventPublisher.publish(new SkuDisabledEvent(this.skuId, this.productId));
 	}
 }

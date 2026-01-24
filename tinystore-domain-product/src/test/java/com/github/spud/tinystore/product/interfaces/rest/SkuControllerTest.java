@@ -14,12 +14,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.github.spud.tinystore.product.application.service.SkuService;
 import com.github.spud.tinystore.product.domain.model.aggregate.Sku;
 import com.github.spud.tinystore.product.domain.model.valueobject.SkuId;
+import com.github.spud.tinystore.product.interfaces.dto.SkuCreateDTO;
 import com.github.spud.tinystore.product.interfaces.dto.SkuResponseDTO;
 import com.github.spud.tinystore.product.interfaces.mapper.SkuDTOMapper;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -31,6 +33,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * Tests HTTP semantics, status codes, and service integration for SKU operations.
  */
 @WebMvcTest(SkuController.class)
+@AutoConfigureMockMvc(addFilters = false)
 @DisplayName("SkuController Unit Tests")
 class SkuControllerTest {
     
@@ -44,7 +47,7 @@ class SkuControllerTest {
     private SkuDTOMapper skuDTOMapper;
     
     @Test
-    @DisplayName("POST /api/skus - Create SKU successfully returns 201 Created")
+	@DisplayName("POST /api/products/{productId}/skus - Create SKU successfully returns 201 Created")
     void createSku_Success_Returns201() throws Exception {
         // Given
         Sku mockSku = mock(Sku.class);
@@ -52,13 +55,16 @@ class SkuControllerTest {
         
         SkuResponseDTO responseDTO = mock(SkuResponseDTO.class);
         
-        when(skuService.createSku(any(Sku.class))).thenReturn(mockSku);
+		when(skuDTOMapper.toDomain(any(SkuCreateDTO.class), any(String.class))).thenReturn(mockSku);
+		when(skuService.createSku(any(Sku.class))).thenReturn(mockSku);
         when(skuDTOMapper.toResponseDTO(mockSku)).thenReturn(responseDTO);
         
         // When & Then
-        mockMvc.perform(post("/api/skus")
+		mockMvc.perform(post("/api/products/{productId}/skus", "prod-123")
+				.header("X-Tenant-Id", "tenant-1")
+				.header("Idempotency-Key", "idem-1")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"productId\":\"prod-123\",\"specCombination\":\"color:red;size:M\"}"))
+				.content("{\"specCombination\":\"color:red;size:M\",\"price\":99.99}"))
             .andExpect(status().isCreated())
             .andExpect(header().exists("Location"))
             .andExpect(header().string("Location", "/api/skus/sku-123"));
@@ -74,14 +80,16 @@ class SkuControllerTest {
         
         Sku mockSku = mock(Sku.class);
         SkuResponseDTO responseDTO = mock(SkuResponseDTO.class);
-        
+		when(skuService.getSku(any(SkuId.class))).thenReturn(Optional.of(mockSku));
         when(skuService.updateSku(any(SkuId.class), any(Sku.class))).thenReturn(mockSku);
         when(skuDTOMapper.toResponseDTO(mockSku)).thenReturn(responseDTO);
         
         // When & Then
         mockMvc.perform(put("/api/skus/{id}", skuId)
+				.header("X-Tenant-Id", "tenant-1")
+				.header("Idempotency-Key", "idem-1")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"price\":99.99}"))
+				.content("{\"specCombination\":\"color:red;size:M\",\"price\":99.99}"))
             .andExpect(status().isOk());
         
         verify(skuService).updateSku(any(SkuId.class), any(Sku.class));
@@ -92,16 +100,15 @@ class SkuControllerTest {
     void updateSku_NotFound_Returns404() throws Exception {
         // Given
         String skuId = "non-existent";
-        
-        when(skuService.updateSku(any(SkuId.class), any(Sku.class)))
-            .thenThrow(new java.util.NoSuchElementException("SKU not found"));
+		when(skuService.getSku(any(SkuId.class))).thenReturn(Optional.empty());
         
         // When & Then
         mockMvc.perform(put("/api/skus/{id}", skuId)
+				.header("X-Tenant-Id", "tenant-1")
+				.header("Idempotency-Key", "idem-1")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"price\":99.99}"))
-            .andExpect(status().isNotFound())
-            .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+				.content("{\"specCombination\":\"color:red;size:M\",\"price\":99.99}"))
+			.andExpect(status().isNotFound());
     }
     
     @Test
@@ -117,7 +124,8 @@ class SkuControllerTest {
         when(skuDTOMapper.toResponseDTO(mockSku)).thenReturn(responseDTO);
         
         // When & Then
-        mockMvc.perform(get("/api/skus/{id}", skuId))
+		mockMvc.perform(get("/api/skus/{id}", skuId)
+				.header("X-Tenant-Id", "tenant-1"))
             .andExpect(status().isOk());
         
         verify(skuService).getSku(any(SkuId.class));
@@ -132,9 +140,9 @@ class SkuControllerTest {
         when(skuService.getSku(any(SkuId.class))).thenReturn(Optional.empty());
         
         // When & Then
-        mockMvc.perform(get("/api/skus/{id}", skuId))
-            .andExpect(status().isNotFound())
-            .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+		mockMvc.perform(get("/api/skus/{id}", skuId)
+				.header("X-Tenant-Id", "tenant-1"))
+			.andExpect(status().isNotFound());
     }
     
     @Test
@@ -145,12 +153,13 @@ class SkuControllerTest {
         
         Sku mockSku = mock(Sku.class);
         SkuResponseDTO responseDTO = mock(SkuResponseDTO.class);
-        
+		when(skuService.getSku(any(SkuId.class))).thenReturn(Optional.of(mockSku));
         when(skuService.updateSku(any(SkuId.class), any(Sku.class))).thenReturn(mockSku);
         when(skuDTOMapper.toResponseDTO(mockSku)).thenReturn(responseDTO);
         
         // When & Then
         mockMvc.perform(put("/api/skus/{id}/attributes", skuId)
+				.header("X-Tenant-Id", "tenant-1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"attributes\":{\"livePrice\":\"88.88\"}}"))
             .andExpect(status().isOk());

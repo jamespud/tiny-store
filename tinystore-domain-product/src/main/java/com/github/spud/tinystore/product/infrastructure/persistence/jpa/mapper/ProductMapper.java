@@ -1,8 +1,13 @@
 package com.github.spud.tinystore.product.infrastructure.persistence.jpa.mapper;
 
 import com.github.spud.tinystore.product.domain.model.aggregate.Product;
+import com.github.spud.tinystore.product.domain.model.valueobject.Brand;
+import com.github.spud.tinystore.product.domain.model.valueobject.ProductAttribute;
+import com.github.spud.tinystore.product.domain.model.valueobject.ProductCategory;
+import com.github.spud.tinystore.product.domain.model.valueobject.ProductId;
 import com.github.spud.tinystore.product.domain.model.valueobject.ProductStatus;
 import com.github.spud.tinystore.product.infrastructure.persistence.jpa.entity.ProductEntity;
+import java.util.List;
 import org.springframework.stereotype.Component;
 
 /**
@@ -29,18 +34,12 @@ public class ProductMapper {
 
 		ProductEntity entity = new ProductEntity();
 		entity.setTenantId(tenantId);
+		entity.setProductId(product.getProductId() != null ? product.getProductId().getId() : null);
 		entity.setName(product.getName());
 		entity.setStatus(
 			product.getStatus() != null ? product.getStatus().name() : ProductStatus.DRAFT.name());
 		entity.setCategoryId(
 			product.getCategory() != null ? product.getCategory().getCategoryId() : null);
-
-		// If product has an ID (update scenario), try to preserve it
-		// Note: ProductId is a value object, need to extract the actual ID
-		if (product.getProductId() != null) {
-			// Assuming ProductId has a way to get the string representation
-			// This is a placeholder - adjust based on actual ProductId implementation
-		}
 
 		return entity;
 	}
@@ -55,13 +54,23 @@ public class ProductMapper {
 		if (entity == null) {
 			return null;
 		}
-
-		// This is a simplified mapping - actual implementation needs to reconstruct
-		// the full Product aggregate with all value objects
-		// Using reflection or builder pattern based on Product's factory methods
-
-		throw new UnsupportedOperationException(
-			"ProductMapper.toDomain requires Product factory method - implement based on actual Product API");
+		ProductId productId = ProductId.of(entity.getProductId());
+		ProductCategory category = new ProductCategory();
+		category.setCategoryId(entity.getCategoryId());
+		Brand brand = new Brand("DEFAULT_BRAND");
+		List<ProductAttribute> attributes = List.of(new ProductAttribute("placeholder-key", "placeholder-value"));
+		ProductStatus status = entity.getStatus() != null ? ProductStatus.valueOf(entity.getStatus()) : ProductStatus.DRAFT;
+		return Product.rehydrate(
+			productId,
+			entity.getName(),
+			category,
+			brand,
+			Product.ProductType.PHYSICAL_GOODS,
+			attributes,
+			status,
+			entity.getCreatedAt(),
+			entity.getUpdatedAt()
+		);
 	}
 
 	/**
@@ -81,4 +90,3 @@ public class ProductMapper {
 			product.getCategory() != null ? product.getCategory().getCategoryId() : null);
 	}
 }
-

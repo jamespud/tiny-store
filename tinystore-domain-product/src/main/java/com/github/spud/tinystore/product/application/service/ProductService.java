@@ -83,13 +83,7 @@ public class ProductService {
 		Product product = existing.get();
 
 		// Domain logic: transition to published
-		if (product.getStatus() != ProductStatus.DRAFT) {
-			throw new IllegalArgumentException("Only DRAFT products can be published");
-		}
-
-		// TODO: Trigger domain event ProductPublishedEvent
-		// Update status (assuming setter exists or use reflection)
-		// For now, save and return
+		product.publish();
 		return productRepository.save(product);
 	}
 

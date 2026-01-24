@@ -11,6 +11,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -36,7 +37,7 @@ public class TenantContextFilter implements Filter {
 
 	private static final String TENANT_HEADER = "X-Tenant-Id";
 
-	private final TenantContext tenantContext;
+	private final ObjectProvider<TenantContext> tenantContextProvider;
 
 	@Override
 	public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
@@ -49,6 +50,11 @@ public class TenantContextFilter implements Filter {
 
 		HttpServletRequest httpRequest = (HttpServletRequest) request;
 		HttpServletResponse httpResponse = (HttpServletResponse) response;
+		TenantContext tenantContext = tenantContextProvider.getIfAvailable();
+		if (tenantContext == null) {
+			chain.doFilter(request, response);
+			return;
+		}
 
 		try {
 			String tenantId = httpRequest.getHeader(TENANT_HEADER);

@@ -41,6 +41,27 @@ public class SkuEntity {
 	@Column(name = "product_id", nullable = false)
 	private String productId;
 
+	@Column(name = "sku_id", nullable = false)
+	private String skuId;
+
+	@Column(name = "merchant_id")
+	private String merchantId;
+
+	@Column(name = "sku_name")
+	private String skuName;
+
+	@Column(name = "spec_json", columnDefinition = "jsonb")
+	private String specJson;
+
+	@Column(name = "weight_grams")
+	private Long weightGrams;
+
+	@Column(name = "unit_price_cents")
+	private Long unitPriceCents;
+
+	@Column(name = "promote_price_cents")
+	private Long promotePriceCents;
+
 	@Column(name = "tenant_id", nullable = false)
 	private String tenantId;
 

@@ -29,15 +29,12 @@ tinystore:
   feature:
     outbox:
       enabled: false  # Use logging publisher for local dev
-    pricing-rule:
-      enabled: true
       
   product:
     cache:
       ttl:
         product: 60    # Short TTL for testing
         sku: 60
-        pricing: 30
         channel: 10
         
 logging:

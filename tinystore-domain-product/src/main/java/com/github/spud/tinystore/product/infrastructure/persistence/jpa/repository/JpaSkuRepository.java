@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.product.infrastructure.persistence.jpa.repository;
 
 import com.github.spud.tinystore.product.infrastructure.persistence.jpa.entity.SkuEntity;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -39,6 +40,10 @@ public interface JpaSkuRepository extends JpaRepository<SkuEntity, Long>,
 	 * @return List of SKU entities
 	 */
 	List<SkuEntity> findByTenantIdAndProductId(String tenantId, String productId);
+
+	Optional<SkuEntity> findByTenantIdAndSkuId(String tenantId, String skuId);
+
+	List<SkuEntity> findByTenantIdAndSkuIdIn(String tenantId, Collection<String> skuIds);
 
 	/**
 	 * Find SKU by unique product and spec combination Enforces uniqueness constraint uk_product_spec
