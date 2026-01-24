@@ -53,8 +53,6 @@ import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.Checko
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CheckoutQuoteRequest;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CheckoutQuoteResponse;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.CheckoutReleaseRequest;
-import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.MerchantInfo;
-import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient.PreUseCouponResponse;
 import com.github.spud.tinystore.order.interfaces.dto.response.CreateOrderResponse;
 import com.github.spud.tinystore.order.infrastructure.audit.AuditService;
 import com.github.spud.tinystore.order.infrastructure.metrics.OrderMetrics;
@@ -1238,38 +1236,6 @@ public class OrderApplicationService {
 					);
 				}
 			}
-		}
-	}
-
-	// -------------------------- 工具方法：计算商家运费（按商家运费政策） --------------------------
-	private Money calculateMerchantFreight(
-		ConfirmOrderCommand.MerchantSkuDTO merchantGroup,
-		List<SubOrderItem> subItemList,
-		Map<String, SkuDTO> skuMap,
-		MerchantInfo merchantInfo
-	) {
-			// 占位实现：未接入运费计算时返回0
-			return Money.of(0);
-	}
-
-	// -------------------------- 工具方法：回滚所有优惠券（平台+商家） --------------------------
-	private void rollbackAllCoupons(
-		PreUseCouponResponse platformCouponResp,
-		Map<String, PreUseCouponResponse> merchantCouponMap
-	) {
-		// 回滚平台优惠券
-		if (platformCouponResp != null) {
-			promotionService.rollbackCouponUse(platformCouponResp.getLockId());
-			log.info("回滚平台优惠券：couponId={}, lockId={}", platformCouponResp.getCouponId(),
-				platformCouponResp.getLockId());
-		}
-		// 回滚商家优惠券
-		for (Map.Entry<String, PreUseCouponResponse> entry : merchantCouponMap.entrySet()) {
-			String merchantId = entry.getKey();
-			PreUseCouponResponse resp = entry.getValue();
-			promotionService.rollbackCouponUse(resp.getLockId());
-			log.info("回滚商家[{}]优惠券：couponId={}, lockId={}", merchantId, resp.getCouponId(),
-				resp.getLockId());
 		}
 	}
 

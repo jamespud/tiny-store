@@ -2,7 +2,7 @@ package com.github.spud.tinystore.promotion.interfaces.dto;
 
 import jakarta.validation.constraints.NotBlank;
 
-public class ReceiveCouponRequest {
+public class CouponReceiveRequest {
 
 	@NotBlank
 	private String userId;
@@ -11,8 +11,6 @@ public class ReceiveCouponRequest {
 	private String couponId;
 
 	private String traceId;
-
-	private String userTags;
 
 	public String getUserId() {
 		return userId;
@@ -37,12 +35,5 @@ public class ReceiveCouponRequest {
 	public void setTraceId(String traceId) {
 		this.traceId = traceId;
 	}
-
-	public String getUserTags() {
-		return userTags;
-	}
-
-	public void setUserTags(String userTags) {
-		this.userTags = userTags;
-	}
 }
+
