@@ -219,81 +219,122 @@ public class OrderApplicationService {
 
 		java.util.List<com.github.spud.tinystore.order.application.result.ConfirmOrderResult.ShopProductSnapshot> shopLines =
 			buildShopLines(cmd.getMerchantSkus(), snapshot, total.currency());
+		int lineCount = this.flattenSkuList(cmd.getMerchantSkus()).size();
 
-		OrderMainEntity mainEntity = new OrderMainEntity()
-			.setOrderNo(mainOrderNo)
-			.setTenantId(tenantId)
-			.setUserId(cmd.getUserId())
-			.setCoreFlowStatus(CoreFlowStatus.PENDING_PAYMENT.name())
-			.setPaymentStatus(PaymentStatus.CREATED.name())
-			.setFulfillmentStatus(FulfillmentStatus.NONE.name())
-			.setAfterSaleStatus(AfterSaleStatus.NONE.name())
-			.setTotalAmount(totalAmountCents)
-			.setDiscountAmount(discountAmountCents)
-			.setPayableAmount(payableAmountCents)
-			.setCurrency(total.currency());
-		mainEntity.setAddressId(cmd.getAddressId());
-		mainEntity.setPromotionQuoteId(quoteResp.getQuoteId());
-		mainEntity.setPromotionInputHash(snapshot.getVersion() != null ? snapshot.getVersion().getInputHash() : null);
-		orderMainJpaRepository.save(mainEntity);
+		var inventoryPreOccupyReq = new com.github.spud.tinystore.order.infrastructure.acl.InventoryClient.StockPreOccupyRequest();
+		inventoryPreOccupyReq.setTenantId(tenantId);
+		inventoryPreOccupyReq.setOrderNo(mainOrderNo);
+		inventoryPreOccupyReq.setExpiresAtEpochMs(java.time.Instant.now().plus(java.time.Duration.ofMinutes(15)).toEpochMilli());
+		java.util.List<com.github.spud.tinystore.order.infrastructure.acl.InventoryClient.StockPreOccupyRequest.Line> invLines = new java.util.ArrayList<>();
+		for (SkuRiskDTO s : this.flattenSkuList(cmd.getMerchantSkus())) {
+			var l = new com.github.spud.tinystore.order.infrastructure.acl.InventoryClient.StockPreOccupyRequest.Line();
+			l.setSkuId(s.getSkuId());
+			l.setQuantity(s.getQuantity());
+			invLines.add(l);
+		}
+		inventoryPreOccupyReq.setLines(invLines);
+		var inventoryPreOccupyResp = inventoryService.preOccupyStock(
+			buildInventoryIdempotencyKey(cmd.getIdempotentKey(), "pre_occupy", mainOrderNo),
+			inventoryPreOccupyReq
+		);
+		if (inventoryPreOccupyResp == null || !inventoryPreOccupyResp.isSuccess()) {
+			throw new IllegalStateException("inventory pre-occupy failed");
+		}
+		Map<String, String> merchantPreOccupyMap = groupStockPreOccupyByMerchant(
+			cmd.getMerchantSkus(),
+			skuMap,
+			inventoryPreOccupyResp.getPreOccupyIds()
+		);
 
-		Map<String, String> merchantSubOrderNo = new HashMap<>();
-		List<OrderSubEntity> subEntities = new ArrayList<>();
-		int subIndex = 1;
-		for (var merchantSkus : cmd.getMerchantSkus()) {
-			String subOrderNo = generateSubOrderNo(mainOrderNo, subIndex++);
-			merchantSubOrderNo.put(merchantSkus.merchantId(), subOrderNo);
-			subEntities.add(new OrderSubEntity()
-				.setSubOrderNo(subOrderNo)
-				.setMainOrderNo(mainOrderNo)
+		try {
+			OrderMainEntity mainEntity = new OrderMainEntity()
+				.setOrderNo(mainOrderNo)
 				.setTenantId(tenantId)
-				.setMerchantId(merchantSkus.merchantId())
-				.setMerchantName(null)
+				.setUserId(cmd.getUserId())
 				.setCoreFlowStatus(CoreFlowStatus.PENDING_PAYMENT.name())
 				.setPaymentStatus(PaymentStatus.CREATED.name())
 				.setFulfillmentStatus(FulfillmentStatus.NONE.name())
 				.setAfterSaleStatus(AfterSaleStatus.NONE.name())
-			);
-		}
-		orderSubJpaRepository.saveAll(subEntities);
+				.setTotalAmount(totalAmountCents)
+				.setDiscountAmount(discountAmountCents)
+				.setPayableAmount(payableAmountCents)
+				.setCurrency(total.currency());
+			mainEntity.setAddressId(cmd.getAddressId());
+			mainEntity.setPromotionQuoteId(quoteResp.getQuoteId());
+			mainEntity.setPromotionInputHash(snapshot.getVersion() != null ? snapshot.getVersion().getInputHash() : null);
+			orderMainJpaRepository.save(mainEntity);
 
-		List<OrderItemEntity> itemEntities = new ArrayList<>();
-		int lineNo = 1;
-		for (var merchantSkus : cmd.getMerchantSkus()) {
-			String subOrderNo = merchantSubOrderNo.get(merchantSkus.merchantId());
-			for (var item : merchantSkus.skuItems()) {
-				int qty = item.quantity() != null ? item.quantity() : 0;
-				var priced = findSnapshotLine(snapshot, merchantSkus.merchantId(), item.skuId());
-				long unit = priced != null ? priced.getFinalUnitPriceCents() : 0L;
-				long lineTotal = priced != null ? priced.getLineSubtotalCents() : unit * (long) qty;
-				long lineDiscount = priced != null ? priced.getLineDiscountAllocatedCents() : 0L;
-				long linePayable = priced != null ? priced.getLinePayableCents() : (lineTotal - lineDiscount);
-				Map<String, Object> skuSnapshot = new HashMap<>();
-				skuSnapshot.put("skuId", item.skuId());
-				skuSnapshot.put("merchantId", merchantSkus.merchantId());
-				SkuDTO sku = skuMap.get(item.skuId());
-				skuSnapshot.put("title", sku != null && sku.getSkuName() != null ? sku.getSkuName() : item.skuId());
-				skuSnapshot.put("specJson", sku != null ? sku.getSecJson() : null);
-				skuSnapshot.put("unitPriceCents", unit);
-				skuSnapshot.put("currency", total.currency());
-				skuSnapshot.put("snapshotTime", Instant.now().toString());
-				String snapshotJson = objectMapper.writeValueAsString(skuSnapshot);
-				itemEntities.add(new OrderItemEntity()
-					.setMainOrderNo(mainOrderNo)
+			Map<String, String> merchantSubOrderNo = new HashMap<>();
+			List<OrderSubEntity> subEntities = new ArrayList<>();
+			int subIndex = 1;
+			for (var merchantSkus : cmd.getMerchantSkus()) {
+				String subOrderNo = generateSubOrderNo(mainOrderNo, subIndex++);
+				merchantSubOrderNo.put(merchantSkus.merchantId(), subOrderNo);
+				subEntities.add(new OrderSubEntity()
 					.setSubOrderNo(subOrderNo)
-					.setLineNo(lineNo++)
-					.setSkuId(item.skuId())
-					.setQuantity(qty)
-					.setUnitPriceAmount(unit)
-					.setLineTotalAmount(lineTotal)
-					.setLineDiscountAmount(lineDiscount)
-					.setLinePayableAmount(linePayable)
-					.setCurrency(total.currency())
-					.setSkuSnapshot(snapshotJson)
+					.setMainOrderNo(mainOrderNo)
+					.setTenantId(tenantId)
+					.setMerchantId(merchantSkus.merchantId())
+					.setMerchantName(null)
+					.setCoreFlowStatus(CoreFlowStatus.PENDING_PAYMENT.name())
+					.setPaymentStatus(PaymentStatus.CREATED.name())
+					.setFulfillmentStatus(FulfillmentStatus.NONE.name())
+					.setAfterSaleStatus(AfterSaleStatus.NONE.name())
+					.setStockPreOccupyIds(merchantPreOccupyMap.get(merchantSkus.merchantId()))
 				);
 			}
+			orderSubJpaRepository.saveAll(subEntities);
+
+			List<OrderItemEntity> itemEntities = new ArrayList<>();
+			int lineNo = 1;
+			for (var merchantSkus : cmd.getMerchantSkus()) {
+				String subOrderNo = merchantSubOrderNo.get(merchantSkus.merchantId());
+				for (var item : merchantSkus.skuItems()) {
+					int qty = item.quantity() != null ? item.quantity() : 0;
+					var priced = findSnapshotLine(snapshot, merchantSkus.merchantId(), item.skuId());
+					long unit = priced != null ? priced.getFinalUnitPriceCents() : 0L;
+					long lineTotal = priced != null ? priced.getLineSubtotalCents() : unit * (long) qty;
+					long lineDiscount = priced != null ? priced.getLineDiscountAllocatedCents() : 0L;
+					long linePayable = priced != null ? priced.getLinePayableCents() : (lineTotal - lineDiscount);
+					Map<String, Object> skuSnapshot = new HashMap<>();
+					skuSnapshot.put("skuId", item.skuId());
+					skuSnapshot.put("merchantId", merchantSkus.merchantId());
+					SkuDTO sku = skuMap.get(item.skuId());
+					skuSnapshot.put("title", sku != null && sku.getSkuName() != null ? sku.getSkuName() : item.skuId());
+					skuSnapshot.put("specJson", sku != null ? sku.getSecJson() : null);
+					skuSnapshot.put("unitPriceCents", unit);
+					skuSnapshot.put("currency", total.currency());
+					skuSnapshot.put("snapshotTime", Instant.now().toString());
+					String snapshotJson = objectMapper.writeValueAsString(skuSnapshot);
+					itemEntities.add(new OrderItemEntity()
+						.setMainOrderNo(mainOrderNo)
+						.setSubOrderNo(subOrderNo)
+						.setLineNo(lineNo++)
+						.setSkuId(item.skuId())
+						.setQuantity(qty)
+						.setUnitPriceAmount(unit)
+						.setLineTotalAmount(lineTotal)
+						.setLineDiscountAmount(lineDiscount)
+						.setLinePayableAmount(linePayable)
+						.setCurrency(total.currency())
+						.setSkuSnapshot(snapshotJson)
+					);
+				}
+			}
+			orderItemJpaRepository.saveAll(itemEntities);
+		} catch (Exception e) {
+			try {
+				var releaseReq = new com.github.spud.tinystore.order.infrastructure.acl.InventoryClient.StockReleaseRequest();
+				releaseReq.setTenantId(tenantId);
+				releaseReq.setOrderNo(mainOrderNo);
+				releaseReq.setReason("ORDER_PERSIST_FAILED");
+				releaseReq.setPreOccupyIds(inventoryPreOccupyResp.getPreOccupyIds());
+				inventoryService.rollbackPreOccupy(buildInventoryIdempotencyKey(cmd.getIdempotentKey(), "release", mainOrderNo), releaseReq);
+			} catch (Exception ex) {
+				log.warn("inventory release after persist failure failed: {}", ex.getMessage());
+			}
+			throw e;
 		}
-		orderItemJpaRepository.saveAll(itemEntities);
 
 		OrderItem agg = new OrderItem();
 		agg.setOrderNo(mainOrderNo);
@@ -312,7 +353,7 @@ public class OrderApplicationService {
 			"mainOrderNo", mainOrderNo,
 			"userId", cmd.getUserId(),
 			"merchantCount", cmd.getMerchantSkus() != null ? cmd.getMerchantSkus().size() : 0,
-			"lineCount", itemEntities.size()
+			"lineCount", lineCount
 		));
 
 		SubmitOrderResult result = new SubmitOrderResult();
@@ -383,6 +424,25 @@ public class OrderApplicationService {
 						throw new IllegalStateException("paid amount mismatch with promotion snapshot");
 					}
 					applyPromotionSnapshotToOrder(main, commitResp);
+				}
+			}
+			if (main != null) {
+				java.util.List<OrderSubEntity> subs = orderSubJpaRepository.findByMainOrderNo(main.getOrderNo());
+				java.util.List<String> preOccupyIds = new java.util.ArrayList<>();
+				for (OrderSubEntity s : subs) {
+					preOccupyIds.addAll(parsePreOccupyIds(s.getStockPreOccupyIds()));
+				}
+				if (!preOccupyIds.isEmpty()) {
+					var invCommitReq = new com.github.spud.tinystore.order.infrastructure.acl.InventoryClient.StockCommitRequest();
+					invCommitReq.setTenantId(main.getTenantId());
+					invCommitReq.setOrderNo(main.getOrderNo());
+					invCommitReq.setPayNo(cmd.getPaymentId());
+					invCommitReq.setPaidAtEpochMs(cmd.getPaidAt());
+					invCommitReq.setPreOccupyIds(preOccupyIds);
+					var invCommitResp = inventoryService.commitStock(buildInventoryIdempotencyKey(idempotencyKey, "commit", main.getOrderNo()), invCommitReq);
+					if (invCommitResp == null || !invCommitResp.isSuccess()) {
+						throw new IllegalStateException("inventory commit failed");
+					}
 				}
 			}
 			OrderStatus cur = order.getOrderStatus();
@@ -633,6 +693,7 @@ public class OrderApplicationService {
 		if (cmd != null && cmd.getOrderId() != null) {
 			OrderItem order = orderDomainService.loadForUpdate(String.valueOf(cmd.getOrderId()));
 			releasePromotionIfPresent(cmd.getIdempotencyKey(), order.getOrderNo(), cmd.getReasonCode());
+			releaseInventoryIfPresent(cmd.getIdempotencyKey(), order.getOrderNo(), cmd.getReasonCode());
 		}
 		String result = "待确认";
 		recordAudit("user.cancel", null, null, true, null);
@@ -971,6 +1032,38 @@ public class OrderApplicationService {
 				log.info("Processing refund success for order: {}, refundId: {}", cmd.getOrderId(), cmd.getRefundId());
 				OrderItem order = orderDomainService.loadForUpdate(cmd.getOrderId());
 				long expectedVersion = order.getVersion();
+			String orderNo = order.getOrderNo();
+			java.util.List<com.github.spud.tinystore.order.infrastructure.acl.InventoryClient.StockRestockRequest.Item> restockItems = new java.util.ArrayList<>();
+			if (cmd.getItems() != null && !cmd.getItems().isEmpty()) {
+				for (var it : cmd.getItems()) {
+					var item = new com.github.spud.tinystore.order.infrastructure.acl.InventoryClient.StockRestockRequest.Item();
+					item.setSkuId(it.getSkuId());
+					item.setQuantity(it.getQuantity());
+					restockItems.add(item);
+				}
+			} else {
+				java.util.Map<String, Integer> skuQty = new java.util.HashMap<>();
+				for (OrderItemEntity it : orderItemJpaRepository.findByMainOrderNoOrderByLineNoAsc(orderNo)) {
+					skuQty.merge(it.getSkuId(), it.getQuantity() != null ? it.getQuantity() : 0, Integer::sum);
+				}
+				for (var e : skuQty.entrySet()) {
+					var item = new com.github.spud.tinystore.order.infrastructure.acl.InventoryClient.StockRestockRequest.Item();
+					item.setSkuId(e.getKey());
+					item.setQuantity(e.getValue());
+					restockItems.add(item);
+				}
+			}
+			if (!restockItems.isEmpty()) {
+				var restockReq = new com.github.spud.tinystore.order.infrastructure.acl.InventoryClient.StockRestockRequest();
+				restockReq.setTenantId(order.getTenantId());
+				restockReq.setOrderNo(orderNo);
+				restockReq.setRefundId(cmd.getRefundId());
+				restockReq.setItems(restockItems);
+				var restockResp = inventoryService.restockOnRefund(buildInventoryIdempotencyKey(idempotencyKey, "restock", orderNo), restockReq);
+				if (restockResp == null || !restockResp.isSuccess()) {
+					throw new IllegalStateException("inventory restock failed");
+				}
+			}
 				// 占位：后续补齐维度状态更新
 				orderDomainService.save(order, expectedVersion);
 				orderDomainService.recordOutbox(order, "order.refund.completed", cmd);
@@ -1014,6 +1107,7 @@ public class OrderApplicationService {
 			OrderItem order = orderDomainService.loadForUpdate(String.valueOf(cmd.getOrderId()));
 			long expectedVersion = order.getVersion();
 			releasePromotionIfPresent(idempotencyKey, order.getOrderNo(), "PAYMENT_TIMEOUT");
+			releaseInventoryIfPresent(idempotencyKey, order.getOrderNo(), "PAYMENT_TIMEOUT");
 			// 占位：状态机与资源释放逻辑待补齐
 			orderDomainService.save(order, expectedVersion);
 			orderDomainService.recordOutbox(order, OrderEventTypeConstants.ORDER_CANCELLED, Map.of("reason", "PAYMENT_TIMEOUT"));
@@ -1074,6 +1168,14 @@ public class OrderApplicationService {
 			return "order:promotion:" + op + ":" + stableId;
 		}
 		return base + ":promotion:" + op;
+	}
+
+	private String buildInventoryIdempotencyKey(String base, String operation, String stableId) {
+		String op = operation == null ? "op" : operation;
+		if (base == null || base.isBlank()) {
+			return "order:inventory:" + op + ":" + stableId;
+		}
+		return base + ":inventory:" + op;
 	}
 
 	private CheckoutQuoteRequest buildCheckoutQuoteRequest(SubmitOrderCommand cmd, Map<String, SkuDTO> skuMap) {
@@ -1203,6 +1305,47 @@ public class OrderApplicationService {
 		req.setOrderNo(orderNo);
 		req.setReason(reason);
 		promotionService.checkoutRelease(buildPromotionIdempotencyKey(idempotencyKey, "release", orderNo), req);
+	}
+
+	private void releaseInventoryIfPresent(String idempotencyKey, String orderNo, String reason) {
+		if (orderNo == null || orderNo.isBlank()) {
+			return;
+		}
+		OrderMainEntity main = orderMainJpaRepository.findForUpdateByOrderNo(orderNo).orElse(null);
+		if (main == null) {
+			return;
+		}
+		java.util.List<OrderSubEntity> subs = orderSubJpaRepository.findByMainOrderNo(orderNo);
+		java.util.List<String> preOccupyIds = new java.util.ArrayList<>();
+		for (OrderSubEntity s : subs) {
+			preOccupyIds.addAll(parsePreOccupyIds(s.getStockPreOccupyIds()));
+		}
+		if (preOccupyIds.isEmpty()) {
+			return;
+		}
+		var releaseReq = new com.github.spud.tinystore.order.infrastructure.acl.InventoryClient.StockReleaseRequest();
+		releaseReq.setTenantId(main.getTenantId());
+		releaseReq.setOrderNo(orderNo);
+		releaseReq.setReason(reason);
+		releaseReq.setPreOccupyIds(preOccupyIds);
+		try {
+			inventoryService.rollbackPreOccupy(buildInventoryIdempotencyKey(idempotencyKey, "release", orderNo), releaseReq);
+		} catch (Exception e) {
+			log.warn("inventory release failed: {}", e.getMessage());
+		}
+	}
+
+	private java.util.List<String> parsePreOccupyIds(String csv) {
+		if (csv == null || csv.isBlank()) {
+			return java.util.List.of();
+		}
+		java.util.List<String> ids = new java.util.ArrayList<>();
+		for (String s : csv.split(",")) {
+			if (s != null && !s.isBlank()) {
+				ids.add(s.trim());
+			}
+		}
+		return ids;
 	}
 
 	private long kgToGrams(double kg) {

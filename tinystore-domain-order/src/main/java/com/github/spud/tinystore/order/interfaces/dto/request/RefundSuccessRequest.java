@@ -60,9 +60,22 @@ public class RefundSuccessRequest {
 	private String eventId;
 
 	public RefundSucceededCommand toCommand() {
+		List<RefundSucceededCommand.RefundItem> mapped = null;
+		if (items != null && !items.isEmpty()) {
+			mapped = items.stream()
+				.map(it -> RefundSucceededCommand.RefundItem.builder()
+					.skuId(it.getSkuId())
+					.quantity(it.getQuantity())
+					.amount(it.getAmount())
+					.build())
+				.toList();
+		}
 		return RefundSucceededCommand.builder()
 			.orderId(orderId != null ? orderId.toString() : null)
 			.refundId(refundId)
+			.amount(amount)
+			.time(time)
+			.items(mapped)
 			.idempotencyKey(eventId)
 			.build();
 	}

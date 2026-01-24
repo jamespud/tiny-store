@@ -67,6 +67,7 @@ public class PaymentSuccessRequest {
 			.orderId(this.orderId)
 			.paymentId(this.paymentId)
 			.amount(Money.of(cents))
+			.paidAt(this.paidAt)
 			.isDeposit(isDeposit)
 			.isFinalPayment(isFinal)
 			.build();

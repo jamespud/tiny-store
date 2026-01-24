@@ -72,6 +72,9 @@ public class OrderSubEntity {
 	@Column(name = "received_at")
 	private OffsetDateTime receivedAt;
 
+	@Column(name = "stock_pre_occupy_ids", length = 2000)
+	private String stockPreOccupyIds;
+
 	@Version
 	@Column(name = "version", nullable = false)
 	private Long version = 0L;
@@ -96,4 +99,3 @@ public class OrderSubEntity {
 		if (this.version == null) this.version = 0L;
 	}
 }
-
