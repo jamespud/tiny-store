@@ -14,6 +14,7 @@ public class PaymentSucceededCommand {
 	private String orderId;
 	private String paymentId;
 	private Money amount;
+	private Long paidAt;
 	private boolean isDeposit;
 	private boolean isFinalPayment;
 }
