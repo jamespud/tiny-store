@@ -34,15 +34,11 @@ public class CacheConfig {
     @Bean
     public KeyGenerator userKeyGenerator() {
         return (target, method, params) -> {
-            StringBuilder sb = new StringBuilder();
-            sb.append(target.getClass().getSimpleName());
-            sb.append(".");
-            sb.append(method.getName());
-            for (Object param : params) {
-                sb.append(".");
-                sb.append(param.toString());
+            if (params == null || params.length == 0 || params[0] == null) {
+                return "";
             }
-            return sb.toString();
+            return String.valueOf(params[0]);
         };
     }
+
 }

@@ -1,11 +1,13 @@
 package com.github.spud.tinystore.account.application;
 
-import com.github.spud.tinystore.account.domain.event.UserCreatedEvent;
-import com.github.spud.tinystore.account.domain.event.UserStatusChangedEvent;
-import com.github.spud.tinystore.account.domain.event.UserUpdatedEvent;
 import com.github.spud.tinystore.account.infrastructure.event.AccountEventPublisher;
 import com.github.spud.tinystore.account.infrastructure.persistence.entity.UserCore;
 import com.github.spud.tinystore.account.infrastructure.persistence.repository.UserCoreRepository;
+import com.github.spud.tinystore.account.infrastructure.security.CredentialVersionStore;
+import com.github.spud.tinystore.contracts.account.events.UserCreatedEvent;
+import com.github.spud.tinystore.contracts.account.events.UserCredentialChangedEvent;
+import com.github.spud.tinystore.contracts.account.events.UserStatusChangedEvent;
+import com.github.spud.tinystore.contracts.account.events.UserUpdatedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,6 +18,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
@@ -36,6 +40,9 @@ class UserAccountApplicationServiceTest {
     @Mock
     private AccountEventPublisher eventPublisher;
 
+    @Mock
+    private CredentialVersionStore credentialVersionStore;
+
     @InjectMocks
     private UserAccountApplicationService service;
 
@@ -55,6 +62,7 @@ class UserAccountApplicationServiceTest {
 
         verify(userCoreRepository, never()).save(any());
         verify(eventPublisher, never()).publishUserCreatedEvent(any());
+        verify(credentialVersionStore, never()).save(any(), any());
     }
 
     @Test
@@ -76,6 +84,8 @@ class UserAccountApplicationServiceTest {
         savedUser.setNickname(nickname);
         savedUser.setAccountStatus(1);
         savedUser.setIsDelete(0);
+        savedUser.setCredentialVersion(1L);
+        savedUser.setRegisterTime(LocalDateTime.now());
         when(userCoreRepository.save(any(UserCore.class))).thenReturn(savedUser);
 
         // When
@@ -98,9 +108,12 @@ class UserAccountApplicationServiceTest {
         ArgumentCaptor<UserCreatedEvent> eventCaptor = ArgumentCaptor.forClass(UserCreatedEvent.class);
         verify(eventPublisher).publishUserCreatedEvent(eventCaptor.capture());
         UserCreatedEvent event = eventCaptor.getValue();
-        assertThat(event.getUserId()).isEqualTo(1L);
-        assertThat(event.getPhone()).isEqualTo(phone);
-        assertThat(event.getNickname()).isEqualTo(nickname);
+        assertThat(event.userId()).isEqualTo(1L);
+        assertThat(event.phone()).isEqualTo(phone);
+        assertThat(event.nickname()).isEqualTo(nickname);
+        assertThat(event.createTime()).isEqualTo(savedUser.getRegisterTime().atOffset(ZoneOffset.UTC));
+
+        verify(credentialVersionStore).save(1L, 1L);
     }
 
     @Test
@@ -189,6 +202,7 @@ class UserAccountApplicationServiceTest {
 
         verify(passwordEncoder, never()).encode(anyString());
         verify(userCoreRepository, never()).save(any());
+        verify(credentialVersionStore, never()).save(any(), any());
     }
 
     @Test
@@ -202,6 +216,7 @@ class UserAccountApplicationServiceTest {
         UserCore existingUser = new UserCore();
         existingUser.setUserId(userId);
         existingUser.setPassword("old_password");
+        existingUser.setCredentialVersion(1L);
 
         when(userCoreRepository.findById(userId)).thenReturn(Optional.of(existingUser));
         when(passwordEncoder.encode(newPassword)).thenReturn(encodedPassword);
@@ -214,6 +229,9 @@ class UserAccountApplicationServiceTest {
         ArgumentCaptor<UserCore> userCaptor = ArgumentCaptor.forClass(UserCore.class);
         verify(userCoreRepository).save(userCaptor.capture());
         assertThat(userCaptor.getValue().getPassword()).isEqualTo(encodedPassword);
+        assertThat(userCaptor.getValue().getCredentialVersion()).isEqualTo(2L);
+        verify(eventPublisher).publishUserCredentialChangedEvent(any(UserCredentialChangedEvent.class));
+        verify(credentialVersionStore).save(userId, 2L);
     }
 
     @Test
@@ -230,6 +248,8 @@ class UserAccountApplicationServiceTest {
 
         verify(userCoreRepository, never()).save(any());
         verify(eventPublisher, never()).publishUserStatusChangedEvent(any());
+        verify(eventPublisher, never()).publishUserCredentialChangedEvent(any());
+        verify(credentialVersionStore, never()).save(any(), any());
     }
 
     @Test
@@ -243,6 +263,7 @@ class UserAccountApplicationServiceTest {
         UserCore existingUser = new UserCore();
         existingUser.setUserId(userId);
         existingUser.setAccountStatus(oldStatus);
+        existingUser.setCredentialVersion(5L);
 
         when(userCoreRepository.findById(userId)).thenReturn(Optional.of(existingUser));
 
@@ -253,13 +274,20 @@ class UserAccountApplicationServiceTest {
         ArgumentCaptor<UserCore> userCaptor = ArgumentCaptor.forClass(UserCore.class);
         verify(userCoreRepository).save(userCaptor.capture());
         assertThat(userCaptor.getValue().getAccountStatus()).isEqualTo(newStatus);
+        assertThat(userCaptor.getValue().getCredentialVersion()).isEqualTo(6L);
 
         ArgumentCaptor<UserStatusChangedEvent> eventCaptor = ArgumentCaptor.forClass(UserStatusChangedEvent.class);
         verify(eventPublisher).publishUserStatusChangedEvent(eventCaptor.capture());
         UserStatusChangedEvent event = eventCaptor.getValue();
-        assertThat(event.getUserId()).isEqualTo(userId);
-        assertThat(event.getOldStatus()).isEqualTo(oldStatus);
-        assertThat(event.getNewStatus()).isEqualTo(newStatus);
+        assertThat(event.userId()).isEqualTo(userId);
+        assertThat(event.oldStatus()).isEqualTo(oldStatus);
+        assertThat(event.newStatus()).isEqualTo(newStatus);
+
+        ArgumentCaptor<UserCredentialChangedEvent> cvCaptor = ArgumentCaptor.forClass(UserCredentialChangedEvent.class);
+        verify(eventPublisher).publishUserCredentialChangedEvent(cvCaptor.capture());
+        assertThat(cvCaptor.getValue().userId()).isEqualTo(userId);
+        assertThat(cvCaptor.getValue().credentialVersion()).isEqualTo(6L);
+        verify(credentialVersionStore).save(userId, 6L);
     }
 
     @Test

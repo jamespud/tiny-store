@@ -30,7 +30,8 @@ public class JwtClaimsPropagationFilter implements GlobalFilter, Ordered {
 					ServerWebExchange.Builder builder = exchange.mutate();
 					builder.request(requestBuilder -> requestBuilder.headers(headers -> {
 						headers.remove(HttpHeaders.AUTHORIZATION);
-						headers.set(HEADER_SUB, jwtAuth.getName());
+						String userId = jwtAuth.getToken().getClaimAsString("user_id");
+						headers.set(HEADER_SUB, userId != null ? userId : jwtAuth.getName());
 						String roles = jwtAuth.getAuthorities().stream()
 							.map(granted -> granted.getAuthority())
 							.collect(Collectors.joining(","));

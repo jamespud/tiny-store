@@ -2,6 +2,7 @@ package com.github.spud.tinystore.account.interfaces.rest;
 
 import com.github.spud.tinystore.account.application.UserAccountApplicationService;
 import com.github.spud.tinystore.account.infrastructure.persistence.entity.UserCore;
+import com.github.spud.tinystore.account.interfaces.dto.UserView;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,21 +15,21 @@ public class UserCommandController {
     private final UserAccountApplicationService userAccountApplicationService;
 
     @PostMapping("/register")
-    public ResponseEntity<UserCore> registerUser(@RequestBody RegisterRequest request) {
+    public ResponseEntity<UserView> registerUser(@RequestBody RegisterRequest request) {
         try {
             UserCore userCore = userAccountApplicationService.registerUser(
                     request.phone(),
                     request.password(),
                     request.nickname()
             );
-            return ResponseEntity.ok(userCore);
+            return ResponseEntity.ok(UserView.from(userCore));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(null);
         }
     }
 
     @PutMapping("/{userId}/profile")
-    public ResponseEntity<UserCore> updateUserProfile(
+    public ResponseEntity<UserView> updateUserProfile(
             @PathVariable Long userId,
             @RequestBody UpdateProfileRequest request) {
         try {
@@ -38,7 +39,7 @@ public class UserCommandController {
                     request.avatarUrl(),
                     request.extJson()
             );
-            return ResponseEntity.ok(userCore);
+            return ResponseEntity.ok(UserView.from(userCore));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.notFound().build();
         }

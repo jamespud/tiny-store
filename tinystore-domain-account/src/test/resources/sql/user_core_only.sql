@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS user_core
     login_ip        VARCHAR(32),
     account_status  SMALLINT     NOT NULL DEFAULT 1,
     is_delete       SMALLINT     NOT NULL DEFAULT 0,
+    credential_version BIGINT     NOT NULL DEFAULT 1,
     ext_json        JSONB,
     CONSTRAINT chk_account_non_empty CHECK (char_length(account) > 0)
 );
