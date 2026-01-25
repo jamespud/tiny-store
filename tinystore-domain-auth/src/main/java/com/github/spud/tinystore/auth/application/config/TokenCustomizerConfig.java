@@ -31,6 +31,11 @@ public class TokenCustomizerConfig {
     return context -> {
       Authentication principal = context.getPrincipal();
       if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
+        if (principal instanceof MallUser user) {
+          context.getClaims().claim("user_id", user.getId().value());
+          context.getClaims().claim("rt_version", user.getRtVersion().value());
+          context.getClaims().claim("status", user.getStatus().name());
+        }
         Collection<? extends GrantedAuthority> authorities = principal != null
             ? principal.getAuthorities()
             : List.of();

@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.account.infrastructure.config;
 
 import com.github.spud.tinystore.account.infrastructure.filter.RateLimitFilter;
+import com.github.spud.tinystore.account.infrastructure.security.InternalCallAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,6 +24,7 @@ import java.util.List;
 public class WebConfig {
 
     private final RateLimitFilter rateLimitFilter;
+    private final InternalCallAuthenticationFilter internalCallAuthenticationFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -32,6 +34,7 @@ public class WebConfig {
                 )
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .addFilterBefore(internalCallAuthenticationFilter, RateLimitFilter.class)
                 .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

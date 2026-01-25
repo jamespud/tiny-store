@@ -1,4 +1,6 @@
 -- 客户端信息表
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 CREATE TABLE IF NOT EXISTS oauth2_registered_client (
     id VARCHAR(100) PRIMARY KEY,
     client_id VARCHAR(100) NOT NULL,
@@ -73,27 +75,23 @@ CREATE TABLE IF NOT EXISTS mall_user (
     avatar VARCHAR(255),
     status VARCHAR(20) NOT NULL DEFAULT 'normal',
     rt_version INTEGER NOT NULL DEFAULT 1,
-    -- H2: use TIMESTAMP and CURRENT_TIMESTAMP for compatibility
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS mall_user_phone_uindex ON mall_user (phone);
 
 -- 登录一次性验证码
 CREATE TABLE IF NOT EXISTS login_otp (
-    -- H2: RANDOM_UUID() replaces gen_random_uuid()
-    id UUID PRIMARY KEY DEFAULT RANDOM_UUID(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     phone VARCHAR(20) NOT NULL,
     code VARCHAR(10) NOT NULL,
-    -- TIMESTAMPTZ -> TIMESTAMP for H2 compatibility
-    expire_at TIMESTAMP NOT NULL,
+    expire_at TIMESTAMPTZ NOT NULL,
     used BOOLEAN NOT NULL DEFAULT FALSE,
     retry_count INTEGER NOT NULL DEFAULT 0,
     send_count INTEGER NOT NULL DEFAULT 0,
     last_send_at TIMESTAMPTZ,
-    last_send_at TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS login_otp_phone_idx ON login_otp (phone);
@@ -102,20 +100,17 @@ CREATE INDEX IF NOT EXISTS login_otp_retry_idx ON login_otp (phone, retry_count)
 
 -- 审计表（auth_audit）
 CREATE TABLE IF NOT EXISTS auth_audit (
-    -- H2 compatibility notes:
-    -- BIGSERIAL -> BIGINT AUTO_INCREMENT
-    -- scopes (Postgres TEXT[]) stored as JSON string in TEXT
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     user_id UUID,
     phone VARCHAR(20),
     client_id VARCHAR(64),
     action VARCHAR(64) NOT NULL,
-    scopes TEXT, -- JSON array string, e.g. '["scope1","scope2"]'
-    ip VARCHAR(45), -- INET -> VARCHAR
+    scopes TEXT[] NOT NULL DEFAULT '{}'::text[],
+    ip INET,
     user_agent TEXT,
     details TEXT,
     success BOOLEAN NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS auth_audit_user_created_idx ON auth_audit (user_id, created_at DESC);
@@ -123,20 +118,19 @@ CREATE INDEX IF NOT EXISTS auth_audit_action_idx ON auth_audit (action);
 
 -- Auth consent history
 CREATE TABLE IF NOT EXISTS auth_consent_history (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     user_id UUID NOT NULL,
     client_id VARCHAR(64) NOT NULL,
-    -- Store scopes arrays as JSON strings
-    added_scopes TEXT NOT NULL DEFAULT '[]',
-    removed_scopes TEXT NOT NULL DEFAULT '[]',
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    added_scopes TEXT[] NOT NULL DEFAULT '{}'::text[],
+    removed_scopes TEXT[] NOT NULL DEFAULT '{}'::text[],
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS auth_consent_history_user_idx ON auth_consent_history (user_id, created_at DESC);
 
 -- Outbox 表（合并、采用 uuid 作为 aggregate_id）
 CREATE TABLE IF NOT EXISTS auth_outbox (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     event_type VARCHAR(120) NOT NULL,
     aggregate_id UUID NOT NULL,
     rt_version BIGINT NOT NULL,
@@ -144,9 +138,9 @@ CREATE TABLE IF NOT EXISTS auth_outbox (
     client_id VARCHAR(128),
     added_scopes TEXT,
     removed_scopes TEXT,
-    occurred_at TIMESTAMP NOT NULL,
+    occurred_at TIMESTAMPTZ NOT NULL,
     published BOOLEAN NOT NULL DEFAULT FALSE,
-    published_at TIMESTAMP
+    published_at TIMESTAMPTZ
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS auth_outbox_user_version_uindex ON auth_outbox (aggregate_id, rt_version);
@@ -155,7 +149,7 @@ CREATE INDEX IF NOT EXISTS idx_auth_outbox_unpublished ON auth_outbox (event_typ
 
 -- 通用审计日志（与 JdbcAuditLogAdapter 对应）
 CREATE TABLE IF NOT EXISTS audit_log (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     user_id VARCHAR(64),
     phone VARCHAR(32),
     client_id VARCHAR(128),
@@ -164,7 +158,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     ip VARCHAR(64),
     user_agent VARCHAR(256),
     details TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log (created_at);

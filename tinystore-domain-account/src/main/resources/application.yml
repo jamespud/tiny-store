@@ -31,6 +31,9 @@ spring:
         userStatusChanged-out-0:
           destination: user-status-changed
           content-type: application/json
+        userCredentialChanged-out-0:
+          destination: user-credential-changed
+          content-type: application/json
       rabbit:
         bindings:
           userCreated-out-0:
@@ -40,6 +43,9 @@ spring:
             producer:
               transacted: true
           userStatusChanged-out-0:
+            producer:
+              transacted: true
+          userCredentialChanged-out-0:
             producer:
               transacted: true
 
@@ -63,6 +69,10 @@ management:
   endpoint:
     health:
       show-details: always
+
+tinystore:
+  internal:
+    call-token: ${TINYSTORE_INTERNAL_CALL_TOKEN:changeit}
 
 ---
 spring:

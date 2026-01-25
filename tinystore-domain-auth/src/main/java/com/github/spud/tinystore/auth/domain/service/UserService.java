@@ -59,14 +59,15 @@ public class UserService implements UserDetailsService {
   }
 
   private MallUser convertToMallUser(AccountServiceFeignClient.UserCoreDto userCoreDto) {
+    long rtVersion = userCoreDto.credentialVersion() == null ? 1L : userCoreDto.credentialVersion();
     return MallUser.restore(
         UserId.of(String.valueOf(userCoreDto.userId())),
         PhoneNumber.of(userCoreDto.account()),
         userCoreDto.nickname(),
         userCoreDto.avatarUrl(),
-        userCoreDto.password(),
+        null,
         userCoreDto.accountStatus() == 1 ? MallUserStatus.ACTIVE : MallUserStatus.FROZEN,
-        RtVersion.of(1)
+        RtVersion.of(rtVersion)
     );
   }
 

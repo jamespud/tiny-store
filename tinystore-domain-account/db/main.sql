@@ -13,6 +13,7 @@ CREATE TABLE user_core
     login_ip        VARCHAR(32),
     account_status  SMALLINT     NOT NULL DEFAULT 1, -- 0:禁用;1:正常;2:待验证(新注册未实名)
     is_delete       SMALLINT     NOT NULL DEFAULT 0, -- 0:未删,1:已逻辑删
+    credential_version BIGINT     NOT NULL DEFAULT 1, -- 凭证版本，用于强制失效刷新令牌
     ext_json        JSONB,                           -- 扩展字段（设备/端信息等）
     CONSTRAINT chk_account_non_empty CHECK (char_length(account) > 0)
 );
@@ -189,5 +190,4 @@ CREATE TABLE role_permission
 );
 COMMENT ON TABLE role_permission IS '角色预设权限，子账号继承后可微调';
 CREATE UNIQUE INDEX idx_role_permission_unique ON role_permission (role_id, perm_id);
-
 

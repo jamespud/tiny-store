@@ -2,6 +2,7 @@ package com.github.spud.tinystore.account.interfaces.rest;
 
 import com.github.spud.tinystore.account.application.UserAccountApplicationService;
 import com.github.spud.tinystore.account.infrastructure.persistence.entity.UserCore;
+import com.github.spud.tinystore.account.interfaces.dto.UserView;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,23 +20,23 @@ public class UserQueryController {
     private final UserAccountApplicationService userAccountApplicationService;
 
     @GetMapping("/{userId}")
-    public ResponseEntity<UserCore> getUserById(@PathVariable Long userId) {
+    public ResponseEntity<UserView> getUserById(@PathVariable Long userId) {
         Optional<UserCore> user = userAccountApplicationService.getUserById(userId);
-        return user.map(ResponseEntity::ok)
+        return user.map(UserView::from).map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/phone/{phone}")
-    public ResponseEntity<UserCore> getUserByPhone(@PathVariable String phone) {
+    public ResponseEntity<UserView> getUserByPhone(@PathVariable String phone) {
         Optional<UserCore> user = userAccountApplicationService.getUserByPhone(phone);
-        return user.map(ResponseEntity::ok)
+        return user.map(UserView::from).map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/username/{username}")
-    public ResponseEntity<UserCore> getUserByUsername(@PathVariable String username) {
+    public ResponseEntity<UserView> getUserByUsername(@PathVariable String username) {
         Optional<UserCore> user = userAccountApplicationService.getUserByUsername(username);
-        return user.map(ResponseEntity::ok)
+        return user.map(UserView::from).map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 }

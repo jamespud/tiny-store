@@ -58,6 +58,10 @@ public class UserCore {
 	@Comment("逻辑删除：0-未删；1-已删")
 	private Integer isDelete;
 
+	@Column(nullable = false)
+	@Comment("凭证版本：改密/冻结等变更递增")
+	private Long credentialVersion;
+
 	@Column(columnDefinition = "JSONB")
 	@Comment("扩展字段（设备/端信息等）")
 	private String extJson; // 用String接收JSONB，如需解析可配合@Convert
@@ -67,6 +71,9 @@ public class UserCore {
 	public void prePersist() {
 		if (registerTime == null) {
 			registerTime = LocalDateTime.now();
+		}
+		if (credentialVersion == null) {
+			credentialVersion = 1L;
 		}
 	}
 }
