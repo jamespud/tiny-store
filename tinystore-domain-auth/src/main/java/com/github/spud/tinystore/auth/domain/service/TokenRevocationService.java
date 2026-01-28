@@ -19,6 +19,6 @@ public class TokenRevocationService {
   public void revokeAllTokensForUser(String userId) {
     userService.incrementRtVersion(userId);
     jdbcTemplate.update("delete from oauth2_authorization where principal_name = ?",
-        userId.toString());
+      userId.toString());
   }
 }

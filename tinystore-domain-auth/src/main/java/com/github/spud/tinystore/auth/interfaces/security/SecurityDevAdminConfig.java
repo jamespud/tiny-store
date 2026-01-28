@@ -17,10 +17,10 @@ public class SecurityDevAdminConfig {
   @Bean
   public InMemoryUserDetailsManager adminUserDetailsManager() {
     UserDetails admin = User
-        .withUsername("admin")
-        .password("{noop}admin")
-        .roles("ADMIN")
-        .build();
+      .withUsername("admin")
+      .password("{noop}admin")
+      .roles("ADMIN")
+      .build();
     return new InMemoryUserDetailsManager(admin);
   }
 }

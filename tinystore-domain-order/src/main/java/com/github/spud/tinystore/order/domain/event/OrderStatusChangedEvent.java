@@ -20,34 +20,34 @@ import org.slf4j.MDC;
 @AllArgsConstructor
 public class OrderStatusChangedEvent extends OrderDomainBaseEvent {
 
-	private final String fromStatus;
-	private final String toStatus;
-	private final String reason;
-	private final String actorType;
-	private final String actorId;
+  private final String fromStatus;
+  private final String toStatus;
+  private final String reason;
+  private final String actorType;
+  private final String actorId;
 
 
-	public OrderStatusChangedEvent(String orderId, String fromStatus, String toStatus, String reason,
-		String actorType, String actorId) {
-		this.setEventId(UUID.randomUUID().toString().replace("-", ""));
-		this.setOrderId(orderId);
-		this.setOccurredAt(OffsetDateTime.now());
-		this.fromStatus = fromStatus;
-		this.toStatus = toStatus;
-		this.reason = reason;
-		this.actorType = actorType;
-		this.actorId = actorId;
-		this.setTraceId(MDC.get("traceId"));
-	}
+  public OrderStatusChangedEvent(String orderId, String fromStatus, String toStatus, String reason,
+    String actorType, String actorId) {
+    this.setEventId(UUID.randomUUID().toString().replace("-", ""));
+    this.setOrderId(orderId);
+    this.setOccurredAt(OffsetDateTime.now());
+    this.fromStatus = fromStatus;
+    this.toStatus = toStatus;
+    this.reason = reason;
+    this.actorType = actorType;
+    this.actorId = actorId;
+    this.setTraceId(MDC.get("traceId"));
+  }
 
-	@Override
-	public Map<String, Object> getPayload() {
-		Map<String, Object> payload = new HashMap<>();
-		payload.put("fromStatus", fromStatus);
-		payload.put("toStatus", toStatus);
-		payload.put("reason", reason);
-		payload.put("actorType", actorType);
-		payload.put("actorId", actorId);
-		return payload;
-	}
+  @Override
+  public Map<String, Object> getPayload() {
+    Map<String, Object> payload = new HashMap<>();
+    payload.put("fromStatus", fromStatus);
+    payload.put("toStatus", toStatus);
+    payload.put("reason", reason);
+    payload.put("actorType", actorType);
+    payload.put("actorId", actorId);
+    return payload;
+  }
 }

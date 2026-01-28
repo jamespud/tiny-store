@@ -31,8 +31,8 @@ public class OtpAuthenticationProvider implements AuthenticationProvider {
       // 返回“已认证”的令牌，确保会话中标记为 authenticated=true
       var user = authResult.user();
       Collection<? extends GrantedAuthority> authorities = user.getAuthorities() != null
-          ? user.getAuthorities()
-          : Collections.emptyList();
+        ? user.getAuthorities()
+        : Collections.emptyList();
       return new OtpAuthenticationToken(user, null, authorities);
     }
     return null;

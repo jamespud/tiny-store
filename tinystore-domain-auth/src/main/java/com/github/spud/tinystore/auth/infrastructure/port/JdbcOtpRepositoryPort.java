@@ -9,18 +9,18 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class JdbcOtpRepositoryPort implements OtpRepositoryPort {
 
-	@Override
-	public Otp save(Otp otp) {
-		return null;
-	}
+  @Override
+  public Otp save(Otp otp) {
+    return null;
+  }
 
-	@Override
-	public Optional<Otp> findLatest(PhoneNumber phone) {
-		return Optional.empty();
-	}
+  @Override
+  public Optional<Otp> findLatest(PhoneNumber phone) {
+    return Optional.empty();
+  }
 
-	@Override
-	public void markUsed(Otp otp) {
+  @Override
+  public void markUsed(Otp otp) {
 
-	}
+  }
 }

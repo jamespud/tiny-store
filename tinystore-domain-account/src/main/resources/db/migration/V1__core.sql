@@ -138,7 +138,7 @@ VALUES (1, '普通用户', '抖音商城消费者', 1),
        (4, '商家客服', '处理订单咨询、售后问题', 1),
        (5, '商家财务', '负责对账、发票管理', 1),
        (6, '商家仓储', '处理发货、库存管理', 1)
-ON CONFLICT (role_id) DO NOTHING;
+    ON CONFLICT (role_id) DO NOTHING;
 
 
 -- 4. 权限字典 permission_dict（颗粒化到按钮/接口级）
@@ -159,7 +159,7 @@ VALUES (1000, '商品管理', 'PRODUCT_MANAGE', 1, 0, 1),
        (1002, '商品下架', 'PRODUCT_DELETE', 2, 1000, 1),
        (2000, '订单管理', 'ORDER_MANAGE', 1, 0, 1),
        (2001, '订单改价', 'ORDER_PRICE_EDIT', 2, 2000, 1)
-ON CONFLICT (perm_code) DO NOTHING;
+    ON CONFLICT (perm_code) DO NOTHING;
 
 
 -- 5. 用户角色关联 user_role（用户与角色绑定，支持商家角色关联 merchant_core）

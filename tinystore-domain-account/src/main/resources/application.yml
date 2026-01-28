@@ -48,18 +48,15 @@ spring:
           userCredentialChanged-out-0:
             producer:
               transacted: true
-
-# Eureka配置
-eureka:
-  client:
-    service-url:
-      defaultZone: http://localhost:8761/eureka/
-    fetch-registry: true
-    register-with-eureka: true
-  instance:
-    prefer-ip-address: true
-    instance-id: ${spring.cloud.client.ip-address}:${server.port}
-
+    nacos:
+      config:
+        server-addr: 127.0.0.1:8848
+        access-key:
+        import-check:
+          enabled: false
+      discovery:
+        server-addr: 127.0.0.1:8848
+        access-key:
 # Actuator配置
 management:
   endpoints:

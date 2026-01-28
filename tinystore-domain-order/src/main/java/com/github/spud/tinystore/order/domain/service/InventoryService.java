@@ -18,25 +18,27 @@ import org.springframework.stereotype.Service;
 @Service
 public class InventoryService {
 
-	private final InventoryClient inventoryClient;
+  private final InventoryClient inventoryClient;
 
-	public InventoryService(InventoryClient inventoryClient) {
-		this.inventoryClient = inventoryClient;
-	}
+  public InventoryService(InventoryClient inventoryClient) {
+    this.inventoryClient = inventoryClient;
+  }
 
-	public StockPreOccupyResponse preOccupyStock(String idempotencyKey, StockPreOccupyRequest request) {
-		return inventoryClient.preOccupy(idempotencyKey, request);
-	}
+  public StockPreOccupyResponse preOccupyStock(String idempotencyKey,
+    StockPreOccupyRequest request) {
+    return inventoryClient.preOccupy(idempotencyKey, request);
+  }
 
-	public StockReleaseResponse rollbackPreOccupy(String idempotencyKey, StockReleaseRequest request) {
-		return inventoryClient.release(idempotencyKey, request);
-	}
+  public StockReleaseResponse rollbackPreOccupy(String idempotencyKey,
+    StockReleaseRequest request) {
+    return inventoryClient.release(idempotencyKey, request);
+  }
 
-	public StockCommitResponse commitStock(String idempotencyKey, StockCommitRequest request) {
-		return inventoryClient.commit(idempotencyKey, request);
-	}
+  public StockCommitResponse commitStock(String idempotencyKey, StockCommitRequest request) {
+    return inventoryClient.commit(idempotencyKey, request);
+  }
 
-	public StockRestockResponse restockOnRefund(String idempotencyKey, StockRestockRequest request) {
-		return inventoryClient.restock(idempotencyKey, request);
-	}
+  public StockRestockResponse restockOnRefund(String idempotencyKey, StockRestockRequest request) {
+    return inventoryClient.restock(idempotencyKey, request);
+  }
 }

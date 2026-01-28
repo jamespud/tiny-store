@@ -26,8 +26,8 @@ public class PasswordApplicationService implements PasswordUserCase {
   private final String internalCallToken;
 
   public PasswordApplicationService(AccountServiceFeignClient accountServiceFeignClient,
-      AuditLogPort auditLogPort,
-      @Value("${tinystore.internal.call-token:changeit}") String internalCallToken) {
+    AuditLogPort auditLogPort,
+    @Value("${tinystore.internal.call-token:changeit}") String internalCallToken) {
     this.accountServiceFeignClient = accountServiceFeignClient;
     this.auditLogPort = auditLogPort;
     this.internalCallToken = internalCallToken;
@@ -40,38 +40,38 @@ public class PasswordApplicationService implements PasswordUserCase {
     AccountServiceFeignClient.CredentialVerifyResponse verified;
     try {
       verified = accountServiceFeignClient.verifyCredentials(
-          internalCallToken,
-          new AccountServiceFeignClient.CredentialVerifyRequest(phone.value(), command.password()));
+        internalCallToken,
+        new AccountServiceFeignClient.CredentialVerifyRequest(phone.value(), command.password()));
     } catch (FeignException ex) {
       if (ex.status() == 403) {
         auditLogPort.append(AuditEvent.failure(null, phone.value(), null,
-            "PASSWORD_LOGIN", Set.of(), null, null, "user_frozen"));
+          "PASSWORD_LOGIN", Set.of(), null, null, "user_frozen"));
         throw new UserFrozenException("user is frozen");
       }
       auditLogPort.append(AuditEvent.failure(null, phone.value(), null,
-          "PASSWORD_LOGIN", Set.of(), null, null, "invalid_credentials"));
+        "PASSWORD_LOGIN", Set.of(), null, null, "invalid_credentials"));
       throw new IllegalArgumentException("invalid credentials");
     }
 
     if (verified == null) {
       auditLogPort.append(AuditEvent.failure(null, phone.value(), null,
-          "PASSWORD_LOGIN", Set.of(), null, null, "invalid_credentials"));
+        "PASSWORD_LOGIN", Set.of(), null, null, "invalid_credentials"));
       throw new IllegalArgumentException("invalid credentials");
     }
 
     long rtVersion = verified.credentialVersion() == null ? 1L : verified.credentialVersion();
     MallUser user = MallUser.restore(
-        UserId.of(String.valueOf(verified.userId())),
-        phone,
-        verified.nickname(),
-        verified.avatarUrl(),
-        null,
-        verified.accountStatus() == 1 ? MallUserStatus.ACTIVE : MallUserStatus.FROZEN,
-        RtVersion.of(rtVersion)
+      UserId.of(String.valueOf(verified.userId())),
+      phone,
+      verified.nickname(),
+      verified.avatarUrl(),
+      null,
+      verified.accountStatus() == 1 ? MallUserStatus.ACTIVE : MallUserStatus.FROZEN,
+      RtVersion.of(rtVersion)
     );
 
     auditLogPort.append(AuditEvent.success(user.getId().value(), user.getPhone().value(), null,
-        "PASSWORD_LOGIN", Set.of(), null, null, null));
+      "PASSWORD_LOGIN", Set.of(), null, null, null));
     return new AuthResult(user);
   }
 }

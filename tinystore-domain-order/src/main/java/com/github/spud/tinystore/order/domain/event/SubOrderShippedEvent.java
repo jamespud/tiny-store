@@ -15,19 +15,19 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 public class SubOrderShippedEvent extends OrderDomainBaseEvent {
 
-	private String orderId;
-	private String subOrderId;
-	private String shipmentInfo;
+  private String orderId;
+  private String subOrderId;
+  private String shipmentInfo;
 
-	@Builder
-	public SubOrderShippedEvent(String orderId, String subOrderId, String shipmentInfo) {
-		this.orderId = orderId;
-		this.subOrderId = subOrderId;
-		this.shipmentInfo = shipmentInfo;
+  @Builder
+  public SubOrderShippedEvent(String orderId, String subOrderId, String shipmentInfo) {
+    this.orderId = orderId;
+    this.subOrderId = subOrderId;
+    this.shipmentInfo = shipmentInfo;
 
-		// Set base event properties
-		setType(OrderEventType.ORDER_SHIPPED);
-		setAggregateId(orderId);
-		setOccurredAt(OffsetDateTime.now());
-	}
+    // Set base event properties
+    setType(OrderEventType.ORDER_SHIPPED);
+    setAggregateId(orderId);
+    setOccurredAt(OffsetDateTime.now());
+  }
 }

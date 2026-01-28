@@ -17,18 +17,20 @@ import org.springframework.stereotype.Service;
 @Service
 public class PromotionService {
 
-	@Autowired
-	private PromotionClient promotionClient;
+  @Autowired
+  private PromotionClient promotionClient;
 
-	public CheckoutQuoteResponse checkoutQuote(String idempotencyKey, CheckoutQuoteRequest request) {
-		return promotionClient.checkoutQuote(idempotencyKey, request);
-	}
+  public CheckoutQuoteResponse checkoutQuote(String idempotencyKey, CheckoutQuoteRequest request) {
+    return promotionClient.checkoutQuote(idempotencyKey, request);
+  }
 
-	public CheckoutCommitResponse checkoutCommit(String idempotencyKey, CheckoutCommitRequest request) {
-		return promotionClient.checkoutCommit(idempotencyKey, request);
-	}
+  public CheckoutCommitResponse checkoutCommit(String idempotencyKey,
+    CheckoutCommitRequest request) {
+    return promotionClient.checkoutCommit(idempotencyKey, request);
+  }
 
-	public CheckoutReleaseResponse checkoutRelease(String idempotencyKey, CheckoutReleaseRequest request) {
-		return promotionClient.checkoutRelease(idempotencyKey, request);
-	}
+  public CheckoutReleaseResponse checkoutRelease(String idempotencyKey,
+    CheckoutReleaseRequest request) {
+    return promotionClient.checkoutRelease(idempotencyKey, request);
+  }
 }

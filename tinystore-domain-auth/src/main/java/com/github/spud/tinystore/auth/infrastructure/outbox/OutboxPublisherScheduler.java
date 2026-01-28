@@ -21,8 +21,8 @@ public class OutboxPublisherScheduler {
   private final OutboxProperties outboxProperties;
 
   public OutboxPublisherScheduler(OutboxPort outboxPort,
-      EventPublisherPort eventPublisherPort,
-      OutboxProperties outboxProperties) {
+    EventPublisherPort eventPublisherPort,
+    OutboxProperties outboxProperties) {
     this.outboxPort = outboxPort;
     this.eventPublisherPort = eventPublisherPort;
     this.outboxProperties = outboxProperties;
@@ -32,7 +32,7 @@ public class OutboxPublisherScheduler {
   @Transactional
   public void publishOutbox() {
     List<RefreshTokenRevokedEvent> events = outboxPort.fetchUnpublished(
-        outboxProperties.getBatchSize());
+      outboxProperties.getBatchSize());
     if (events.isEmpty()) {
       return;
     }

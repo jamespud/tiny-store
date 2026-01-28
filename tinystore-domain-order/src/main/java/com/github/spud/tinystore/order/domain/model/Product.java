@@ -10,6 +10,6 @@ package com.github.spud.tinystore.order.domain.model;
  * @param unitPrice 商品单价
  */
 public record Product(String shopId, String skuId, String title, String specJson,
-											Money unitPrice, Boolean available) {
+                      Money unitPrice, Boolean available) {
 
 }

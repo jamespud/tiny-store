@@ -10,28 +10,28 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public class OrderStatus {
-	
-	public static final OrderStatus CREATED = new OrderStatus(CoreFlowStatus.CREATED,
-		PaymentStatus.NONE, FulfillmentStatus.NONE, AfterSaleStatus.NONE);
 
-	/**
-	 * 核心流程状态
-	 */
-	private CoreFlowStatus coreFlowStatus;
+  public static final OrderStatus CREATED = new OrderStatus(CoreFlowStatus.CREATED,
+    PaymentStatus.NONE, FulfillmentStatus.NONE, AfterSaleStatus.NONE);
 
-	/**
-	 * 支付状态
-	 */
-	private PaymentStatus paymentStatus;
+  /**
+   * 核心流程状态
+   */
+  private CoreFlowStatus coreFlowStatus;
 
-	/**
-	 * 履约状态
-	 */
-	private FulfillmentStatus fulfillmentStatus;
+  /**
+   * 支付状态
+   */
+  private PaymentStatus paymentStatus;
 
-	/**
-	 * 售后状态
-	 */
-	private AfterSaleStatus afterSaleStatus;
+  /**
+   * 履约状态
+   */
+  private FulfillmentStatus fulfillmentStatus;
+
+  /**
+   * 售后状态
+   */
+  private AfterSaleStatus afterSaleStatus;
 
 }

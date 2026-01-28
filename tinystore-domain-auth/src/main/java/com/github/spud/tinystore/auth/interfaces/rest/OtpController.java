@@ -30,12 +30,12 @@ public class OtpController {
 
   @PostMapping("/send")
   public ResponseEntity<Void> send(@Valid @RequestBody SendRequest request,
-      HttpServletRequest servletRequest) {
+    HttpServletRequest servletRequest) {
     otpUseCase.sendOtp(new SendOtpCommand(
-        request.phone(),
-        request.requestId() != null ? request.requestId() : UUID.randomUUID().toString(),
-        servletRequest.getRemoteAddr(),
-        servletRequest.getHeader("User-Agent")));
+      request.phone(),
+      request.requestId() != null ? request.requestId() : UUID.randomUUID().toString(),
+      servletRequest.getRemoteAddr(),
+      servletRequest.getHeader("User-Agent")));
     return ResponseEntity.accepted().build();
   }
 
@@ -43,22 +43,22 @@ public class OtpController {
   public ResponseEntity<?> verify(@Valid @RequestBody VerifyRequest request) {
     try {
       Authentication authentication = authenticationManager.authenticate(
-          new OtpAuthenticationToken(request.phone(), request.code()));
+        new OtpAuthenticationToken(request.phone(), request.code()));
       SecurityContextHolder.getContext().setAuthentication(authentication);
 
       // 返回统一的成功响应格式
       return ResponseEntity.ok(new VerifyResponse(
-          "success",
-          "验证码验证成功",
-          authentication.getName(),
-          null // TODO: 根据需要添加 token 信息
+        "success",
+        "验证码验证成功",
+        authentication.getName(),
+        null // TODO: 根据需要添加 token 信息
       ));
     } catch (Exception e) {
       return ResponseEntity.badRequest().body(new VerifyResponse(
-          "error",
-          "验证码验证失败: " + e.getMessage(),
-          null,
-          null
+        "error",
+        "验证码验证失败: " + e.getMessage(),
+        null,
+        null
       ));
     }
   }

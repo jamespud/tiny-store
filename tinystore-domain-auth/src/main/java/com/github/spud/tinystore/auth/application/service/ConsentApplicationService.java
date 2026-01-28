@@ -21,7 +21,7 @@ public class ConsentApplicationService implements ConsentUseCase {
   private final ScopePolicyService scopePolicyService;
 
   public ConsentApplicationService(AuthorizationStorePort authorizationStorePort,
-      ScopePolicyService scopePolicyService) {
+    ScopePolicyService scopePolicyService) {
     this.authorizationStorePort = authorizationStorePort;
     this.scopePolicyService = scopePolicyService;
   }
@@ -41,28 +41,28 @@ public class ConsentApplicationService implements ConsentUseCase {
     }
 
     Set<String> userVisibleScopes = requestedScopes.stream()
-        .filter(scope -> scopePolicyService.isUserVisible(ScopeName.of(scope)))
-        .collect(Collectors.toCollection(LinkedHashSet::new));
+      .filter(scope -> scopePolicyService.isUserVisible(ScopeName.of(scope)))
+      .collect(Collectors.toCollection(LinkedHashSet::new));
 
     var userId = parseUserId(command.username());
     Set<ScopeName> consentedScopes = userId != null
-        ? authorizationStorePort.loadConsent(userId, ClientId.of(command.clientId()))
-        : Set.of();
+      ? authorizationStorePort.loadConsent(userId, ClientId.of(command.clientId()))
+      : Set.of();
     Set<String> approvedUserScopes = consentedScopes.stream()
-        .map(ScopeName::value)
-        .filter(scope -> scopePolicyService.isUserVisible(ScopeName.of(scope)))
-        .collect(Collectors.toCollection(LinkedHashSet::new));
+      .map(ScopeName::value)
+      .filter(scope -> scopePolicyService.isUserVisible(ScopeName.of(scope)))
+      .collect(Collectors.toCollection(LinkedHashSet::new));
 
     Set<String> scopesToApprove = userVisibleScopes.stream()
-        .filter(scope -> !approvedUserScopes.contains(scope))
-        .collect(Collectors.toCollection(LinkedHashSet::new));
+      .filter(scope -> !approvedUserScopes.contains(scope))
+      .collect(Collectors.toCollection(LinkedHashSet::new));
 
     return new ConsentView(
-        command.clientId(),
-        command.state(),
-        command.username(),
-        scopesToApprove,
-        approvedUserScopes
+      command.clientId(),
+      command.state(),
+      command.username(),
+      scopesToApprove,
+      approvedUserScopes
     );
   }
 

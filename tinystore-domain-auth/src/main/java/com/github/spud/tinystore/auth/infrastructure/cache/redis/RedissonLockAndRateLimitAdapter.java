@@ -7,9 +7,7 @@ import java.util.function.Supplier;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Component;
 
 //@Component
 //@Primary
@@ -20,7 +18,7 @@ public class RedissonLockAndRateLimitAdapter implements LockAndRateLimitPort {
   private final StringRedisTemplate redisTemplate;
 
   public RedissonLockAndRateLimitAdapter(RedissonClient redissonClient,
-      StringRedisTemplate redisTemplate) {
+    StringRedisTemplate redisTemplate) {
     this.redissonClient = redissonClient;
     this.redisTemplate = redisTemplate;
   }

@@ -20,7 +20,7 @@ public class PasswordAuthenticationToken extends AbstractAuthenticationToken {
   }
 
   public PasswordAuthenticationToken(MallUserPrincipal principal, Object credentials,
-      Collection<? extends GrantedAuthority> authorities) {
+    Collection<? extends GrantedAuthority> authorities) {
     super(authorities);
     this.principal = principal;
     this.credentials = credentials;
@@ -40,7 +40,7 @@ public class PasswordAuthenticationToken extends AbstractAuthenticationToken {
   @Override
   public void setAuthenticated(boolean isAuthenticated) throws IllegalArgumentException {
     Assert.isTrue(!isAuthenticated,
-        "Cannot set this token to trusted - use constructor which takes a GrantedAuthority list instead");
+      "Cannot set this token to trusted - use constructor which takes a GrantedAuthority list instead");
     super.setAuthenticated(false);
   }
 

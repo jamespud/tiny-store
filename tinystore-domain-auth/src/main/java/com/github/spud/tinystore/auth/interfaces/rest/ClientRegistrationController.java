@@ -29,9 +29,9 @@ public class ClientRegistrationController {
    */
   @PostMapping("/register")
   public ResponseEntity<RegisteredClientDto> register(
-      @Valid @RequestBody RegisteredClientRequest request,
-      @RequestHeader(value = "X-Registration-Token", required = false) String headerToken,
-      @RequestParam(value = "registration_token", required = false) String paramToken) {
+    @Valid @RequestBody RegisteredClientRequest request,
+    @RequestHeader(value = "X-Registration-Token", required = false) String headerToken,
+    @RequestParam(value = "registration_token", required = false) String paramToken) {
     String token = StringUtils.hasText(headerToken) ? headerToken : paramToken;
     RegisteredClientDto result = registrationService.register(request, token);
     return ResponseEntity.ok(result);

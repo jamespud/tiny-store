@@ -11,7 +11,7 @@ import lombok.Setter;
 @Setter
 @Getter
 @Entity
-@Table(name = "`client`")
+@Table(name = "oauth2_registered_client")
 public class Client {
 
   @Id

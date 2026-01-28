@@ -16,22 +16,22 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 public class OrderCreatedEvent extends OrderDomainBaseEvent {
 
-	private String orderId;
-	private String buyerId;
-	private Money totalAmount;
-	private OffsetDateTime createdAt;
+  private String orderId;
+  private String buyerId;
+  private Money totalAmount;
+  private OffsetDateTime createdAt;
 
-	@Builder
-	public OrderCreatedEvent(String orderId, String buyerId, Money totalAmount,
-		OffsetDateTime createdAt) {
-		this.orderId = orderId;
-		this.buyerId = buyerId;
-		this.totalAmount = totalAmount;
-		this.createdAt = createdAt;
+  @Builder
+  public OrderCreatedEvent(String orderId, String buyerId, Money totalAmount,
+    OffsetDateTime createdAt) {
+    this.orderId = orderId;
+    this.buyerId = buyerId;
+    this.totalAmount = totalAmount;
+    this.createdAt = createdAt;
 
-		// Set base event properties
-		setType(OrderEventType.ORDER_CREATED);
-		setAggregateId(orderId);
-		setOccurredAt(createdAt != null ? createdAt : OffsetDateTime.now());
-	}
+    // Set base event properties
+    setType(OrderEventType.ORDER_CREATED);
+    setAggregateId(orderId);
+    setOccurredAt(createdAt != null ? createdAt : OffsetDateTime.now());
+  }
 }

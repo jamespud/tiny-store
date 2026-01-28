@@ -23,7 +23,7 @@ public class LoginController {
   @PostMapping
   @ResponseBody
   public LoginResponse usernamePasswordLogin(
-      @RequestBody LoginRequest request) {
+    @RequestBody LoginRequest request) {
     throw new UnsupportedOperationException("Not implemented");
   }
 

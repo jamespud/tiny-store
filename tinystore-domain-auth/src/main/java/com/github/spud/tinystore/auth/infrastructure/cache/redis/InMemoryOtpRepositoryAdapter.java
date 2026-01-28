@@ -6,12 +6,14 @@ import com.github.spud.tinystore.auth.domain.primitives.PhoneNumber;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 /**
  * 开发态内存 OTP 仓储适配器，便于无 Redis 情况下运行。
  */
 @Component
+@Primary
 public class InMemoryOtpRepositoryAdapter implements OtpRepositoryPort {
 
   private final Map<String, Otp> store = new ConcurrentHashMap<>();
