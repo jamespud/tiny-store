@@ -1,0 +1,39 @@
+services:
+  postgres-primary:
+    image: postgres:18.1
+    container_name: pg-primary
+    environment:
+      POSTGRES_DB: tinystore
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pg-primary:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks: [pg-net]
+
+  postgres-replica:
+    image: postgres:18.1
+    container_name: pg-replica
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_PRIMARY_HOST: postgres-primary
+    depends_on:
+      - postgres-primary
+    volumes:
+      - pg-replica:/var/lib/postgresql/data
+    command: >
+      bash -c "
+      until pg_isready -h postgres-primary; do sleep 1; done &&
+      pg_basebackup -h postgres-primary -D /var/lib/postgresql/data -U postgres -Fp -Xs -P -R &&
+      postgres
+      "
+    networks: [pg-net]
+
+networks:
+  pg-net:
+
+volumes:
+  pg-primary:
+  pg-replica:
