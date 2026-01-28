@@ -18,7 +18,7 @@ public class UserConsent {
   private OffsetDateTime updatedAt;
 
   private UserConsent(UserId userId, ClientId clientId, Set<ScopeName> scopes,
-      OffsetDateTime updatedAt) {
+    OffsetDateTime updatedAt) {
     this.userId = Objects.requireNonNull(userId, "userId");
     this.clientId = Objects.requireNonNull(clientId, "clientId");
     this.grantedScopes = new HashSet<>(Objects.requireNonNull(scopes, "scopes"));
@@ -30,7 +30,7 @@ public class UserConsent {
   }
 
   public static UserConsent restore(UserId userId, ClientId clientId, Set<ScopeName> scopes,
-      OffsetDateTime updatedAt) {
+    OffsetDateTime updatedAt) {
     return new UserConsent(userId, clientId, scopes, updatedAt);
   }
 

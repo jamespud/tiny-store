@@ -4,8 +4,6 @@ import com.github.spud.tinystore.auth.application.port.out.SmsSenderPort;
 import com.github.spud.tinystore.auth.domain.primitives.OtpCode;
 import com.github.spud.tinystore.auth.domain.primitives.PhoneNumber;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 

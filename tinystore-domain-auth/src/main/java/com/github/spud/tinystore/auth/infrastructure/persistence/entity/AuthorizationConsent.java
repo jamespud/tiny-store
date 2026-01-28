@@ -13,7 +13,7 @@ import lombok.Setter;
 @Setter
 @Getter
 @Entity
-@Table(name = "`authorizationConsent`")
+@Table(name = "oauth2_authorization_consent")
 @IdClass(AuthorizationConsent.AuthorizationConsentId.class)
 public class AuthorizationConsent {
 
@@ -66,7 +66,7 @@ public class AuthorizationConsent {
       }
       AuthorizationConsentId that = (AuthorizationConsentId) o;
       return registeredClientId.equals(that.registeredClientId) && principalName.equals(
-          that.principalName);
+        that.principalName);
     }
 
     @Override

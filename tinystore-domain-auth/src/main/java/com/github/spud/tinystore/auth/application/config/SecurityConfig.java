@@ -33,46 +33,46 @@ public class SecurityConfig {
   private final PasswordAuthenticationProvider passwordAuthenticationProvider;
 
   public SecurityConfig(OtpAuthenticationProvider otpAuthenticationProvider,
-      PasswordAuthenticationProvider passwordAuthenticationProvider) {
+    PasswordAuthenticationProvider passwordAuthenticationProvider) {
     this.otpAuthenticationProvider = otpAuthenticationProvider;
     this.passwordAuthenticationProvider = passwordAuthenticationProvider;
   }
 
   @Bean
   SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http,
-      OtpAuthenticationFilter otpAuthenticationFilter,
-      AuthenticationManager authenticationManager,
-      OtpAuthenticationProvider otpAuthenticationProvider,
-      PasswordAuthenticationProvider passwordAuthenticationProvider) throws Exception {
+    OtpAuthenticationFilter otpAuthenticationFilter,
+    AuthenticationManager authenticationManager,
+    OtpAuthenticationProvider otpAuthenticationProvider,
+    PasswordAuthenticationProvider passwordAuthenticationProvider) throws Exception {
     http
-        .authorizeHttpRequests(auth -> auth
-            .requestMatchers(
-                "/assets/**", "/css/**", "/js/**", "/images/**",
-                "/.well-known/**", "/actuator/health", "/error",
-                "/api/auth/otp/**", "/login/otp", "/api/auth/login/password",
-                "/login", "/login/otp", "/api/auth/otp/**", "/oauth2/consent"
-            ).permitAll()
-            .anyRequest().authenticated()
-        )
-        .cors(Customizer.withDefaults())
-        .headers(h -> h
-            .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'"))
-            .referrerPolicy(r -> r.policy(
-                ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
-            .frameOptions(HeadersConfigurer.FrameOptionsConfig::deny)
-        )
-        .formLogin(form ->
-            form.loginPage("/login").permitAll()
-                .loginProcessingUrl("/login")
-        )
-        .logout(Customizer.withDefaults())
-        .csrf(csrf -> csrf
-            .ignoringRequestMatchers("/oauth2/**", "/api/auth/otp/**", "/login/otp",
-                "/api/**", "/oidc/**")
-        )
-        // Register AuthenticationProviders
-        .authenticationProvider(otpAuthenticationProvider)
-        .authenticationProvider(passwordAuthenticationProvider);
+      .authorizeHttpRequests(auth -> auth
+        .requestMatchers(
+          "/assets/**", "/css/**", "/js/**", "/images/**",
+          "/.well-known/**", "/actuator/health", "/error",
+          "/api/auth/otp/**", "/login/otp", "/api/auth/login/password",
+          "/login", "/login/otp", "/api/auth/otp/**", "/oauth2/consent"
+        ).permitAll()
+        .anyRequest().authenticated()
+      )
+      .cors(Customizer.withDefaults())
+      .headers(h -> h
+        .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'"))
+        .referrerPolicy(r -> r.policy(
+          ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
+        .frameOptions(HeadersConfigurer.FrameOptionsConfig::deny)
+      )
+      .formLogin(form ->
+        form.loginPage("/login").permitAll()
+          .loginProcessingUrl("/login")
+      )
+      .logout(Customizer.withDefaults())
+      .csrf(csrf -> csrf
+        .ignoringRequestMatchers("/oauth2/**", "/api/auth/otp/**", "/login/otp",
+          "/api/**", "/oidc/**")
+      )
+      // Register AuthenticationProviders
+      .authenticationProvider(otpAuthenticationProvider)
+      .authenticationProvider(passwordAuthenticationProvider);
 
     // Add OTP filter for POST /login/otp before UsernamePasswordAuthenticationFilter
     http.addFilterBefore(otpAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
@@ -87,7 +87,7 @@ public class SecurityConfig {
 
   @Bean
   public OtpAuthenticationFilter otpAuthenticationFilter(
-      AuthenticationManager authenticationManager) {
+    AuthenticationManager authenticationManager) {
     return new OtpAuthenticationFilter(authenticationManager);
   }
 

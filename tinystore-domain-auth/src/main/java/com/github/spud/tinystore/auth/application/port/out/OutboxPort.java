@@ -9,12 +9,12 @@ import java.util.List;
 public interface OutboxPort {
 
   void save(RefreshTokenRevokedEvent event);
-	
-	void save(ConsentChangedEvent event);
-	
-	void save(UserFrozenEvent event);
-	
-	void save(UserUnfrozenEvent event);
+
+  void save(ConsentChangedEvent event);
+
+  void save(UserFrozenEvent event);
+
+  void save(UserUnfrozenEvent event);
 
   List<RefreshTokenRevokedEvent> fetchUnpublished(int batchSize);
 

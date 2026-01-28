@@ -6,8 +6,6 @@ import com.github.spud.tinystore.auth.domain.primitives.RtVersion;
 import com.github.spud.tinystore.auth.domain.primitives.UserId;
 import java.util.Collection;
 import java.util.Objects;
-
-import lombok.Builder;
 import lombok.Getter;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -30,12 +28,12 @@ public class MallUser implements UserDetails, Authentication {
   private RtVersion rtVersion;
 
   private MallUser(UserId id,
-      PhoneNumber phone,
-      String username,
-      String avatar,
-      String passwordHash,
-      MallUserStatus status,
-      RtVersion rtVersion) {
+    PhoneNumber phone,
+    String username,
+    String avatar,
+    String passwordHash,
+    MallUserStatus status,
+    RtVersion rtVersion) {
     this.id = Objects.requireNonNull(id, "id");
     this.phone = Objects.requireNonNull(phone, "phone");
     this.username = username;
@@ -51,8 +49,8 @@ public class MallUser implements UserDetails, Authentication {
   }
 
   public static MallUser restore(UserId id, PhoneNumber phone, String nickname, String avatar,
-      String passwordHash,
-      MallUserStatus status, RtVersion version) {
+    String passwordHash,
+    MallUserStatus status, RtVersion version) {
     return new MallUser(id, phone, nickname, avatar, passwordHash, status, version);
   }
 

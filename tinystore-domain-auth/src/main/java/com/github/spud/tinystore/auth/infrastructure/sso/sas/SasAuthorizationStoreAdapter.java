@@ -19,7 +19,7 @@ public class SasAuthorizationStoreAdapter implements AuthorizationStorePort {
   private final OAuth2AuthorizationConsentService consentService;
 
   public SasAuthorizationStoreAdapter(JdbcTemplate jdbcTemplate,
-      OAuth2AuthorizationConsentService consentService) {
+    OAuth2AuthorizationConsentService consentService) {
     this.jdbcTemplate = jdbcTemplate;
     this.consentService = consentService;
   }
@@ -27,33 +27,33 @@ public class SasAuthorizationStoreAdapter implements AuthorizationStorePort {
   @Override
   public void clearAuthorizationsOf(UserId userId) {
     jdbcTemplate.update("delete from oauth2_authorization where principal_name = ?",
-        userId.toString());
+      userId.toString());
   }
 
   @Override
   public Set<ScopeName> loadConsent(UserId userId, ClientId clientId) {
     OAuth2AuthorizationConsent consent = consentService.findById(clientId.value(),
-        userId.toString());
+      userId.toString());
     if (consent == null) {
       return Set.of();
     }
     return consent.getScopes().stream()
-        .map(ScopeName::of)
-        .collect(Collectors.toCollection(LinkedHashSet::new));
+      .map(ScopeName::of)
+      .collect(Collectors.toCollection(LinkedHashSet::new));
   }
 
   @Override
   public void persistConsent(UserId userId, ClientId clientId, Set<ScopeName> scopes) {
     if (scopes.isEmpty()) {
       OAuth2AuthorizationConsent consent = consentService.findById(clientId.value(),
-          userId.toString());
+        userId.toString());
       if (consent != null) {
         consentService.remove(consent);
       }
       return;
     }
     OAuth2AuthorizationConsent.Builder builder = OAuth2AuthorizationConsent.withId(clientId.value(),
-        userId.toString());
+      userId.toString());
     scopes.stream().map(ScopeName::value).forEach(builder::scope);
     consentService.save(builder.build());
   }

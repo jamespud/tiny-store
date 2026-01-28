@@ -20,83 +20,83 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class OutboxEventEnvelope {
 
-	// Event identification
-	private String eventId;
-	private String aggregateType;
-	private String aggregateId;
-	private Integer version;
+  // Event identification
+  private String eventId;
+  private String aggregateType;
+  private String aggregateId;
+  private Integer version;
 
-	// Event metadata
-	private String eventType;
-	private OffsetDateTime occurredAt;
-	private String idempotencyKey;
-	private String topic;
+  // Event metadata
+  private String eventType;
+  private OffsetDateTime occurredAt;
+  private String idempotencyKey;
+  private String topic;
 
-	// Event payload
-	private String payloadType;
-	private String payload; // JSON serialized
+  // Event payload
+  private String payloadType;
+  private String payload; // JSON serialized
 
-	// Outbox state
-	private OutboxStatus status;
-	private LocalDateTime publishedAt;
-	private Integer retryCount;
-	private String errorMessage;
+  // Outbox state
+  private OutboxStatus status;
+  private LocalDateTime publishedAt;
+  private Integer retryCount;
+  private String errorMessage;
 
-	// Additional headers/context
-	private Map<String, String> headers;
+  // Additional headers/context
+  private Map<String, String> headers;
 
-	public enum OutboxStatus {
-		PENDING,
-		PUBLISHED,
-		FAILED
-	}
+  public enum OutboxStatus {
+    PENDING,
+    PUBLISHED,
+    FAILED
+  }
 
-	/**
-	 * Create envelope from domain event
-	 */
-	public static OutboxEventEnvelope fromDomainEvent(OrderDomainEvent domainEvent, String topic,
-		String payload) {
-		return OutboxEventEnvelope.builder()
-			.eventId(domainEvent.getEventId())
-			.aggregateType("Order")
-			.aggregateId(domainEvent.getOrderId())
-			.version(domainEvent.getVersion())
-			.eventType(domainEvent.getType().toString())
-			.occurredAt(domainEvent.getOccurredAt())
-			.idempotencyKey(generateIdempotencyKey(domainEvent))
-			.topic(topic)
-			.payloadType(domainEvent.getClass().getSimpleName())
-			.payload(payload)
-			.status(OutboxStatus.PENDING)
-			.retryCount(0)
-			.build();
-	}
+  /**
+   * Create envelope from domain event
+   */
+  public static OutboxEventEnvelope fromDomainEvent(OrderDomainEvent domainEvent, String topic,
+    String payload) {
+    return OutboxEventEnvelope.builder()
+      .eventId(domainEvent.getEventId())
+      .aggregateType("Order")
+      .aggregateId(domainEvent.getOrderId())
+      .version(domainEvent.getVersion())
+      .eventType(domainEvent.getType().toString())
+      .occurredAt(domainEvent.getOccurredAt())
+      .idempotencyKey(generateIdempotencyKey(domainEvent))
+      .topic(topic)
+      .payloadType(domainEvent.getClass().getSimpleName())
+      .payload(payload)
+      .status(OutboxStatus.PENDING)
+      .retryCount(0)
+      .build();
+  }
 
-	private static String generateIdempotencyKey(OrderDomainEvent domainEvent) {
-		return String.format("%s#%s#%s",
-			domainEvent.getEventId(),
-			domainEvent.getVersion(),
-			domainEvent.getType().toString()
-		);
-	}
+  private static String generateIdempotencyKey(OrderDomainEvent domainEvent) {
+    return String.format("%s#%s#%s",
+      domainEvent.getEventId(),
+      domainEvent.getVersion(),
+      domainEvent.getType().toString()
+    );
+  }
 
-	public void markPublished() {
-		this.status = OutboxStatus.PUBLISHED;
-		this.publishedAt = LocalDateTime.now();
-	}
+  public void markPublished() {
+    this.status = OutboxStatus.PUBLISHED;
+    this.publishedAt = LocalDateTime.now();
+  }
 
-	public void markFailed(String errorMessage) {
-		this.status = OutboxStatus.FAILED;
-		this.errorMessage = errorMessage;
-		this.retryCount = (this.retryCount != null) ? this.retryCount + 1 : 1;
-	}
+  public void markFailed(String errorMessage) {
+    this.status = OutboxStatus.FAILED;
+    this.errorMessage = errorMessage;
+    this.retryCount = (this.retryCount != null) ? this.retryCount + 1 : 1;
+  }
 
-	public boolean isPublished() {
-		return OutboxStatus.PUBLISHED.equals(this.status);
-	}
+  public boolean isPublished() {
+    return OutboxStatus.PUBLISHED.equals(this.status);
+  }
 
-	public boolean shouldRetry(int maxRetries) {
-		return OutboxStatus.FAILED.equals(this.status) &&
-			(this.retryCount == null || this.retryCount < maxRetries);
-	}
+  public boolean shouldRetry(int maxRetries) {
+    return OutboxStatus.FAILED.equals(this.status) &&
+      (this.retryCount == null || this.retryCount < maxRetries);
+  }
 }

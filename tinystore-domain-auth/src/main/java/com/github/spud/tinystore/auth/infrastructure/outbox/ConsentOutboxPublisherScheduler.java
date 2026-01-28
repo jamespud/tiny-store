@@ -21,8 +21,8 @@ public class ConsentOutboxPublisherScheduler {
   private final OutboxProperties outboxProperties;
 
   public ConsentOutboxPublisherScheduler(OutboxPort outboxPort,
-      ConsentEventPublisherPort consentPublisherPort,
-      OutboxProperties outboxProperties) {
+    ConsentEventPublisherPort consentPublisherPort,
+    OutboxProperties outboxProperties) {
     this.outboxPort = outboxPort;
     this.consentPublisherPort = consentPublisherPort;
     this.outboxProperties = outboxProperties;
@@ -32,7 +32,7 @@ public class ConsentOutboxPublisherScheduler {
   @Transactional
   public void publishOutbox() {
     List<ConsentChangedEvent> events = outboxPort.fetchConsentChangedUnpublished(
-        outboxProperties.getBatchSize());
+      outboxProperties.getBatchSize());
     if (events.isEmpty()) {
       return;
     }

@@ -16,50 +16,50 @@ import java.time.Instant;
  * @param snapshotTime 快照时间
  */
 public record SkuSnapshot(
-	String skuId,
-	String title,
-	String specJson,
-	Money unitPrice,
-	String currency,
-	Instant snapshotTime
+  String skuId,
+  String title,
+  String specJson,
+  Money unitPrice,
+  String currency,
+  Instant snapshotTime
 ) {
 
-	public SkuSnapshot {
-		if (skuId == null || skuId.trim().isEmpty()) {
-			throw new IllegalArgumentException("SKU ID cannot be null or empty");
-		}
-		if (title == null || title.trim().isEmpty()) {
-			throw new IllegalArgumentException("Title cannot be null or empty");
-		}
-		if (unitPrice == null) {
-			throw new IllegalArgumentException("Unit price cannot be null");
-		}
-		if (currency == null || !currency.equals("CNY")) {
-			throw new IllegalArgumentException("Currency must be CNY for now");
-		}
-		if (snapshotTime == null) {
-			throw new IllegalArgumentException("Snapshot time cannot be null");
-		}
-	}
+  public SkuSnapshot {
+    if (skuId == null || skuId.trim().isEmpty()) {
+      throw new IllegalArgumentException("SKU ID cannot be null or empty");
+    }
+    if (title == null || title.trim().isEmpty()) {
+      throw new IllegalArgumentException("Title cannot be null or empty");
+    }
+    if (unitPrice == null) {
+      throw new IllegalArgumentException("Unit price cannot be null");
+    }
+    if (currency == null || !currency.equals("CNY")) {
+      throw new IllegalArgumentException("Currency must be CNY for now");
+    }
+    if (snapshotTime == null) {
+      throw new IllegalArgumentException("Snapshot time cannot be null");
+    }
+  }
 
-	/**
-	 * 创建SKU快照的工厂方法
-	 *
-	 * @param skuId            SKU标识
-	 * @param title            商品标题
-	 * @param specJson         规格JSON
-	 * @param unitPriceInCents 单价（分）
-	 * @return SKU快照实例
-	 */
-	public static SkuSnapshot create(String skuId, String title, String specJson,
-		long unitPriceInCents) {
-		return new SkuSnapshot(
-			skuId,
-			title,
-			specJson,
-			Money.ofCents(unitPriceInCents, "CNY"),
-			"CNY",
-			Instant.now()
-		);
-	}
+  /**
+   * 创建SKU快照的工厂方法
+   *
+   * @param skuId            SKU标识
+   * @param title            商品标题
+   * @param specJson         规格JSON
+   * @param unitPriceInCents 单价（分）
+   * @return SKU快照实例
+   */
+  public static SkuSnapshot create(String skuId, String title, String specJson,
+    long unitPriceInCents) {
+    return new SkuSnapshot(
+      skuId,
+      title,
+      specJson,
+      Money.ofCents(unitPriceInCents, "CNY"),
+      "CNY",
+      Instant.now()
+    );
+  }
 }

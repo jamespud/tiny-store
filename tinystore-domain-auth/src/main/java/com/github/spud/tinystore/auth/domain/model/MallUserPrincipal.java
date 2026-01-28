@@ -7,7 +7,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 public record MallUserPrincipal(MallUser user, Collection<? extends GrantedAuthority> authorities)
-    implements Authentication, UserDetails {
+  implements Authentication, UserDetails {
 
   @Override
   public Collection<? extends GrantedAuthority> getAuthorities() {

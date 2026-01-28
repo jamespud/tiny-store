@@ -16,47 +16,47 @@ import org.springframework.stereotype.Service;
 @Service
 public class OrderRedisOperatorService {
 
-	@Autowired
-	private StringRedisTemplate redisTemplate;
+  @Autowired
+  private StringRedisTemplate redisTemplate;
 
-	@Autowired
-	private RedissonClient redisson;
+  @Autowired
+  private RedissonClient redisson;
 
-	private static final String incrScript =
-		"for i=1,#KEYS do " +
-			"  local stock = tonumber(redis.call('get', KEYS[i])) " +
-			"  if stock == nil then " +
-			"    return 0 " + // 任一商品不存在则失败
-			"  end " +
-			"end " +
-			"for i=1,#KEYS do " +
-			"  redis.call('incrby', KEYS[i], ARGV[i]) " +
-			"end " +
-			"return 1";
+  private static final String incrScript =
+    "for i=1,#KEYS do " +
+      "  local stock = tonumber(redis.call('get', KEYS[i])) " +
+      "  if stock == nil then " +
+      "    return 0 " + // 任一商品不存在则失败
+      "  end " +
+      "end " +
+      "for i=1,#KEYS do " +
+      "  redis.call('incrby', KEYS[i], ARGV[i]) " +
+      "end " +
+      "return 1";
 
-	private static final String decrScript =
-		"for i=1,#KEYS do " +
-			"  local stock = tonumber(redis.call('get', KEYS[i])) " +
-			"  local req = tonumber(ARGV[i]) " +
-			"  if stock == nil or stock < req then " +
-			"    return 0 " + // 任一商品不足则失败
-			"  end " +
-			"end " +
-			"for i=1,#KEYS do " +
-			"  redis.call('decrby', KEYS[i], ARGV[i]) " +
-			"end " +
-			"return 1";
+  private static final String decrScript =
+    "for i=1,#KEYS do " +
+      "  local stock = tonumber(redis.call('get', KEYS[i])) " +
+      "  local req = tonumber(ARGV[i]) " +
+      "  if stock == nil or stock < req then " +
+      "    return 0 " + // 任一商品不足则失败
+      "  end " +
+      "end " +
+      "for i=1,#KEYS do " +
+      "  redis.call('decrby', KEYS[i], ARGV[i]) " +
+      "end " +
+      "return 1";
 
-	private DefaultRedisScript<Long> stockDecrScript;
-	private DefaultRedisScript<Long> stockIncrScript;
+  private DefaultRedisScript<Long> stockDecrScript;
+  private DefaultRedisScript<Long> stockIncrScript;
 
-	@PostConstruct
-	public void init() {
-		// 初始化Redis脚本
-		stockIncrScript = new DefaultRedisScript<>(incrScript, Long.class);
-		stockDecrScript = new DefaultRedisScript<>(decrScript, Long.class);
-		redisTemplate.setEnableTransactionSupport(true);
-		redisTemplate.setDefaultSerializer(new StringRedisSerializer());
-	}
+  @PostConstruct
+  public void init() {
+    // 初始化Redis脚本
+    stockIncrScript = new DefaultRedisScript<>(incrScript, Long.class);
+    stockDecrScript = new DefaultRedisScript<>(decrScript, Long.class);
+    redisTemplate.setEnableTransactionSupport(true);
+    redisTemplate.setDefaultSerializer(new StringRedisSerializer());
+  }
 }
 

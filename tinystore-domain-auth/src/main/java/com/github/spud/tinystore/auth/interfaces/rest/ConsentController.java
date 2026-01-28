@@ -24,36 +24,36 @@ public class ConsentController {
 
   @GetMapping("/oauth2/consent")
   public String consent(
-      @RequestParam("client_id") String clientId,
-      @RequestParam(value = "state", required = false) String state,
-      @RequestParam(value = "scope", required = false) List<String> scopes,
-      @AuthenticationPrincipal(expression = "username") String username,
-      Model model) {
+    @RequestParam("client_id") String clientId,
+    @RequestParam(value = "state", required = false) String state,
+    @RequestParam(value = "scope", required = false) List<String> scopes,
+    @AuthenticationPrincipal(expression = "username") String username,
+    Model model) {
 
     Set<String> requestedScopes = new LinkedHashSet<>();
     if (scopes != null) {
       scopes.forEach(scopeParam -> requestedScopes.addAll(Arrays.asList(scopeParam.split(" "))));
     }
     Set<String> userRequestedScopes = requestedScopes.stream()
-        .filter(scope -> scope.startsWith("user."))
-        .collect(Collectors.toCollection(LinkedHashSet::new));
+      .filter(scope -> scope.startsWith("user."))
+      .collect(Collectors.toCollection(LinkedHashSet::new));
 
     Set<String> previouslyApprovedScopes = Set.of();
     OAuth2AuthorizationConsent consent = consentService.findById(clientId, username);
     if (consent != null && consent.getAuthorities() != null) {
       previouslyApprovedScopes = consent.getAuthorities().stream()
-          .map(org.springframework.security.core.GrantedAuthority::getAuthority)
-          .filter(a -> a != null && a.startsWith("SCOPE_"))
-          .map(a -> a.substring("SCOPE_".length()))
-          .collect(Collectors.toCollection(LinkedHashSet::new));
+        .map(org.springframework.security.core.GrantedAuthority::getAuthority)
+        .filter(a -> a != null && a.startsWith("SCOPE_"))
+        .map(a -> a.substring("SCOPE_".length()))
+        .collect(Collectors.toCollection(LinkedHashSet::new));
     }
     Set<String> previouslyApprovedUserScopes = previouslyApprovedScopes.stream()
-        .filter(scope -> scope.startsWith("user."))
-        .collect(Collectors.toCollection(LinkedHashSet::new));
+      .filter(scope -> scope.startsWith("user."))
+      .collect(Collectors.toCollection(LinkedHashSet::new));
 
     Set<String> scopesToApprove = userRequestedScopes.stream()
-        .filter(scope -> !previouslyApprovedUserScopes.contains(scope))
-        .collect(Collectors.toCollection(LinkedHashSet::new));
+      .filter(scope -> !previouslyApprovedUserScopes.contains(scope))
+      .collect(Collectors.toCollection(LinkedHashSet::new));
 
     model.addAttribute("clientId", clientId);
     model.addAttribute("state", state);

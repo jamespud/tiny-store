@@ -28,6 +28,7 @@
 		<spring.boot.version>3.5.0</spring.boot.version>
 		<spring.cloud.version>2025.0.0</spring.cloud.version>
 		<spring-statemachine.version>4.0.1</spring-statemachine.version>
+		<nacos.client.version>2023.0.1.0</nacos.client.version>
 	</properties>
 
 
@@ -53,6 +54,16 @@
 				<version>${spring-statemachine.version}</version>
 				<type>pom</type>
 				<scope>import</scope>
+			</dependency>
+			<dependency>
+				<groupId>com.alibaba.cloud</groupId>
+				<artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+				<version>${nacos.client.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.alibaba.cloud</groupId>
+				<artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+				<version>${nacos.client.version}</version>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
@@ -130,5 +141,4 @@
 			</modules>
 		</profile>
 	</profiles>
-
 </project>

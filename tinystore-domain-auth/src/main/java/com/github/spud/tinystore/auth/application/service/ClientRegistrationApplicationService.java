@@ -30,10 +30,10 @@ public class ClientRegistrationApplicationService {
   private final DynamicRegistrationProperties dynamicProps;
 
   public ClientRegistrationApplicationService(
-      RegisteredClientStorePort registeredClientStore,
-      PasswordEncoder passwordEncoder,
-      AuditLogPort auditLogPort,
-      DynamicRegistrationProperties dynamicProps) {
+    RegisteredClientStorePort registeredClientStore,
+    PasswordEncoder passwordEncoder,
+    AuditLogPort auditLogPort,
+    DynamicRegistrationProperties dynamicProps) {
     this.registeredClientStore = registeredClientStore;
     this.passwordEncoder = passwordEncoder;
     this.auditLogPort = auditLogPort;
@@ -54,9 +54,9 @@ public class ClientRegistrationApplicationService {
     ClientAuthenticationMethod authMethod = resolveAuthMethod(request.tokenEndpointAuthMethod());
 
     RegisteredClient.Builder builder = RegisteredClient.withId(UUID.randomUUID().toString())
-        .clientId(clientId)
-        .clientName(request.clientName())
-        .clientAuthenticationMethod(authMethod);
+      .clientId(clientId)
+      .clientName(request.clientName())
+      .clientAuthenticationMethod(authMethod);
 
     for (String gt : request.grantTypes()) {
       builder.authorizationGrantType(resolveGrantType(gt));
@@ -66,11 +66,11 @@ public class ClientRegistrationApplicationService {
     }
 
     List<String> scopes =
-        request.scopes() == null ? List.of("openid", "user.profile") : request.scopes();
+      request.scopes() == null ? List.of("openid", "user.profile") : request.scopes();
     scopes.forEach(builder::scope);
 
     ClientSettings.Builder cs = ClientSettings.builder()
-        .requireAuthorizationConsent(true);
+      .requireAuthorizationConsent(true);
     // Require PKCE for public/native clients
     if (ClientAuthenticationMethod.NONE.equals(authMethod)) {
       cs.requireProofKey(true);
@@ -90,10 +90,10 @@ public class ClientRegistrationApplicationService {
     registeredClientStore.save(rc);
 
     auditLogPort.append(AuditEvent.success(null, null, clientId,
-        "CLIENT_REGISTER", Set.copyOf(scopes), null, null, authMethod.getValue()));
+      "CLIENT_REGISTER", Set.copyOf(scopes), null, null, authMethod.getValue()));
 
     return new RegisteredClientDto(clientId, request.clientName(), request.redirectUris(),
-        request.grantTypes(), scopes, authMethod.getValue(), clientSecret);
+      request.grantTypes(), scopes, authMethod.getValue(), clientSecret);
   }
 
   public RegisteredClientDto get(String clientId) {
@@ -103,11 +103,11 @@ public class ClientRegistrationApplicationService {
     }
     List<String> redirectUris = new ArrayList<>(rc.getRedirectUris());
     List<String> grantTypes = rc.getAuthorizationGrantTypes().stream()
-        .map(AuthorizationGrantType::getValue)
-        .collect(Collectors.toList());
+      .map(AuthorizationGrantType::getValue)
+      .collect(Collectors.toList());
     List<String> scopes = new ArrayList<>(rc.getScopes());
     return new RegisteredClientDto(rc.getClientId(), rc.getClientName(), redirectUris, grantTypes,
-        scopes, rc.getClientAuthenticationMethods().iterator().next().getValue(), null);
+      scopes, rc.getClientAuthenticationMethods().iterator().next().getValue(), null);
   }
 
   private void validate(RegisteredClientRequest request, String registrationToken) {
@@ -140,8 +140,8 @@ public class ClientRegistrationApplicationService {
     }
     // Scope whitelist
     Set<String> scopeAllowed = Set.of("openid", "user.profile", "user.phone", "user.address",
-        "user.follow", "user.payment", "svc.inventory.read", "svc.inventory.write",
-        "svc.order.read", "svc.order.write", "svc.admin");
+      "user.follow", "user.payment", "svc.inventory.read", "svc.inventory.write",
+      "svc.order.read", "svc.order.write", "svc.admin");
     if (request.scopes() != null) {
       for (String sc : request.scopes()) {
         if (!scopeAllowed.contains(sc)) {

@@ -34,7 +34,7 @@ public class JdbcOutboxAdapter implements OutboxPort {
   public void save(RefreshTokenRevokedEvent event) {
     jdbcTemplate.update(con -> {
       PreparedStatement ps = con.prepareStatement(
-          "insert into auth_outbox (event_type, aggregate_id, rt_version, reason, occurred_at, published) values (?, ?, ?, ?, ?, false)");
+        "insert into auth_outbox (event_type, aggregate_id, rt_version, reason, occurred_at, published) values (?, ?, ?, ?, ?, false)");
       ps.setString(1, "RefreshTokenRevokedEvent");
       ps.setString(2, event.userId().toString());
       ps.setLong(3, event.rtVersion().value());
@@ -48,60 +48,60 @@ public class JdbcOutboxAdapter implements OutboxPort {
   public void save(ConsentChangedEvent event) {
     jdbcTemplate.update(con -> {
       PreparedStatement ps = con.prepareStatement(
-          "insert into auth_outbox (event_type, aggregate_id, client_id, added_scopes, removed_scopes, occurred_at, published) values (?, ?, ?, ?, ?, ?, false)");
+        "insert into auth_outbox (event_type, aggregate_id, client_id, added_scopes, removed_scopes, occurred_at, published) values (?, ?, ?, ?, ?, ?, false)");
       ps.setString(1, "ConsentChangedEvent");
       ps.setString(2, event.userId().value());
       ps.setString(3, event.clientId().value());
       ps.setString(4,
-          event.addedScopes().stream().map(ScopeName::value).reduce((a, b) -> a + "," + b)
-              .orElse(""));
+        event.addedScopes().stream().map(ScopeName::value).reduce((a, b) -> a + "," + b)
+          .orElse(""));
       ps.setString(5,
-          event.removedScopes().stream().map(ScopeName::value).reduce((a, b) -> a + "," + b)
-              .orElse(""));
+        event.removedScopes().stream().map(ScopeName::value).reduce((a, b) -> a + "," + b)
+          .orElse(""));
       ps.setObject(6, event.occurredAt());
       return ps;
     });
   }
 
-	@Override
-	public void save(UserFrozenEvent event) {
-		
-	}
+  @Override
+  public void save(UserFrozenEvent event) {
 
-	@Override
-	public void save(UserUnfrozenEvent event) {
+  }
 
-	}
+  @Override
+  public void save(UserUnfrozenEvent event) {
 
-	@Override
+  }
+
+  @Override
   public List<ConsentChangedEvent> fetchConsentChangedUnpublished(int batchSize) {
     return jdbcTemplate.query(
-        "select aggregate_id, client_id, added_scopes, removed_scopes, occurred_at from auth_outbox where event_type = 'ConsentChangedEvent' and published = false order by occurred_at asc limit ?",
-        (rs, rowNum) -> {
-          String userId = rs.getString("aggregate_id");
-          String clientId = rs.getString("client_id");
-          String added = rs.getString("added_scopes");
-          String removed = rs.getString("removed_scopes");
-          OffsetDateTime at = rs.getObject("occurred_at", OffsetDateTime.class);
-          Set<ScopeName> addedSet = Arrays.stream(
-                  (added == null ? "" : added).split(","))
-              .filter(s -> !s.isBlank())
-              .map(ScopeName::of)
-              .collect(Collectors.toCollection(LinkedHashSet::new));
-          Set<ScopeName> removedSet = Arrays.stream(
-                  (removed == null ? "" : removed).split(","))
-              .filter(s -> !s.isBlank())
-              .map(ScopeName::of)
-              .collect(Collectors.toCollection(LinkedHashSet::new));
-          return new ConsentChangedEvent(
-              UserId.of(userId),
-              ClientId.of(clientId),
-              addedSet,
-              removedSet,
-              at
-          );
-        },
-        batchSize);
+      "select aggregate_id, client_id, added_scopes, removed_scopes, occurred_at from auth_outbox where event_type = 'ConsentChangedEvent' and published = false order by occurred_at asc limit ?",
+      (rs, rowNum) -> {
+        String userId = rs.getString("aggregate_id");
+        String clientId = rs.getString("client_id");
+        String added = rs.getString("added_scopes");
+        String removed = rs.getString("removed_scopes");
+        OffsetDateTime at = rs.getObject("occurred_at", OffsetDateTime.class);
+        Set<ScopeName> addedSet = Arrays.stream(
+            (added == null ? "" : added).split(","))
+          .filter(s -> !s.isBlank())
+          .map(ScopeName::of)
+          .collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<ScopeName> removedSet = Arrays.stream(
+            (removed == null ? "" : removed).split(","))
+          .filter(s -> !s.isBlank())
+          .map(ScopeName::of)
+          .collect(Collectors.toCollection(LinkedHashSet::new));
+        return new ConsentChangedEvent(
+          UserId.of(userId),
+          ClientId.of(clientId),
+          addedSet,
+          removedSet,
+          at
+        );
+      },
+      batchSize);
   }
 
   @Override
@@ -110,27 +110,27 @@ public class JdbcOutboxAdapter implements OutboxPort {
       return;
     }
     jdbcTemplate.batchUpdate(
-        "update auth_outbox set published = true, published_at = now() where event_type = 'ConsentChangedEvent' and aggregate_id = ? and client_id = ? and occurred_at = ? and published = false",
-        events,
-        events.size(),
-        (ps, evt) -> {
-          ps.setString(1, evt.userId().value());
-          ps.setString(2, evt.clientId().value());
-          ps.setObject(3, evt.occurredAt());
-        });
+      "update auth_outbox set published = true, published_at = now() where event_type = 'ConsentChangedEvent' and aggregate_id = ? and client_id = ? and occurred_at = ? and published = false",
+      events,
+      events.size(),
+      (ps, evt) -> {
+        ps.setString(1, evt.userId().value());
+        ps.setString(2, evt.clientId().value());
+        ps.setObject(3, evt.occurredAt());
+      });
   }
 
   @Override
   public List<RefreshTokenRevokedEvent> fetchUnpublished(int batchSize) {
     return jdbcTemplate.query(
-        "select aggregate_id, rt_version, reason, occurred_at from auth_outbox where published = false order by occurred_at asc limit ?",
-        (rs, rowNum) -> new RefreshTokenRevokedEvent(
-            UserId.of((String) rs.getObject("aggregate_id")),
-            RtVersion.of(rs.getLong("rt_version")),
-            rs.getString("reason"),
-            rs.getObject("occurred_at", OffsetDateTime.class)
-        ),
-        batchSize);
+      "select aggregate_id, rt_version, reason, occurred_at from auth_outbox where published = false order by occurred_at asc limit ?",
+      (rs, rowNum) -> new RefreshTokenRevokedEvent(
+        UserId.of((String) rs.getObject("aggregate_id")),
+        RtVersion.of(rs.getLong("rt_version")),
+        rs.getString("reason"),
+        rs.getObject("occurred_at", OffsetDateTime.class)
+      ),
+      batchSize);
   }
 
   @Override
@@ -139,12 +139,12 @@ public class JdbcOutboxAdapter implements OutboxPort {
       return;
     }
     jdbcTemplate.batchUpdate(
-        "update auth_outbox set published = true, published_at = now() where aggregate_id = ? and rt_version = ? and published = false",
-        events,
-        events.size(),
-        (ps, event) -> {
-          ps.setObject(1, event.userId().value());
-          ps.setLong(2, event.rtVersion().value());
-        });
+      "update auth_outbox set published = true, published_at = now() where aggregate_id = ? and rt_version = ? and published = false",
+      events,
+      events.size(),
+      (ps, event) -> {
+        ps.setObject(1, event.userId().value());
+        ps.setLong(2, event.rtVersion().value());
+      });
   }
 }

@@ -34,7 +34,7 @@ public class JdbcAuditLogAdapter implements AuditLogPort {
   public void append(AuditEvent event) {
     jdbcTemplate.getJdbcTemplate().update(con -> {
       var ps = con.prepareStatement(
-          "insert into auth_audit (user_id, phone, client_id, action, scopes, success, ip, user_agent, details, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        "insert into auth_audit (user_id, phone, client_id, action, scopes, success, ip, user_agent, details, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
       ps.setObject(1, toUuidOrNull(event.userId()));
       ps.setString(2, event.subject()); // subject 作为 phone 存储
       ps.setString(3, event.clientId());
@@ -81,13 +81,13 @@ public class JdbcAuditLogAdapter implements AuditLogPort {
     sql.append(" limit ").append(limit);
 
     return jdbcTemplate.query(sql.toString(), params, (rs, rowNum) -> new AuditRecordView(
-        Objects.toString(rs.getObject("user_id"), null),
-        rs.getString("client_id"),
-        rs.getString("action"),
-        arrayToScopeString(rs.getArray("scopes")),
-        rs.getString("ip"),
-        rs.getString("user_agent"),
-        rs.getObject("created_at", OffsetDateTime.class)
+      Objects.toString(rs.getObject("user_id"), null),
+      rs.getString("client_id"),
+      rs.getString("action"),
+      arrayToScopeString(rs.getArray("scopes")),
+      rs.getString("ip"),
+      rs.getString("user_agent"),
+      rs.getObject("created_at", OffsetDateTime.class)
     ));
   }
 

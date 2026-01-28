@@ -30,7 +30,7 @@ public class JdbcConsentRepositoryAdapter implements ConsentRepositoryPort {
   @Override
   public UserConsent save(UserConsent consent) {
     authorizationStorePort.persistConsent(consent.getUserId(), consent.getClientId(),
-        consent.getGrantedScopes());
+      consent.getGrantedScopes());
     return consent;
   }
 }

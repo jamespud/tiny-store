@@ -19,7 +19,7 @@ public class OtpAuthenticationToken extends AbstractAuthenticationToken {
   }
 
   public OtpAuthenticationToken(MallUserPrincipal principal,
-      Collection<? extends GrantedAuthority> authorities) {
+    Collection<? extends GrantedAuthority> authorities) {
     super(authorities);
     this.principal = principal;
     this.credentials = null;
@@ -27,7 +27,7 @@ public class OtpAuthenticationToken extends AbstractAuthenticationToken {
   }
 
   public OtpAuthenticationToken(UserDetails userDetails, String code,
-      Collection<? extends GrantedAuthority> authorities) {
+    Collection<? extends GrantedAuthority> authorities) {
     super(authorities);
     this.principal = userDetails;
     this.credentials = code;

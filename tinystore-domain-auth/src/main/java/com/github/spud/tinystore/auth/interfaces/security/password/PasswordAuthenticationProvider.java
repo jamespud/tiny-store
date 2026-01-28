@@ -19,7 +19,8 @@ public class PasswordAuthenticationProvider implements AuthenticationProvider {
 
   private final PasswordApplicationService passwordApplicationService;
 
-  public PasswordAuthenticationProvider(@Lazy ObjectProvider<PasswordApplicationService> passwordServiceProvider) {
+  public PasswordAuthenticationProvider(
+    @Lazy ObjectProvider<PasswordApplicationService> passwordServiceProvider) {
     this.passwordApplicationService = passwordServiceProvider.getIfAvailable();
   }
 
@@ -36,13 +37,13 @@ public class PasswordAuthenticationProvider implements AuthenticationProvider {
     }
     if (phone != null && password != null) {
       AuthResult authResult = passwordApplicationService.verifyPassword(
-          new VerifyPasswordCommand(phone, password));
+        new VerifyPasswordCommand(phone, password));
       var user = authResult.user();
       Collection<? extends GrantedAuthority> authorities = user.getAuthorities() != null
-          ? user.getAuthorities()
-          : Collections.emptyList();
+        ? user.getAuthorities()
+        : Collections.emptyList();
       var principal = new com.github.spud.tinystore.auth.domain.model.MallUserPrincipal(user,
-          authorities);
+        authorities);
       return new PasswordAuthenticationToken(principal, null, authorities);
     }
     return null;
@@ -51,6 +52,6 @@ public class PasswordAuthenticationProvider implements AuthenticationProvider {
   @Override
   public boolean supports(Class<?> authentication) {
     return PasswordAuthenticationToken.class.isAssignableFrom(authentication)
-        || UsernamePasswordAuthenticationToken.class.isAssignableFrom(authentication);
+      || UsernamePasswordAuthenticationToken.class.isAssignableFrom(authentication);
   }
 }

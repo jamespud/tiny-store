@@ -10,12 +10,12 @@ import com.github.spud.tinystore.domain.event.DomainEvent;
  */
 public interface OrderDomainEvent extends DomainEvent {
 
-	/**
-	 * 订单号
-	 *
-	 * @return 订单号
-	 */
-	String getOrderId();
+  /**
+   * 订单号
+   *
+   * @return 订单号
+   */
+  String getOrderId();
 
 
 }

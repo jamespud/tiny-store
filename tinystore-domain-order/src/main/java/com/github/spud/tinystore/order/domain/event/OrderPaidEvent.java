@@ -1,7 +1,6 @@
 package com.github.spud.tinystore.order.domain.event;
 
 import com.github.spud.tinystore.order.domain.model.Money;
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -20,30 +19,30 @@ import org.slf4j.MDC;
 @AllArgsConstructor
 public class OrderPaidEvent extends OrderDomainBaseEvent {
 
-	private final String paymentId;
-	private final Money amount;
-	private final boolean isDeposit;
-	private final boolean isFinalPayment;
+  private final String paymentId;
+  private final Money amount;
+  private final boolean isDeposit;
+  private final boolean isFinalPayment;
 
-	public OrderPaidEvent(String orderNo, String paymentId, Money amount, boolean isDeposit,
-		boolean isFinalPayment) {
-		this.setEventId(UUID.randomUUID().toString().replace("-", ""));
-		this.setOrderId(orderNo);
-		this.setOccurredAt(OffsetDateTime.now());
-		this.paymentId = paymentId;
-		this.amount = amount;
-		this.isDeposit = isDeposit;
-		this.isFinalPayment = isFinalPayment;
-		this.setTraceId(MDC.get("traceId"));
-	}
+  public OrderPaidEvent(String orderNo, String paymentId, Money amount, boolean isDeposit,
+    boolean isFinalPayment) {
+    this.setEventId(UUID.randomUUID().toString().replace("-", ""));
+    this.setOrderId(orderNo);
+    this.setOccurredAt(OffsetDateTime.now());
+    this.paymentId = paymentId;
+    this.amount = amount;
+    this.isDeposit = isDeposit;
+    this.isFinalPayment = isFinalPayment;
+    this.setTraceId(MDC.get("traceId"));
+  }
 
-	@Override
-	public Map<String, Object> getPayload() {
-		Map<String, Object> payload = new HashMap<>();
-		payload.put("paymentId", paymentId);
-		payload.put("amount", amount);
-		payload.put("isDeposit", isDeposit);
-		payload.put("isFinalPayment", isFinalPayment);
-		return payload;
-	}
+  @Override
+  public Map<String, Object> getPayload() {
+    Map<String, Object> payload = new HashMap<>();
+    payload.put("paymentId", paymentId);
+    payload.put("amount", amount);
+    payload.put("isDeposit", isDeposit);
+    payload.put("isFinalPayment", isFinalPayment);
+    return payload;
+  }
 }

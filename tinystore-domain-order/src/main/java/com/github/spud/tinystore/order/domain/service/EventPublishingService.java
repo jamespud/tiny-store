@@ -10,11 +10,11 @@ import com.github.spud.tinystore.order.domain.model.Outbox;
  */
 public interface EventPublishingService {
 
-	/**
-	 * 发布事件到外部系统（如消息队列）
-	 *
-	 * @param event Outbox 事件
-	 * @throws Exception 发布失败时抛出异常
-	 */
-	void publish(Outbox event) throws Exception;
+  /**
+   * 发布事件到外部系统（如消息队列）
+   *
+   * @param event Outbox 事件
+   * @throws Exception 发布失败时抛出异常
+   */
+  void publish(Outbox event) throws Exception;
 }

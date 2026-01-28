@@ -25,17 +25,17 @@ public class NoOpOutboxAdapter implements OutboxPort, EventPublisherPort {
     // Phase 1: no-op
   }
 
-	@Override
-	public void save(UserFrozenEvent event) {
-		
-	}
+  @Override
+  public void save(UserFrozenEvent event) {
 
-	@Override
-	public void save(UserUnfrozenEvent event) {
+  }
 
-	}
+  @Override
+  public void save(UserUnfrozenEvent event) {
 
-	@Override
+  }
+
+  @Override
   public List<RefreshTokenRevokedEvent> fetchUnpublished(int batchSize) {
     return Collections.emptyList();
   }

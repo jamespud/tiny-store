@@ -27,44 +27,44 @@ public class SasConsentServiceAdapter {
   private final OutboxPort outboxPort;
 
   public SasConsentServiceAdapter(
-      OAuth2AuthorizationConsentService consentService,
-      AuditLogPort auditLogPort,
-      OutboxPort outboxPort) {
+    OAuth2AuthorizationConsentService consentService,
+    AuditLogPort auditLogPort,
+    OutboxPort outboxPort) {
     this.consentService = consentService;
     this.auditLogPort = auditLogPort;
     this.outboxPort = outboxPort;
   }
 
   public void afterConsentApproved(String userId, String username, String clientId,
-      Set<String> addedScopes, Set<String> previouslyApprovedScopes) {
+    Set<String> addedScopes, Set<String> previouslyApprovedScopes) {
     // 写入/更新 SAS consent（基于 authorities 表示 scopes）
     OAuth2AuthorizationConsent existing = consentService.findById(clientId, username);
     Set<String> previously =
-        existing != null ? previouslyApprovedScopes : Set.of();
+      existing != null ? previouslyApprovedScopes : Set.of();
     Set<String> union = new LinkedHashSet<>(previously);
     union.addAll(addedScopes);
     OAuth2AuthorizationConsent.Builder builder = OAuth2AuthorizationConsent.withId(clientId,
-        username);
+      username);
     for (String scope : union) {
       builder.authority(
-          new SimpleGrantedAuthority("SCOPE_" + scope));
+        new SimpleGrantedAuthority("SCOPE_" + scope));
     }
     consentService.save(builder.build());
 
     // 审计
     auditLogPort.append(AuditEvent.success(userId, username, clientId,
-        "CONSENT_APPROVE", addedScopes, null, null, null));
+      "CONSENT_APPROVE", addedScopes, null, null, null));
 
     // 历史与事件（通过 outbox 记录事件，历史表由 Outbox 发布器或独立适配插入，视实现而定）
     ConsentChangedEvent evt = new ConsentChangedEvent(UserId.of(userId), ClientId.of(clientId),
-        addedScopes.stream().map(ScopeName::of).collect(Collectors.toSet()),
-        previouslyApprovedScopes.stream().map(ScopeName::of).collect(Collectors.toSet()),
-        OffsetDateTime.now());
+      addedScopes.stream().map(ScopeName::of).collect(Collectors.toSet()),
+      previouslyApprovedScopes.stream().map(ScopeName::of).collect(Collectors.toSet()),
+      OffsetDateTime.now());
     outboxPort.save(evt);
   }
 
   public void afterConsentRevoked(String userId, String username, String clientId,
-      Set<String> revokedScopes, Set<String> remainingScopes) {
+    Set<String> revokedScopes, Set<String> remainingScopes) {
     // 更新 SAS consent（移除被撤销的 scopes，基于 authorities 表示）
     OAuth2AuthorizationConsent existing = consentService.findById(clientId, username);
     Set<String> remained = new LinkedHashSet<>();
@@ -80,23 +80,23 @@ public class SasConsentServiceAdapter {
       }
     }
     OAuth2AuthorizationConsent.Builder builder = OAuth2AuthorizationConsent.withId(clientId,
-        username);
+      username);
     for (String scope : remained) {
       builder.authority(
-          new SimpleGrantedAuthority("SCOPE_" + scope));
+        new SimpleGrantedAuthority("SCOPE_" + scope));
     }
     consentService.save(builder.build());
 
     // 审计
     auditLogPort.append(AuditEvent.success(userId, username, clientId,
-        "CONSENT_REVOKE", revokedScopes, null, null, null));
+      "CONSENT_REVOKE", revokedScopes, null, null, null));
 
     // 历史与事件
     ConsentChangedEvent evt = new ConsentChangedEvent(
-        UserId.of(userId), ClientId.of(clientId),
-        remainingScopes.stream().map(ScopeName::of).collect(Collectors.toSet()),
-        revokedScopes.stream().map(ScopeName::of).collect(Collectors.toSet()),
-        OffsetDateTime.now());
+      UserId.of(userId), ClientId.of(clientId),
+      remainingScopes.stream().map(ScopeName::of).collect(Collectors.toSet()),
+      revokedScopes.stream().map(ScopeName::of).collect(Collectors.toSet()),
+      OffsetDateTime.now());
     outboxPort.save(evt);
   }
 }

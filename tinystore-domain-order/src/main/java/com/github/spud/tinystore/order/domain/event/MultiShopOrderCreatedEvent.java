@@ -8,18 +8,18 @@ import java.util.List;
  */
 public class MultiShopOrderCreatedEvent {
 
-	public MultiShopOrderCreatedEvent(String mainOrderNo, String tenantId, String userId,
-		List<Object> collect) {
-	}
+  public MultiShopOrderCreatedEvent(String mainOrderNo, String tenantId, String userId,
+    List<Object> collect) {
+  }
 
-	public MultiShopOrderCreatedEvent(String mainOrderNo, String userId,
-		List<Object> collect) {
-	}
+  public MultiShopOrderCreatedEvent(String mainOrderNo, String userId,
+    List<Object> collect) {
+  }
 
-	public static class SubOrderRef {
+  public static class SubOrderRef {
 
-		public SubOrderRef(String subOrderNo, String merchantId, String stockPreOccupyIds,
-			String couponLockId) {
-		}
-	}
+    public SubOrderRef(String subOrderNo, String merchantId, String stockPreOccupyIds,
+      String couponLockId) {
+    }
+  }
 }

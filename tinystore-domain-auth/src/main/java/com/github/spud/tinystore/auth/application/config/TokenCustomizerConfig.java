@@ -37,15 +37,15 @@ public class TokenCustomizerConfig {
           context.getClaims().claim("status", user.getStatus().name());
         }
         Collection<? extends GrantedAuthority> authorities = principal != null
-            ? principal.getAuthorities()
-            : List.of();
+          ? principal.getAuthorities()
+          : List.of();
         List<String> authorityValues = authorities.stream()
-            .map(GrantedAuthority::getAuthority)
-            .collect(Collectors.toList());
+          .map(GrantedAuthority::getAuthority)
+          .collect(Collectors.toList());
         List<String> roles = authorityValues.stream()
-            .filter(auth -> auth.startsWith("ROLE_"))
-            .map(auth -> auth.substring("ROLE_".length()))
-            .collect(Collectors.toList());
+          .filter(auth -> auth.startsWith("ROLE_"))
+          .map(auth -> auth.substring("ROLE_".length()))
+          .collect(Collectors.toList());
         context.getClaims().claim("authorities", authorityValues);
         context.getClaims().claim("roles", roles);
         if (principal != null) {

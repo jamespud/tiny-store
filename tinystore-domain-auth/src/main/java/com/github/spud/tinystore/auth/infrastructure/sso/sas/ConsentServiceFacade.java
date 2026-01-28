@@ -19,7 +19,7 @@ public class ConsentServiceFacade implements OAuth2AuthorizationConsentService {
   private final SasConsentServiceAdapter adapter;
 
   public ConsentServiceFacade(OAuth2AuthorizationConsentService delegate,
-      SasConsentServiceAdapter adapter) {
+    SasConsentServiceAdapter adapter) {
     this.delegate = delegate;
     this.adapter = adapter;
   }
@@ -28,47 +28,47 @@ public class ConsentServiceFacade implements OAuth2AuthorizationConsentService {
   public void save(OAuth2AuthorizationConsent authorizationConsent) {
     // 计算新增 scopes：当前授权 - 已存在授权
     OAuth2AuthorizationConsent existing = delegate.findById(
-        authorizationConsent.getRegisteredClientId(), authorizationConsent.getPrincipalName());
+      authorizationConsent.getRegisteredClientId(), authorizationConsent.getPrincipalName());
     Set<String> previously = Collections.emptySet();
     if (existing != null && existing.getAuthorities() != null) {
       previously = existing.getAuthorities().stream()
-          .map(GrantedAuthority::getAuthority)
-          .filter(a -> a != null && a.startsWith("SCOPE_"))
-          .map(a -> a.substring("SCOPE_".length()))
-          .collect(Collectors.toCollection(LinkedHashSet::new));
+        .map(GrantedAuthority::getAuthority)
+        .filter(a -> a != null && a.startsWith("SCOPE_"))
+        .map(a -> a.substring("SCOPE_".length()))
+        .collect(Collectors.toCollection(LinkedHashSet::new));
     }
     delegate.save(authorizationConsent);
     Set<String> added = new LinkedHashSet<>();
     if (authorizationConsent.getAuthorities() != null) {
       added = authorizationConsent.getAuthorities().stream()
-          .map(GrantedAuthority::getAuthority)
-          .filter(a -> a != null && a.startsWith("SCOPE_"))
-          .map(a -> a.substring("SCOPE_".length()))
-          .collect(Collectors.toCollection(LinkedHashSet::new));
+        .map(GrantedAuthority::getAuthority)
+        .filter(a -> a != null && a.startsWith("SCOPE_"))
+        .map(a -> a.substring("SCOPE_".length()))
+        .collect(Collectors.toCollection(LinkedHashSet::new));
       added.removeAll(previously);
     }
     String userId = resolveUserId();
     adapter.afterConsentApproved(userId, authorizationConsent.getPrincipalName(),
-        authorizationConsent.getRegisteredClientId(), added, previously);
+      authorizationConsent.getRegisteredClientId(), added, previously);
   }
 
   @Override
   public void remove(OAuth2AuthorizationConsent authorizationConsent) {
     // 计算撤销 scopes：已存在授权 - 当前授权（若为空）
     OAuth2AuthorizationConsent existing = delegate.findById(
-        authorizationConsent.getRegisteredClientId(), authorizationConsent.getPrincipalName());
+      authorizationConsent.getRegisteredClientId(), authorizationConsent.getPrincipalName());
     Set<String> revoked = Collections.emptySet();
     if (existing != null && existing.getAuthorities() != null) {
       revoked = existing.getAuthorities().stream()
-          .map(GrantedAuthority::getAuthority)
-          .filter(a -> a != null && a.startsWith("SCOPE_"))
-          .map(a -> a.substring("SCOPE_".length()))
-          .collect(Collectors.toCollection(LinkedHashSet::new));
+        .map(GrantedAuthority::getAuthority)
+        .filter(a -> a != null && a.startsWith("SCOPE_"))
+        .map(a -> a.substring("SCOPE_".length()))
+        .collect(Collectors.toCollection(LinkedHashSet::new));
     }
     delegate.remove(authorizationConsent);
     String userId = resolveUserId();
     adapter.afterConsentRevoked(userId, authorizationConsent.getPrincipalName(),
-        authorizationConsent.getRegisteredClientId(), revoked, Set.of());
+      authorizationConsent.getRegisteredClientId(), revoked, Set.of());
   }
 
   @Override

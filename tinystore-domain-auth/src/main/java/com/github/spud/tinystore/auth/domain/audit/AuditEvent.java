@@ -5,16 +5,16 @@ import java.util.Objects;
 import java.util.Set;
 
 public record AuditEvent(
-    String userId,
-    String subject,
-    String clientId,
-    String action,
-    Set<String> scopes,
-    boolean success,
-    String ip,
-    String userAgent,
-    String detail,
-    OffsetDateTime occurredAt
+  String userId,
+  String subject,
+  String clientId,
+  String action,
+  Set<String> scopes,
+  boolean success,
+  String ip,
+  String userAgent,
+  String detail,
+  OffsetDateTime occurredAt
 ) {
 
   public AuditEvent {
@@ -24,26 +24,26 @@ public record AuditEvent(
   }
 
   public static AuditEvent success(String userId,
-      String subject,
-      String clientId,
-      String action,
-      Set<String> scopes,
-      String ip,
-      String userAgent,
-      String detail) {
+    String subject,
+    String clientId,
+    String action,
+    Set<String> scopes,
+    String ip,
+    String userAgent,
+    String detail) {
     return new AuditEvent(userId, subject, clientId, action, scopes, true, ip, userAgent, detail,
-        OffsetDateTime.now());
+      OffsetDateTime.now());
   }
 
   public static AuditEvent failure(String userId,
-      String subject,
-      String clientId,
-      String action,
-      Set<String> scopes,
-      String ip,
-      String userAgent,
-      String detail) {
+    String subject,
+    String clientId,
+    String action,
+    Set<String> scopes,
+    String ip,
+    String userAgent,
+    String detail) {
     return new AuditEvent(userId, subject, clientId, action, scopes, false, ip, userAgent, detail,
-        OffsetDateTime.now());
+      OffsetDateTime.now());
   }
 }

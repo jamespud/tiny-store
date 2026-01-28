@@ -25,7 +25,7 @@ public class PasswordController {
   @PostMapping("/password")
   public ResponseEntity<?> login(@Valid @RequestBody LoginRequest loginRequest) {
     Authentication authentication = authenticationManager.authenticate(
-        new PasswordAuthenticationToken(loginRequest.principal(), loginRequest.credential()));
+      new PasswordAuthenticationToken(loginRequest.principal(), loginRequest.credential()));
     SecurityContextHolder.getContext().setAuthentication(authentication);
     return ResponseEntity.ok().build();
   }

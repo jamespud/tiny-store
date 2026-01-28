@@ -11,7 +11,7 @@ import lombok.Setter;
 @Setter
 @Getter
 @Entity
-@Table(name = "`authorization`")
+@Table(name = "oauth2_authorization")
 public class Authorization {
 
   @Id

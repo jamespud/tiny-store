@@ -8,6 +8,6 @@ import com.github.spud.tinystore.order.domain.enums.ReservationType;
  * @date 2025/9/6
  */
 public record ReservationRef(String reservationId, ReservationType type, String orderId,
-														 String skuId, Integer quantity, ReservationStatus status) {
+                             String skuId, Integer quantity, ReservationStatus status) {
 
 }

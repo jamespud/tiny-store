@@ -17,7 +17,7 @@ import org.springframework.util.StringUtils;
 public class OtpAuthenticationFilter extends AbstractAuthenticationProcessingFilter {
 
   private static final RequestMatcher OTP_MATCHER = request ->
-      "POST".equalsIgnoreCase(request.getMethod()) && "/login/otp".equals(request.getServletPath());
+    "POST".equalsIgnoreCase(request.getMethod()) && "/login/otp".equals(request.getServletPath());
 
   public OtpAuthenticationFilter(AuthenticationManager authenticationManager) {
     super(OTP_MATCHER);
@@ -28,8 +28,8 @@ public class OtpAuthenticationFilter extends AbstractAuthenticationProcessingFil
 
   @Override
   public Authentication attemptAuthentication(HttpServletRequest request,
-      HttpServletResponse response)
-      throws AuthenticationException {
+    HttpServletResponse response)
+    throws AuthenticationException {
     String phone = request.getParameter("phone");
     String code = request.getParameter("code");
     if (!StringUtils.hasText(phone) || !StringUtils.hasText(code)) {

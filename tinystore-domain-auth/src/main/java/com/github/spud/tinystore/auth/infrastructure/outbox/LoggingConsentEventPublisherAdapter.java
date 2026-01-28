@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 public class LoggingConsentEventPublisherAdapter implements ConsentEventPublisherPort {
 
   private static final Logger log = LoggerFactory.getLogger(
-      LoggingConsentEventPublisherAdapter.class);
+    LoggingConsentEventPublisherAdapter.class);
 
   @Override
   public void publish(List<ConsentChangedEvent> events) {
@@ -21,8 +21,8 @@ public class LoggingConsentEventPublisherAdapter implements ConsentEventPublishe
       return;
     }
     events.forEach(evt -> log.info(
-        "ConsentChangedEvent published userId={} clientId={} added={} removed={} at={}",
-        evt.userId().value(), evt.clientId().value(), evt.addedScopes(), evt.removedScopes(),
-        evt.occurredAt()));
+      "ConsentChangedEvent published userId={} clientId={} added={} removed={} at={}",
+      evt.userId().value(), evt.clientId().value(), evt.addedScopes(), evt.removedScopes(),
+      evt.occurredAt()));
   }
 }

@@ -8,8 +8,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class MockSmsSenderPort implements SmsSenderPort {
 
-	@Override
-	public OtpCode sendLoginCode(PhoneNumber phone, OtpCode code) {
-		return null;
-	}
+  @Override
+  public OtpCode sendLoginCode(PhoneNumber phone, OtpCode code) {
+    return null;
+  }
 }

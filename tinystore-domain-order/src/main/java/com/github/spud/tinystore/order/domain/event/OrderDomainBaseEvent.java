@@ -11,25 +11,25 @@ import lombok.Data;
 @Data
 public class OrderDomainBaseEvent implements OrderDomainEvent {
 
-	private String eventId;
+  private String eventId;
 
-	private String orderId;
+  private String orderId;
 
-	private OrderEventType type;
+  private OrderEventType type;
 
-	private OffsetDateTime occurredAt;
+  private OffsetDateTime occurredAt;
 
-	private Object aggregateType;
+  private Object aggregateType;
 
-	private String aggregateId;
+  private String aggregateId;
 
-	private Integer version;
+  private Integer version;
 
-	private Object payloadType;
+  private Object payloadType;
 
-	private Map<String, Object> payload;
+  private Map<String, Object> payload;
 
-	private Object dataHash;
+  private Object dataHash;
 
-	private String traceId;
+  private String traceId;
 }

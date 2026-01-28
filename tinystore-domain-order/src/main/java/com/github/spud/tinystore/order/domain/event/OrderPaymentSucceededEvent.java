@@ -16,24 +16,24 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 public class OrderPaymentSucceededEvent extends OrderDomainBaseEvent {
 
-	private String orderId;
-	private String paymentId;
-	private BigDecimal amount;
-	private boolean isDeposit;
-	private boolean isFinalPayment;
+  private String orderId;
+  private String paymentId;
+  private BigDecimal amount;
+  private boolean isDeposit;
+  private boolean isFinalPayment;
 
-	@Builder
-	public OrderPaymentSucceededEvent(String orderId, String paymentId, BigDecimal amount,
-		boolean isDeposit, boolean isFinalPayment) {
-		this.orderId = orderId;
-		this.paymentId = paymentId;
-		this.amount = amount;
-		this.isDeposit = isDeposit;
-		this.isFinalPayment = isFinalPayment;
+  @Builder
+  public OrderPaymentSucceededEvent(String orderId, String paymentId, BigDecimal amount,
+    boolean isDeposit, boolean isFinalPayment) {
+    this.orderId = orderId;
+    this.paymentId = paymentId;
+    this.amount = amount;
+    this.isDeposit = isDeposit;
+    this.isFinalPayment = isFinalPayment;
 
-		// Set base event properties
-		setType(OrderEventType.ORDER_PAID);
-		setAggregateId(orderId);
-		setOccurredAt(OffsetDateTime.now());
-	}
+    // Set base event properties
+    setType(OrderEventType.ORDER_PAID);
+    setAggregateId(orderId);
+    setOccurredAt(OffsetDateTime.now());
+  }
 }

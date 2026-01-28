@@ -26,86 +26,86 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class OrderItem {
 
-	/**
-	 * 子订单ID
-	 */
-	private String id;
+  /**
+   * 子订单ID
+   */
+  private String id;
 
-	/**
-	 * 订单号（关联Order）
-	 */
-	private String orderNo;
+  /**
+   * 订单号（关联Order）
+   */
+  private String orderNo;
 
-	/**
-	 * 买家ID
-	 */
-	private String userId;
+  /**
+   * 买家ID
+   */
+  private String userId;
 
-	/**
-	 * 店铺ID
-	 */
-	private String tenantId;
+  /**
+   * 店铺ID
+   */
+  private String tenantId;
 
-	/**
-	 * 订单行
-	 */
-	private List<LineItem> lines;
+  /**
+   * 订单行
+   */
+  private List<LineItem> lines;
 
-	/**
-	 * 额外费用项（如运费、税费等）
-	 */
-	private List<ChargeItem> charges;
+  /**
+   * 额外费用项（如运费、税费等）
+   */
+  private List<ChargeItem> charges;
 
-	/**
-	 * 折扣分摊
-	 */
-	private List<DiscountAllocation> discountAllocations;
+  /**
+   * 折扣分摊
+   */
+  private List<DiscountAllocation> discountAllocations;
 
-	/**
-	 * 优惠券分摊
-	 */
-	private List<CouponAllocation> couponAllocations;
+  /**
+   * 优惠券分摊
+   */
+  private List<CouponAllocation> couponAllocations;
 
-	/**
-	 * 小计（不含费用和折扣）
-	 */
-	private Money total;
+  /**
+   * 小计（不含费用和折扣）
+   */
+  private Money total;
 
-	/**
-	 * 应付金额（含费用和折扣）
-	 */
-	private Money payable;
+  /**
+   * 应付金额（含费用和折扣）
+   */
+  private Money payable;
 
-	/**
-	 * 收货地址
-	 */
-	private Address address;
+  /**
+   * 收货地址
+   */
+  private Address address;
 
-	/**
-	 * 订单状态
-	 */
-	private OrderStatus orderStatus = OrderStatus.CREATED;
+  /**
+   * 订单状态
+   */
+  private OrderStatus orderStatus = OrderStatus.CREATED;
 
-	private Integer version;
+  private Integer version;
 
-	@Builder.Default
-	private List<OrderDomainEvent> domainEvents = new ArrayList<>();
+  @Builder.Default
+  private List<OrderDomainEvent> domainEvents = new ArrayList<>();
 
-	public OrderItem(String id, String tenantId, List<LineItem> lines, List<ChargeItem> charges,
-		Address address) {
-		this.id = id;
-		this.tenantId = tenantId;
-		this.lines = lines;
-		this.charges = charges;
-		this.address = address;
-		// TODO: 计算金额
-	}
+  public OrderItem(String id, String tenantId, List<LineItem> lines, List<ChargeItem> charges,
+    Address address) {
+    this.id = id;
+    this.tenantId = tenantId;
+    this.lines = lines;
+    this.charges = charges;
+    this.address = address;
+    // TODO: 计算金额
+  }
 
-	public List<OrderDomainEvent> pullDomainEvents() {
-		List<OrderDomainEvent> events = new ArrayList<>(this.domainEvents);
-		this.domainEvents.clear();
-		return events;
-	}
+  public List<OrderDomainEvent> pullDomainEvents() {
+    List<OrderDomainEvent> events = new ArrayList<>(this.domainEvents);
+    this.domainEvents.clear();
+    return events;
+  }
 
 //	/**
 //	 * Handle payment success
@@ -465,51 +465,51 @@ public class OrderItem {
 //		return computed;
 //	}
 
-	/**
-	 * 计算小计（不含费用和折扣）
-	 *
-	 * @return 小计金额
-	 */
-	public Money computeSubtotal() {
-		return lines.stream()
-			.map(LineItem::getLineTotal)
-			.reduce(Money.zero(), com.github.spud.tinystore.order.domain.model.Money::add);
-	}
+  /**
+   * 计算小计（不含费用和折扣）
+   *
+   * @return 小计金额
+   */
+  public Money computeSubtotal() {
+    return lines.stream()
+      .map(LineItem::getLineTotal)
+      .reduce(Money.zero(), com.github.spud.tinystore.order.domain.model.Money::add);
+  }
 
-	/**
-	 * 应用折扣分摊到各行
-	 */
-	public void applyDiscountAllocations() {
-		// TODO: 实现折扣分摊逻辑
-		// 按行金额比例分摊或其他策略
-	}
+  /**
+   * 应用折扣分摊到各行
+   */
+  public void applyDiscountAllocations() {
+    // TODO: 实现折扣分摊逻辑
+    // 按行金额比例分摊或其他策略
+  }
 
-	/**
-	 * 标记部分行已发货
-	 *
-	 * @param partialLineIds 部分发货的行ID列表
-	 */
-	public void markShipped(List<String> partialLineIds) {
-		// TODO: 实现部分发货逻辑
-		// 更新履约状态，可能需要与库存域协调
-	}
+  /**
+   * 标记部分行已发货
+   *
+   * @param partialLineIds 部分发货的行ID列表
+   */
+  public void markShipped(List<String> partialLineIds) {
+    // TODO: 实现部分发货逻辑
+    // 更新履约状态，可能需要与库存域协调
+  }
 
-	/**
-	 * 标记已签收
-	 */
-	public void markDelivered() {
-		// TODO: 实现签收逻辑
-		// 更新履约状态为已完成
-	}
+  /**
+   * 标记已签收
+   */
+  public void markDelivered() {
+    // TODO: 实现签收逻辑
+    // 更新履约状态为已完成
+  }
 
-	/**
-	 * 检查是否已完全履约
-	 *
-	 * @return true 如果所有行都已履约完成
-	 */
-	public boolean isFulfilled() {
-		return false;
-	}
+  /**
+   * 检查是否已完全履约
+   *
+   * @return true 如果所有行都已履约完成
+   */
+  public boolean isFulfilled() {
+    return false;
+  }
 
 //	public void onPaymentSuccess(PaymentSuccessArgs build) {
 //		// TODO: 
@@ -527,31 +527,31 @@ public class OrderItem {
 //		// TODO: 
 //	}
 
-	public void onAutoComplete() {
-		// TODO:
-	}
+  public void onAutoComplete() {
+    // TODO:
+  }
 
-	public void requestAfterSale() {
-		// TODO:
-	}
+  public void requestAfterSale() {
+    // TODO:
+  }
 
-	public void onRefundSuccess() {
-		// TODO:
-	}
+  public void onRefundSuccess() {
+    // TODO:
+  }
 
-	public void requestCancel() {
-		// TODO: 
-	}
+  public void requestCancel() {
+    // TODO:
+  }
 
-	public void approveCancel() {
-		// TODO: 
-	}
+  public void approveCancel() {
+    // TODO:
+  }
 
-	public void rejectCancel() {
-		// TODO:
-	}
+  public void rejectCancel() {
+    // TODO:
+  }
 
-	public void onExchangeCompleted() {
-		// TODO: 
-	}
+  public void onExchangeCompleted() {
+    // TODO:
+  }
 }

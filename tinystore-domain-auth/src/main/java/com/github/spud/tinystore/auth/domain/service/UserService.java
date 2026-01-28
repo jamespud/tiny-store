@@ -7,14 +7,13 @@ import com.github.spud.tinystore.auth.domain.primitives.PhoneNumber;
 import com.github.spud.tinystore.auth.domain.primitives.RtVersion;
 import com.github.spud.tinystore.auth.domain.primitives.UserId;
 import com.github.spud.tinystore.auth.infrastructure.feign.AccountServiceFeignClient;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
-
-import java.util.Optional;
 
 @Slf4j
 @Service
@@ -31,7 +30,7 @@ public class UserService implements UserDetailsService {
     } else {
       log.warn("User not found for phone: {}, creating new user in auth domain", phone);
       return MallUser.register(UserId.random(), PhoneNumber.of(phone),
-          "用户" + phone.substring(Math.max(phone.length() - 4, 0)), "default");
+        "用户" + phone.substring(Math.max(phone.length() - 4, 0)), "default");
     }
   }
 
@@ -61,31 +60,32 @@ public class UserService implements UserDetailsService {
   private MallUser convertToMallUser(AccountServiceFeignClient.UserCoreDto userCoreDto) {
     long rtVersion = userCoreDto.credentialVersion() == null ? 1L : userCoreDto.credentialVersion();
     return MallUser.restore(
-        UserId.of(String.valueOf(userCoreDto.userId())),
-        PhoneNumber.of(userCoreDto.account()),
-        userCoreDto.nickname(),
-        userCoreDto.avatarUrl(),
-        null,
-        userCoreDto.accountStatus() == 1 ? MallUserStatus.ACTIVE : MallUserStatus.FROZEN,
-        RtVersion.of(rtVersion)
+      UserId.of(String.valueOf(userCoreDto.userId())),
+      PhoneNumber.of(userCoreDto.account()),
+      userCoreDto.nickname(),
+      userCoreDto.avatarUrl(),
+      null,
+      userCoreDto.accountStatus() == 1 ? MallUserStatus.ACTIVE : MallUserStatus.FROZEN,
+      RtVersion.of(rtVersion)
     );
   }
 
   @Override
   public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-    AccountServiceFeignClient.UserCoreDto userCoreDto = accountServiceFeignClient.getUserByUsername(username);
+    AccountServiceFeignClient.UserCoreDto userCoreDto = accountServiceFeignClient.getUserByUsername(
+      username);
     if (userCoreDto == null) {
       throw new UsernameNotFoundException("User not found: " + username);
     }
     return org.springframework.security.core.userdetails.User
-        .withUsername(userCoreDto.account())
-        .password("N/A") // 密码不在认证域存储
-        .authorities("ROLE_USER")
-        .accountExpired(false)
-        .accountLocked(false)
-        .credentialsExpired(false)
-        .disabled(userCoreDto.accountStatus() != 1)
-        .build();
+      .withUsername(userCoreDto.account())
+      .password("N/A") // 密码不在认证域存储
+      .authorities("ROLE_USER")
+      .accountExpired(false)
+      .accountLocked(false)
+      .credentialsExpired(false)
+      .disabled(userCoreDto.accountStatus() != 1)
+      .build();
   }
 
 }

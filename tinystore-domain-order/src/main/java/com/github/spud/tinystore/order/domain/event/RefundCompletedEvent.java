@@ -15,17 +15,17 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 public class RefundCompletedEvent extends OrderDomainBaseEvent {
 
-	private String orderId;
-	private OffsetDateTime refundedAt;
+  private String orderId;
+  private OffsetDateTime refundedAt;
 
-	@Builder
-	public RefundCompletedEvent(String orderId, OffsetDateTime refundedAt) {
-		this.orderId = orderId;
-		this.refundedAt = refundedAt;
+  @Builder
+  public RefundCompletedEvent(String orderId, OffsetDateTime refundedAt) {
+    this.orderId = orderId;
+    this.refundedAt = refundedAt;
 
-		// Set base event properties
-		setType(OrderEventType.AFTERSALE_COMPLETED);
-		setAggregateId(orderId);
-		setOccurredAt(refundedAt != null ? refundedAt : OffsetDateTime.now());
-	}
+    // Set base event properties
+    setType(OrderEventType.AFTERSALE_COMPLETED);
+    setAggregateId(orderId);
+    setOccurredAt(refundedAt != null ? refundedAt : OffsetDateTime.now());
+  }
 }

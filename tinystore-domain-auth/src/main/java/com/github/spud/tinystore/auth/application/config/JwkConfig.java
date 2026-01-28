@@ -42,9 +42,9 @@ public class JwkConfig {
       PrivateKey pk = (PrivateKey) ks.getKey(keyAlias, keyPassword.toCharArray());
       RSAPrivateKey privateKey = (RSAPrivateKey) pk;
       RSAKey rsaKey = new RSAKey.Builder(publicKey)
-          .privateKey(privateKey)
-          .keyID(keyAlias)
-          .build();
+        .privateKey(privateKey)
+        .keyID(keyAlias)
+        .build();
       JWKSet jwkSet = new JWKSet(rsaKey);
       return (jwkSelector, securityContext) -> jwkSelector.select(jwkSet);
     } catch (Exception e) {

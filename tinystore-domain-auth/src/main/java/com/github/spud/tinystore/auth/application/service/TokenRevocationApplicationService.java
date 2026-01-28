@@ -17,7 +17,7 @@ public class TokenRevocationApplicationService implements TokenRevocationUseCase
   private final AuditLogPort auditLogPort;
 
   public TokenRevocationApplicationService(AuthorizationStorePort authorizationStorePort,
-      AuditLogPort auditLogPort) {
+    AuditLogPort auditLogPort) {
     this.authorizationStorePort = authorizationStorePort;
     this.auditLogPort = auditLogPort;
   }
@@ -28,6 +28,6 @@ public class TokenRevocationApplicationService implements TokenRevocationUseCase
     var userId = UserId.of(command.userId());
     authorizationStorePort.clearAuthorizationsOf(userId);
     auditLogPort.append(AuditEvent.success(userId.value(), null, null,
-        "TOKEN_REVOKE", Set.of(), null, null, command.reason()));
+      "TOKEN_REVOKE", Set.of(), null, null, command.reason()));
   }
 }

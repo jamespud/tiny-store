@@ -20,7 +20,7 @@ public class Otp {
   private OffsetDateTime usedAt;
 
   public Otp(String id, PhoneNumber phone, OtpCode code, OffsetDateTime expireAt, boolean used,
-      OffsetDateTime usedAt) {
+    OffsetDateTime usedAt) {
     this.id = Objects.requireNonNull(id, "id");
     this.phone = Objects.requireNonNull(phone, "phone");
     this.code = Objects.requireNonNull(code, "code");
@@ -31,7 +31,7 @@ public class Otp {
 
   public static Otp create(PhoneNumber phone, OtpCode code, OffsetDateTime expireAt) {
     return new Otp(UUID.randomUUID().toString().replace("-", ""), phone, code, expireAt, false,
-        null);
+      null);
   }
 
   public void ensureValid(OtpCode input) {
