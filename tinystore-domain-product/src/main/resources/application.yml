@@ -4,9 +4,9 @@ spring:
     
   # Database configuration (PostgreSQL)
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/tinystore_product}
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:postgres}
+    url: jdbc:postgresql://localhost:5432/tinystore?currentSchema=tinystore_product
+    username: postgres
+    password: postgres
     driver-class-name: org.postgresql.Driver
     
   # JPA configuration
@@ -37,7 +37,6 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
       
   # Security configuration
   security:

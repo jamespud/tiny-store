@@ -2,9 +2,9 @@ spring:
   application:
     name: promotion-service
   datasource:
-    url: jdbc:postgresql://localhost:5432/tinystore
-    username: tinystore
-    password: tinystore
+    url: jdbc:postgresql://localhost:5432/tinystore?currentSchema=tinystore_promotion
+    username: postgres
+    password: postgres
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -17,9 +17,10 @@ spring:
     locations: classpath:db/migration/promotion
   kafka:
     bootstrap-servers: localhost:9092
-  redis:
-    host: localhost
-    port: 6379
+  data:
+    redis:
+      host: localhost
+      port: 6379
 
 promotion:
   coupon:
@@ -32,3 +33,5 @@ promotion:
     interval-minutes: 5
     hot-coupon-interval-minutes: 1
     hot-coupons: []
+server:
+  port: 1200
