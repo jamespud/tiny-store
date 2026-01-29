@@ -1,5 +1,7 @@
 package com.github.spud.tinystore.product.infrastructure.outbox;
 
+import com.github.spud.tinystore.product.domain.common.DomainEvent;
+import com.github.spud.tinystore.product.domain.common.DomainEventPublisher;
 import com.github.spud.tinystore.product.domain.event.ProductCreatedEvent;
 import com.github.spud.tinystore.product.domain.event.ProductPublishedEvent;
 import org.springframework.stereotype.Component;
@@ -22,7 +24,7 @@ import org.springframework.stereotype.Component;
  * - Kafka producer (via Spring Kafka)
  */
 @Component
-public class OutboxServiceBridge {
+public class OutboxServiceBridge implements DomainEventPublisher {
 
 	/**
 	 * Publish domain event via outbox pattern
@@ -30,7 +32,8 @@ public class OutboxServiceBridge {
 	 * @param event Domain event to publish
 	 * @throws UnsupportedOperationException until implementation complete
 	 */
-	public void publish(Object event) {
+	@Override
+	public void publish(DomainEvent event) {
 		// TODO: Implement outbox publishing:
 		// 1. Extract event metadata (type, aggregate ID, tenant)
 		// 2. Serialize event payload to JSON
@@ -46,7 +49,7 @@ public class OutboxServiceBridge {
 	 * @param event ProductCreatedEvent
 	 */
 	public void publish(ProductCreatedEvent event) {
-		publish((Object) event);
+		publish((DomainEvent) event);
 	}
 
 	/**
@@ -55,6 +58,6 @@ public class OutboxServiceBridge {
 	 * @param event ProductPublishedEvent
 	 */
 	public void publish(ProductPublishedEvent event) {
-		publish((Object) event);
+		publish((DomainEvent) event);
 	}
 }
