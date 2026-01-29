@@ -1,5 +1,5 @@
 server:
-  port: 9001
+  port: 8000
 spring:
   application:
     name: tinystore-domain-account
