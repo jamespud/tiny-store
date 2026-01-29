@@ -1,5 +1,6 @@
 package com.github.spud.tinystore.product.infrastructure.config;
 
+import com.github.spud.tinystore.product.domain.common.DomainEventPublisher;
 import com.github.spud.tinystore.product.infrastructure.event.LoggingEventPublisher;
 import com.github.spud.tinystore.product.infrastructure.outbox.OutboxServiceBridge;
 import org.springframework.beans.factory.ObjectProvider;
@@ -40,7 +41,7 @@ public class ProductConfig {
 	 */
 	@Bean
 	@RefreshScope
-	public Object domainEventPublisher(
+	public DomainEventPublisher domainEventPublisher(
 		OutboxServiceBridge outboxServiceBridge,
 		ObjectProvider<LoggingEventPublisher> loggingEventPublisherProvider) {
 		// TODO: Return actual DomainEventPublisher interface
