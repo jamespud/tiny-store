@@ -8,8 +8,6 @@ services:
       POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
-    volumes:
-      - ./docker/postgres/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres -d tinystore -h localhost" ]
       interval: 5s
