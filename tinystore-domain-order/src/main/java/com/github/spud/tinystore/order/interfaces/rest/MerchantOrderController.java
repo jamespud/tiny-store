@@ -1,216 +1,151 @@
 package com.github.spud.tinystore.order.interfaces.rest;
 
-import com.github.spud.tinystore.infrastructure.vo.Response;
-import com.github.spud.tinystore.order.application.service.IdempotencyStorage;
-import com.github.spud.tinystore.order.application.service.OrderApplicationService;
-import com.github.spud.tinystore.order.infrastructure.metrics.OrderMetrics;
-import com.github.spud.tinystore.order.interfaces.dto.request.CancelApproveRequest;
-import com.github.spud.tinystore.order.interfaces.dto.request.CancelRejectRequest;
-import com.github.spud.tinystore.order.interfaces.dto.request.DeliveredRequest;
-import com.github.spud.tinystore.order.interfaces.dto.request.MerchantAcceptRequest;
-import com.github.spud.tinystore.order.interfaces.dto.request.ShipOrderRequest;
-import com.github.spud.tinystore.order.interfaces.dto.response.BasicAckVO;
-import com.github.spud.tinystore.order.interfaces.util.IdempotencyHelper;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
+import com.github.spud.tinystore.order.application.service.MerchantFulfillmentService;
+import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.ShopOrderJpaRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 /**
- * 商家订单控制器 - 处理商家侧订单操作
- *
- * @author Spud
- * @date 2025/9/9
+ * 商家订单 REST 控制器
+ * 路径前缀：/order/merchant
  */
 @Slf4j
 @RestController
 @RequestMapping("/order/merchant")
 public class MerchantOrderController {
 
-	private final OrderApplicationService applicationService;
-	private final IdempotencyStorage idempotencyStorage;
-	private final OrderMetrics orderMetrics;
+    @Autowired
+    private MerchantFulfillmentService merchantFulfillmentService;
 
-	public MerchantOrderController(OrderApplicationService applicationService,
-		org.springframework.beans.factory.ObjectProvider<IdempotencyStorage> idempotencyStorageProvider,
-		org.springframework.beans.factory.ObjectProvider<OrderMetrics> orderMetricsProvider) {
-		this.applicationService = applicationService;
-		this.idempotencyStorage = idempotencyStorageProvider.getIfAvailable(() -> new IdempotencyStorage() {
-			@Override public boolean exists(String key) { return false; }
-			@Override public <T> T getResponse(String key, Class<T> type) { return null; }
-			@Override public void saveResponse(String key, Object value) { }
-			@Override public void evict(String key) { }
-		});
-		this.orderMetrics = orderMetricsProvider.getIfAvailable(() -> null);
-	}
+    @Autowired
+    private ShopOrderJpaRepository shopOrderJpaRepository;
 
-	private void ensureTenantInMdc(HttpServletRequest request) {
-		if (request == null) return;
-		String tenantId = request.getHeader("X-Tenant-Id");
-		if (tenantId != null && !tenantId.isBlank()) org.slf4j.MDC.put("tenantId", tenantId);
-	}
+    /**
+     * GET /order/merchant/orders/{orderId} - 获取商家订单详情
+     */
+    @GetMapping("/orders/{orderId}")
+    public ResponseEntity<Map<String, Object>> getOrder(@PathVariable String orderId) {
+        try {
+            var order = shopOrderJpaRepository.findByOrderId(orderId)
+                .map(o -> Map.of(
+                    "orderId", o.getOrderId(),
+                    "tradeId", o.getTradeId(),
+                    "shopId", o.getShopId(),
+                    "sellerId", o.getSellerId(),
+                    "orderStatus", o.getOrderStatus(),
+                    "createdAt", o.getCreatedAt().toString()
+                ))
+                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
 
-	/**
-	 * 商家接单
-	 */
-	@PostMapping(value = "/order/receive", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> receiveOrder(@Valid @RequestBody MerchantAcceptRequest request,
-		HttpServletRequest httpRequest) {
-		if (request.getOperatorId() != null) org.slf4j.MDC.put("actorId", request.getOperatorId());
-		IdempotencyHelper.extractAndSetContext(httpRequest);
-		ensureTenantInMdc(httpRequest);
-		String key = IdempotencyHelper.getCurrentIdempotencyKey();
-		if (key == null || key.isBlank()) {
-			key = "merchant_accept:" + request.getOrderId() + ":" + request.getOperatorId();
-			org.slf4j.MDC.put(IdempotencyHelper.MDC_IDEMPOTENCY_KEY, key);
-		}
-		try {
-			if (idempotencyStorage.exists(key)) {
-				BasicAckVO cached = idempotencyStorage.getResponse(key, BasicAckVO.class);
-				if (cached != null) {
-					if (orderMetrics != null) { try { orderMetrics.incrementIdempotencyHit(key); } catch (Exception ignored) {} }
-					return Response.ok(cached);
-				}
-			}
-		} catch (Exception ignored) { }
-		if (orderMetrics != null) { try { orderMetrics.incrementIdempotencyMiss(key); } catch (Exception ignored) {} }
-		log.info("Merchant accepting order: {}, operator: {}, correlationId: {}",
-			request.getOrderId(), request.getOperatorId(), IdempotencyHelper.getCurrentCorrelationId());
-		applicationService.merchantAccept(request.toCommand());
-		log.info("Merchant accept operation completed for order: {}", request.getOrderId());
-		BasicAckVO ack = new BasicAckVO("success", "Order accepted", null);
-		try { idempotencyStorage.saveResponse(key, ack); if (orderMetrics != null) { orderMetrics.incrementIdempotencyHit(key); } } catch (Exception ignored) { }
-		return Response.ok(ack);
-	}
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", 0);
+            response.put("msg", "OK");
+            response.put("data", order);
+            return ResponseEntity.ok(response);
 
-	/**
-	 * 商家同意取消
-	 */
-	@PostMapping(value = "/cancel/approve", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> approveCancel(@Valid @RequestBody CancelApproveRequest request,
-		HttpServletRequest httpRequest) {
-		if (request.getOperatorId() != null) org.slf4j.MDC.put("actorId", request.getOperatorId());
-		IdempotencyHelper.extractAndSetContext(httpRequest);
-		ensureTenantInMdc(httpRequest);
-		String key = IdempotencyHelper.getCurrentIdempotencyKey();
-		if (key == null || key.isBlank()) {
-			key = "merchant_cancel_decision:" + request.getOrderId() + ":" + request.getOperatorId() + ":approve";
-			org.slf4j.MDC.put(IdempotencyHelper.MDC_IDEMPOTENCY_KEY, key);
-		}
-		try {
-			if (idempotencyStorage.exists(key)) {
-				BasicAckVO cached = idempotencyStorage.getResponse(key, BasicAckVO.class);
-				if (cached != null) {
-					if (orderMetrics != null) { try { orderMetrics.incrementIdempotencyHit(key); } catch (Exception ignored) {} }
-					return Response.ok(cached);
-				}
-			}
-		} catch (Exception ignored) { }
-		if (orderMetrics != null) { try { orderMetrics.incrementIdempotencyMiss(key); } catch (Exception ignored) {} }
-		applicationService.approveCancelRequest(request.toCommand());
-		BasicAckVO ack = new BasicAckVO("success", "Cancel approved", null);
-		try { idempotencyStorage.saveResponse(key, ack); if (orderMetrics != null) { orderMetrics.incrementIdempotencyHit(key); } } catch (Exception ignored) { }
-		return Response.ok(ack);
-	}
+        } catch (Exception e) {
+            log.error("Get order failed: orderId={}", orderId, e);
+            return buildErrorResponse(404, "Order not found: " + orderId);
+        }
+    }
 
-	/**
-	 * 商家拒绝取消
-	 */
-	@PostMapping(value = "/cancel/reject", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> rejectCancel(@Valid @RequestBody CancelRejectRequest request,
-		HttpServletRequest httpRequest) {
-		if (request.getOperatorId() != null) org.slf4j.MDC.put("actorId", request.getOperatorId());
-		IdempotencyHelper.extractAndSetContext(httpRequest);
-		ensureTenantInMdc(httpRequest);
-		String key = IdempotencyHelper.getCurrentIdempotencyKey();
-		if (key == null || key.isBlank()) {
-			key = "merchant_cancel_decision:" + request.getOrderId() + ":" + request.getOperatorId() + ":reject";
-			org.slf4j.MDC.put(IdempotencyHelper.MDC_IDEMPOTENCY_KEY, key);
-		}
-		try {
-			if (idempotencyStorage.exists(key)) {
-				BasicAckVO cached = idempotencyStorage.getResponse(key, BasicAckVO.class);
-				if (cached != null) {
-					if (orderMetrics != null) { try { orderMetrics.incrementIdempotencyHit(key); } catch (Exception ignored) {} }
-					return Response.ok(cached);
-				}
-			}
-		} catch (Exception ignored) { }
-		if (orderMetrics != null) { try { orderMetrics.incrementIdempotencyMiss(key); } catch (Exception ignored) {} }
-		applicationService.rejectCancelRequest(request.toCommand());
-		BasicAckVO ack = new BasicAckVO("success", "Cancel rejected", null);
-		try { idempotencyStorage.saveResponse(key, ack); if (orderMetrics != null) { orderMetrics.incrementIdempotencyHit(key); } } catch (Exception ignored) { }
-		return Response.ok(ack);
-	}
+    /**
+     * POST /order/merchant/orders/{orderId}/accept - 商家同意订单
+     */
+    @PostMapping("/orders/{orderId}/accept")
+    public ResponseEntity<Map<String, Object>> acceptOrder(
+        @PathVariable String orderId,
+        @RequestBody(required = false) Map<String, Object> request,
+        @RequestHeader("Idempotency-Key") String idempotencyKey) {
 
-	/**
-	 * 商家发货
-	 */
-	@PostMapping(value = "/ship", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> shipOrder(@Valid @RequestBody ShipOrderRequest request,
-		HttpServletRequest httpRequest) {
-		if (request.getOperatorId() != null) org.slf4j.MDC.put("actorId", request.getOperatorId());
-		IdempotencyHelper.extractAndSetContext(httpRequest);
-		ensureTenantInMdc(httpRequest);
-		String key = IdempotencyHelper.getCurrentIdempotencyKey();
-		if (key == null || key.isBlank()) {
-			String pkg = request.getLogistics() != null ? request.getLogistics().getTrackingNo() : "";
-			key = "ship:" + request.getOrderId() + ":" + pkg;
-			org.slf4j.MDC.put(IdempotencyHelper.MDC_IDEMPOTENCY_KEY, key);
-		}
-		try {
-			if (idempotencyStorage.exists(key)) {
-				BasicAckVO cached = idempotencyStorage.getResponse(key, BasicAckVO.class);
-				if (cached != null) {
-					if (orderMetrics != null) { try { orderMetrics.incrementIdempotencyHit(key); } catch (Exception ignored) {} }
-					return Response.ok(cached);
-				}
-			}
-		} catch (Exception ignored) { }
-		if (orderMetrics != null) { try { orderMetrics.incrementIdempotencyMiss(key); } catch (Exception ignored) {} }
-		log.info("Merchant shipping order: {}, operator: {}, logistics: {}, correlationId: {}",
-			request.getOrderId(), request.getOperatorId(),
-			request.getLogistics().getCompanyName(), IdempotencyHelper.getCurrentCorrelationId());
-		applicationService.shipOrder(request.toCommand());
-		log.info("Merchant ship operation completed for order: {}", request.getOrderId());
-		BasicAckVO ack = new BasicAckVO("success", "Order shipped", null);
-		try { idempotencyStorage.saveResponse(key, ack); if (orderMetrics != null) { orderMetrics.incrementIdempotencyHit(key); } } catch (Exception ignored) { }
-		return Response.ok(ack);
-	}
+        try {
+            String traceId = request != null ? (String) request.get("traceId") : UUID.randomUUID().toString();
+            merchantFulfillmentService.merchantAcceptOrder(orderId, traceId);
 
-	/**
-	 * 商家确认妥投（可选）
-	 */
-	@PostMapping(value = "/delivery/confirm", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public Response<BasicAckVO> confirmDelivery(@Valid @RequestBody DeliveredRequest request,
-		HttpServletRequest httpRequest) {
-		// DeliveredRequest 无 operatorId 字段；使用 source 近似标注操作者类型
-		if (request.getSource() != null) org.slf4j.MDC.put("actorId", request.getSource());
-		IdempotencyHelper.extractAndSetContext(httpRequest);
-		ensureTenantInMdc(httpRequest);
-		String key = IdempotencyHelper.getCurrentIdempotencyKey();
-		if (key == null || key.isBlank()) {
-			String pkg = request.getTrackingNo();
-			key = "delivered_confirm:" + request.getOrderId() + ":" + pkg;
-			org.slf4j.MDC.put(IdempotencyHelper.MDC_IDEMPOTENCY_KEY, key);
-		}
-		try {
-			if (idempotencyStorage.exists(key)) {
-				BasicAckVO cached = idempotencyStorage.getResponse(key, BasicAckVO.class);
-				if (cached != null) {
-					if (orderMetrics != null) { try { orderMetrics.incrementIdempotencyHit(key); } catch (Exception ignored) {} }
-					return Response.ok(cached);
-				}
-			}
-		} catch (Exception ignored) { }
-		if (orderMetrics != null) { try { orderMetrics.incrementIdempotencyMiss(key); } catch (Exception ignored) {} }
-		applicationService.confirmDelivered(request.toCommand());
-		BasicAckVO ack = new BasicAckVO("success", "Delivery confirmed", request.getEventId());
-		try { idempotencyStorage.saveResponse(key, ack); if (orderMetrics != null) { orderMetrics.incrementIdempotencyHit(key); } } catch (Exception ignored) { }
-		return Response.ok(ack);
-	}
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", 0);
+            response.put("msg", "Order accepted");
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            log.error("Accept order failed: orderId={}", orderId, e);
+            return buildErrorResponse(500, "Accept order failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * POST /order/merchant/orders/{orderId}/ship - 商家发货
+     *
+     * Request body:
+     * {
+     *   "packageId": "pkg_001",
+     *   "waybillNo": "SF123456789",
+     *   "logistics": "SFEXPRESS",
+     *   "traceId": "trace_xxx"
+     * }
+     */
+    @PostMapping("/orders/{orderId}/ship")
+    public ResponseEntity<Map<String, Object>> shipOrder(
+        @PathVariable String orderId,
+        @RequestBody Map<String, Object> request,
+        @RequestHeader("Idempotency-Key") String idempotencyKey) {
+
+        try {
+            String packageId = (String) request.get("packageId");
+            String waybillNo = (String) request.get("waybillNo");
+            String logistics = (String) request.get("logistics");
+            String traceId = (String) request.getOrDefault("traceId", UUID.randomUUID().toString());
+
+            merchantFulfillmentService.shipOrder(orderId, packageId, waybillNo, logistics, traceId);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", 0);
+            response.put("msg", "Order shipped");
+            response.put("data", Map.of("packageId", packageId, "waybillNo", waybillNo));
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            log.error("Ship order failed: orderId={}", orderId, e);
+            return buildErrorResponse(500, "Ship order failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * POST /order/merchant/packages/{packageId}/delivered - 包裹签收
+     */
+    @PostMapping("/packages/{packageId}/delivered")
+    public ResponseEntity<Map<String, Object>> packageDelivered(
+        @PathVariable String packageId,
+        @RequestBody(required = false) Map<String, Object> request,
+        @RequestHeader("Idempotency-Key") String idempotencyKey) {
+
+        try {
+            String traceId = request != null ? (String) request.get("traceId") : UUID.randomUUID().toString();
+            merchantFulfillmentService.markPackageDelivered(packageId, traceId);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", 0);
+            response.put("msg", "Package delivered");
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            log.error("Mark package delivered failed: packageId={}", packageId, e);
+            return buildErrorResponse(500, "Mark package delivered failed: " + e.getMessage());
+        }
+    }
+
+    // ============ 辅助方法 ============
+
+    private ResponseEntity<Map<String, Object>> buildErrorResponse(int code, String msg) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("code", code);
+        response.put("msg", msg);
+        return ResponseEntity.status(code).body(response);
+    }
 }

@@ -1,0 +1,24 @@
+package com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository;
+
+import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.TradeEntity;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+/**
+ * Trade JPA Repository
+ */
+@Repository
+public interface TradeJpaRepository extends JpaRepository<TradeEntity, Long> {
+
+    Optional<TradeEntity> findByTradeId(String tradeId);
+
+    List<TradeEntity> findByBuyerId(String buyerId);
+
+    @Query("SELECT t FROM TradeEntity t WHERE t.payStatus = :payStatus AND t.createdAt < :before ORDER BY t.createdAt ASC")
+    List<TradeEntity> findPendingPaymentsByTimeout(@Param("payStatus") String payStatus, @Param("before") LocalDateTime before);
+}

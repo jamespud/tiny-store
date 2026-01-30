@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: order-service-test
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  flyway:
+    enabled: false
+
+order:
+  idempotency:
+    ttl-seconds: 600
+  payment-timeout-seconds: 900
