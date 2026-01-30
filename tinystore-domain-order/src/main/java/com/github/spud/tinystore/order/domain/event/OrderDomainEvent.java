@@ -1,21 +1,31 @@
 package com.github.spud.tinystore.order.domain.event;
 
-import com.github.spud.tinystore.domain.event.DomainEvent;
+import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
- * 领域事件基础接口 所有订单相关的领域事件都应该实现此接口
- *
- * @author Spud
- * @date 2025/9/29
+ * 订单域基础事件（用于 Outbox 存储的事件 envelope）
  */
-public interface OrderDomainEvent extends DomainEvent {
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class OrderDomainEvent {
+    private String eventId;
+    private OrderEventType eventType;
+    private String aggregateType;
+    private String aggregateId;
+    private LocalDateTime occurredAt;
+    private String traceId;
+    private String payloadJson;
 
-  /**
-   * 订单号
-   *
-   * @return 订单号
-   */
-  String getOrderId();
-
-
+    public static class Constants {
+        public static final String AGGREGATE_TYPE_TRADE = "TRADE";
+        public static final String AGGREGATE_TYPE_ORDER = "ORDER";
+        public static final String AGGREGATE_TYPE_PACKAGE = "PACKAGE";
+        public static final String AGGREGATE_TYPE_AFTER_SALE = "AFTER_SALE";
+    }
 }

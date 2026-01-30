@@ -1,12 +1,19 @@
-tinystore:
-  security:
-    resource-server:
-      enabled: false
-
 spring:
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
-      - org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration
-  jpa:
-    show-sql: false
+  datasource:
+    url: jdbc:postgresql://localhost:5432/tinystore?currentSchema=tinystore_order
+    username: postgres
+    password: postgres
+  kafka:
+    bootstrap-servers: localhost:9092
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+order:
+  idempotency:
+    ttl-seconds: 600
+  payment:
+    timeout-seconds: 120
+  auto-receive:
+    timeout-seconds: 60

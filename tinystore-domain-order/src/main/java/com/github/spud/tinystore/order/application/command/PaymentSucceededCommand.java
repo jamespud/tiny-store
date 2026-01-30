@@ -1,20 +1,20 @@
 package com.github.spud.tinystore.order.application.command;
 
-import com.github.spud.tinystore.order.domain.model.Money;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
- * Command for payment success callback
+ * 支付成功回写命令
  */
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
 public class PaymentSucceededCommand {
-
-	private String orderId;
-	private String paymentId;
-	private Money amount;
-	private Long paidAt;
-	private boolean isDeposit;
-	private boolean isFinalPayment;
+    private String paymentId;
+    private String tradeId;
+    private Long paidAmountCents;
+    private String traceId;
 }
