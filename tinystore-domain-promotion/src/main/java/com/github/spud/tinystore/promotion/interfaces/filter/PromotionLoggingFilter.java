@@ -27,7 +27,7 @@ public class PromotionLoggingFilter extends OncePerRequestFilter {
 		}
 		MDC.put("traceId", traceId);
 		putIfPresent("userId", firstNonBlank(request.getHeader("X-User-Id"), request.getHeader("User-Id")));
-		putIfPresent("orderNo", firstNonBlank(request.getHeader("X-Order-No"), request.getHeader("Order-No")));
+		putIfPresent("tradeId", firstNonBlank(request.getHeader("X-Trade-Id"), firstNonBlank(request.getHeader("X-Order-No"), request.getHeader("Order-No"))));
 		putIfPresent("quoteId", firstNonBlank(request.getHeader("X-Quote-Id"), request.getHeader("Quote-Id")));
 		response.setHeader("X-Trace-Id", traceId);
 		try {

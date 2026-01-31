@@ -68,7 +68,7 @@ public class JpaUserCouponRepositoryAdapter implements UserCouponRepository {
 		uc.setUseStatus(e.getUseStatus() == null ? null : UserCouponStatus.valueOf(e.getUseStatus()));
 		uc.setLockId(e.getLockId());
 		uc.setLockExpireTime(toOffset(e.getLockExpireTime()));
-		uc.setUsedOrderNo(e.getUsedOrderNo());
+		uc.setUsedTradeId(e.getUsedTradeId());
 		uc.setUsedTime(toOffset(e.getUsedTime()));
 		return uc;
 	}
@@ -83,7 +83,7 @@ public class JpaUserCouponRepositoryAdapter implements UserCouponRepository {
 		e.setUseStatus(uc.getUseStatus() == null ? null : uc.getUseStatus().name());
 		e.setLockId(uc.getLockId());
 		e.setLockExpireTime(toLocal(uc.getLockExpireTime()));
-		e.setUsedOrderNo(uc.getUsedOrderNo());
+		e.setUsedTradeId(uc.getUsedTradeId());
 		e.setUsedTime(toLocal(uc.getUsedTime()));
 		e.setCreatedAt(LocalDateTime.now());
 		e.setUpdatedAt(LocalDateTime.now());

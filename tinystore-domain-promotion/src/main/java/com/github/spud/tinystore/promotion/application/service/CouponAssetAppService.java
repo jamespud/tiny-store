@@ -124,7 +124,7 @@ public class CouponAssetAppService {
 			v.setCouponNo(uc.getCouponNo());
 			v.setUseStatus(uc.getUseStatus());
 			v.setReceiveAtEpochMs(toEpochMs(uc.getReceiveTime()));
-			v.setUsedOrderNo(uc.getUsedOrderNo());
+			v.setUsedTradeId(uc.getUsedTradeId());
 			v.setUsedAtEpochMs(toEpochMs(uc.getUsedTime()));
 			views.add(v);
 		}

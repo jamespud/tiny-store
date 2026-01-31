@@ -37,8 +37,8 @@ public class UserCouponEntity {
 	@Column(name = "lock_expire_time")
 	private LocalDateTime lockExpireTime;
 
-	@Column(name = "used_order_no")
-	private String usedOrderNo;
+	@Column(name = "used_trade_id")
+	private String usedTradeId;
 
 	@Column(name = "used_time")
 	private LocalDateTime usedTime;
@@ -113,12 +113,12 @@ public class UserCouponEntity {
 		this.lockExpireTime = lockExpireTime;
 	}
 
-	public String getUsedOrderNo() {
-		return usedOrderNo;
+	public String getUsedTradeId() {
+		return usedTradeId;
 	}
 
-	public void setUsedOrderNo(String usedOrderNo) {
-		this.usedOrderNo = usedOrderNo;
+	public void setUsedTradeId(String usedTradeId) {
+		this.usedTradeId = usedTradeId;
 	}
 
 	public LocalDateTime getUsedTime() {

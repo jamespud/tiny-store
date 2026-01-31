@@ -109,7 +109,7 @@ public class CheckoutAppService {
 	@Transactional
 	public CheckoutCommitResponse commit(String idempotencyKey, CheckoutCommitRequest request) {
 		String key = "promotion:checkout:commit:" + idempotencyKey;
-		String requestHash = sha256(String.valueOf(request.getQuoteId()) + "|" + String.valueOf(request.getOrderNo()) + "|"
+		String requestHash = sha256(String.valueOf(request.getQuoteId()) + "|" + String.valueOf(request.getTradeId()) + "|"
 			+ String.valueOf(request.getInputHash()) + "|" + String.valueOf(request.getPayNo()) + "|" + String.valueOf(request.getPaidAt()));
 		IdempotencyStorage.StoredValue stored = idempotencyStorage.get(key);
 		if (stored != null) {
@@ -205,13 +205,13 @@ public class CheckoutAppService {
 		}
 
 		List<ChangeReason> changes = new ArrayList<>();
-		applyCouponUsageAndDegrade(payload, request.getOrderNo(), now, changes);
+		applyCouponUsageAndDegrade(payload, request.getTradeId(), now, changes);
 		recomputeTotals(payload);
 
 		entity.setSnapshot(writePayload(payload));
 		entity.setUpdatedAt(now);
 		checkoutQuoteRepository.save(entity);
-		checkoutQuoteRepository.markCommitted(entity.getId(), request.getOrderNo(), now);
+		checkoutQuoteRepository.markCommitted(entity.getId(), request.getTradeId(), now);
 
 		resp.setStatus(changes.isEmpty() ? CheckoutResultStatus.OK : CheckoutResultStatus.OK_WITH_CHANGE);
 		resp.setFinalQuoteId(entity.getId().toString());
@@ -225,7 +225,7 @@ public class CheckoutAppService {
 	@Transactional
 	public CheckoutReleaseResponse release(String idempotencyKey, CheckoutReleaseRequest request) {
 		String key = "promotion:checkout:release:" + idempotencyKey;
-		String requestHash = sha256(String.valueOf(request.getQuoteId()) + "|" + String.valueOf(request.getOrderNo()) + "|" + String.valueOf(request.getReason()));
+		String requestHash = sha256(String.valueOf(request.getQuoteId()) + "|" + String.valueOf(request.getTradeId()) + "|" + String.valueOf(request.getReason()));
 		IdempotencyStorage.StoredValue stored = idempotencyStorage.get(key);
 		if (stored != null) {
 			if (!Objects.equals(requestHash, stored.requestHash())) {
@@ -317,7 +317,7 @@ public class CheckoutAppService {
 		entity.setShippingRulesVersion(v.getShippingRulesVersion());
 		entity.setSnapshot(writePayload(payload));
 		entity.setExpiresAt(expiresAt);
-		entity.setOrderNo(null);
+		entity.setTradeId(null);
 		entity.setCreatedAt(now);
 		entity.setUpdatedAt(now);
 		checkoutQuoteRepository.save(entity);
@@ -739,7 +739,7 @@ public class CheckoutAppService {
 		}
 	}
 
-	private void applyCouponUsageAndDegrade(CheckoutQuotePayload payload, String orderNo, LocalDateTime now,
+	private void applyCouponUsageAndDegrade(CheckoutQuotePayload payload, String tradeId, LocalDateTime now,
 		List<ChangeReason> changes) {
 		PricingSnapshot snapshot = payload.getSnapshot();
 		List<PricingSnapshot.AppliedBenefit> benefits = new ArrayList<>(snapshot.getAppliedBenefits());
@@ -756,7 +756,7 @@ public class CheckoutAppService {
 			if (lockId == null) {
 				continue;
 			}
-			int used = userCouponRepository.useByLockId(lockId, orderNo, now, now);
+			int used = userCouponRepository.useByLockId(lockId, tradeId, now, now);
 			if (used > 0) {
 				continue;
 			}
@@ -784,7 +784,7 @@ public class CheckoutAppService {
 					if (locked <= 0) {
 						continue;
 					}
-					int used2 = userCouponRepository.useByLockId(newLockId, orderNo, now, now);
+					int used2 = userCouponRepository.useByLockId(newLockId, tradeId, now, now);
 					if (used2 <= 0) {
 						userCouponRepository.unlockByLockId(newLockId, now);
 						continue;

@@ -14,6 +14,6 @@ import lombok.NoArgsConstructor;
 @Builder
 public class PromotionReleaseRequest {
     private String quoteId;
-    private String orderNo;
+    private String tradeId;
     private String reason;
 }

@@ -15,7 +15,7 @@ public class StockRestockRequest {
 	private String tenantId;
 
 	@NotBlank
-	private String orderNo;
+	private String tradeId;
 
 	@NotBlank
 	private String refundId;

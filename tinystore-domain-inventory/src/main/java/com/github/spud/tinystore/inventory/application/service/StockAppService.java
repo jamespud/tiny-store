@@ -104,7 +104,7 @@ public class StockAppService {
 			InventoryReservationEntity reservation = new InventoryReservationEntity()
 				.setReservationId(reservationId)
 				.setTenantId(request.getTenantId())
-				.setOrderNo(request.getOrderNo())
+				.setTradeId(request.getTradeId())
 				.setSkuId(line.getSkuId())
 				.setQuantity(line.getQuantity())
 				.setExpireAt(expireAt)
@@ -130,7 +130,7 @@ public class StockAppService {
 			if (reservation == null) {
 				return StockCommitResponse.fail("RESERVATION_NOT_FOUND");
 			}
-			if (!reservation.getTenantId().equals(request.getTenantId()) || !reservation.getOrderNo().equals(request.getOrderNo())) {
+			if (!reservation.getTenantId().equals(request.getTenantId()) || !reservation.getTradeId().equals(request.getTradeId())) {
 				return StockCommitResponse.fail("RESERVATION_MISMATCH");
 			}
 			if (STATUS_COMMITTED.equals(reservation.getStatus())) {
@@ -161,7 +161,7 @@ public class StockAppService {
 			if (reservation == null) {
 				continue;
 			}
-			if (!reservation.getTenantId().equals(request.getTenantId()) || !reservation.getOrderNo().equals(request.getOrderNo())) {
+			if (!reservation.getTenantId().equals(request.getTenantId()) || !reservation.getTradeId().equals(request.getTradeId())) {
 				return StockReleaseResponse.fail("RESERVATION_MISMATCH");
 			}
 			if (STATUS_RELEASED.equals(reservation.getStatus()) || STATUS_EXPIRED.equals(reservation.getStatus())) {
@@ -260,7 +260,7 @@ public class StockAppService {
 
 		Map<String, InventoryReservationEntity> bySku = new HashMap<>();
 		for (InventoryReservationEntity reservation : existing) {
-			if (!reservation.getTenantId().equals(request.getTenantId()) || !reservation.getOrderNo().equals(request.getOrderNo())) {
+			if (!reservation.getTenantId().equals(request.getTenantId()) || !reservation.getTradeId().equals(request.getTradeId())) {
 				return StockPreOccupyResponse.fail(List.of(), "IDEMPOTENCY_CONFLICT");
 			}
 			bySku.put(reservation.getSkuId(), reservation);

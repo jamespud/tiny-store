@@ -15,7 +15,7 @@ public class StockPreOccupyRequest {
 	private String tenantId;
 
 	@NotBlank
-	private String orderNo;
+	private String tradeId;
 
 	@NotNull
 	private Long expiresAtEpochMs;

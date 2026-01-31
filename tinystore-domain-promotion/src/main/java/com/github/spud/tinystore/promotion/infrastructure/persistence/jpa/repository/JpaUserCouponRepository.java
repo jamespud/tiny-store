@@ -40,9 +40,9 @@ public interface JpaUserCouponRepository extends JpaRepository<UserCouponEntity,
 	int unlockByLockId(@Param("lockId") String lockId, @Param("now") LocalDateTime now);
 
 	@Modifying
-	@Query("UPDATE UserCouponEntity uc SET uc.useStatus = 'USED', uc.usedOrderNo = :orderNo, uc.usedTime = :usedTime, uc.updatedAt = :now " +
+	@Query("UPDATE UserCouponEntity uc SET uc.useStatus = 'USED', uc.usedTradeId = :tradeId, uc.usedTime = :usedTime, uc.updatedAt = :now " +
 		"WHERE uc.lockId = :lockId AND uc.useStatus = 'LOCKED'")
-	int useByLockId(@Param("lockId") String lockId, @Param("orderNo") String orderNo, @Param("usedTime") LocalDateTime usedTime,
+	int useByLockId(@Param("lockId") String lockId, @Param("tradeId") String tradeId, @Param("usedTime") LocalDateTime usedTime,
 		@Param("now") LocalDateTime now);
 
 	List<UserCouponEntity> findByUserId(String userId);

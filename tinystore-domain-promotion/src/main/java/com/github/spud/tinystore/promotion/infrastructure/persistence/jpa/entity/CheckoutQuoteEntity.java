@@ -41,8 +41,8 @@ public class CheckoutQuoteEntity {
 	@Column(name = "expires_at", nullable = false)
 	private LocalDateTime expiresAt;
 
-	@Column(name = "order_no")
-	private String orderNo;
+	@Column(name = "trade_id")
+	private String tradeId;
 
 	@Column(name = "created_at", nullable = false)
 	private LocalDateTime createdAt;
@@ -114,12 +114,12 @@ public class CheckoutQuoteEntity {
 		this.expiresAt = expiresAt;
 	}
 
-	public String getOrderNo() {
-		return orderNo;
+	public String getTradeId() {
+		return tradeId;
 	}
 
-	public void setOrderNo(String orderNo) {
-		this.orderNo = orderNo;
+	public void setTradeId(String tradeId) {
+		this.tradeId = tradeId;
 	}
 
 	public LocalDateTime getCreatedAt() {
