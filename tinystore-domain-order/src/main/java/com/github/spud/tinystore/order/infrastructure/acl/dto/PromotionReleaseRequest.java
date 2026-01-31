@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Builder
 public class PromotionReleaseRequest {
-    private String couponId;
-    private String buyerId;
+    private String quoteId;
+    private String orderNo;
+    private String reason;
 }

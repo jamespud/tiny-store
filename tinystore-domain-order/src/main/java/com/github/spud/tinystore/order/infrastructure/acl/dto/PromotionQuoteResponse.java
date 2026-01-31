@@ -13,6 +13,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Builder
 public class PromotionQuoteResponse {
+    private String quoteId;
+    private String inputHash;
     private Long discountAmountCents;
     private Long itemsTotalCents;
     private Long payableAmountCents;

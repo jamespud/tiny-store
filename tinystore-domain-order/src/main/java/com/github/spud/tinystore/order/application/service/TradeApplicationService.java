@@ -104,19 +104,37 @@ public class TradeApplicationService {
                 throw new DomainConflictException("PROMOTION_QUOTE_FAILED", "Failed to get promotion quote: " + e.getMessage());
             }
 
-            // 2.5. 调用 promotion commit（核销优惠）
-            PromotionCommitRequest promotionCommitRequest = PromotionCommitRequest.builder()
-                .buyerId(command.getBuyerId())
-                .shopId(command.getOrderLines().get(0).getShopId())
-                .couponCode(command.getCouponCode())
-                .build();
-            try {
-                promotionClient.commit(idempotencyKey, promotionCommitRequest);
-                log.info("Promotion commit succeeded");
-            } catch (Exception e) {
-                log.error("Promotion commit failed", e);
-                throw new DomainConflictException("PROMOTION_COMMIT_FAILED", "Failed to commit promotion: " + e.getMessage());
+            // 2.1 校验 promotion quote 响应关键字段
+            if (quoteResponse.getQuoteId() == null || quoteResponse.getQuoteId().isEmpty()) {
+                throw new DomainConflictException("PROMOTION_QUOTE_INVALID", 
+                    "Promotion quote response missing quoteId for tradeId: " + command.getTradeId());
             }
+            if (quoteResponse.getInputHash() == null || quoteResponse.getInputHash().isEmpty()) {
+                throw new DomainConflictException("PROMOTION_QUOTE_INVALID", 
+                    "Promotion quote response missing inputHash for tradeId: " + command.getTradeId());
+            }
+
+            // 2.5. 创建 Trade（写入 quoteId/inputHash/couponCode）
+            long totalAmountCents = quoteRequest.getItemsTotalCents();
+            long discountAmountCents = quoteResponse.getDiscountAmountCents();
+            long payableAmountCents = totalAmountCents - discountAmountCents;
+            
+            Trade trade = Trade.builder()
+                .tradeId(command.getTradeId())
+                .buyerId(command.getBuyerId())
+                .buyerNick(command.getBuyerNick())
+                .payStatus(PayStatus.UNPAID)
+                .totalAmountCents(totalAmountCents)
+                .discountAmountCents(discountAmountCents)
+                .payableAmountCents(payableAmountCents)
+                .promotionQuoteId(quoteResponse.getQuoteId())
+                .promotionInputHash(quoteResponse.getInputHash())
+                .couponCode(command.getCouponCode())
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+            trade = tradeRepository.save(trade);
+            log.info("Trade created with promotionQuoteId: {}", quoteResponse.getQuoteId());
 
             // 3. 调用 inventory pre-occupy（库存预占）
             InventoryPreOccupyRequest preOccupyRequest = buildInventoryPreOccupyRequest(command);
@@ -132,8 +150,9 @@ public class TradeApplicationService {
                 // 调用 promotion release 补偿
                 try {
                     promotionClient.release(idempotencyKey, PromotionReleaseRequest.builder()
-                        .buyerId(command.getBuyerId())
-                        .couponId(command.getCouponCode())
+                        .quoteId(trade.getPromotionQuoteId())
+                        .orderNo(trade.getTradeId())
+                        .reason("INVENTORY_PREOCCUPY_FAILED")
                         .build());
                 } catch (Exception releaseE) {
                     log.error("Promotion release failed during compensation", releaseE);
@@ -141,21 +160,41 @@ public class TradeApplicationService {
                 throw new DomainConflictException("INVENTORY_PREOCCUPY_FAILED", "Inventory pre-occupy failed: " + e.getMessage());
             }
 
-            // 4. 生成 Trade 聚合根
-            Trade trade = Trade.builder()
-                .tradeId(command.getTradeId())
-                .buyerId(command.getBuyerId())
-                .buyerNick(command.getBuyerNick())
-                .payStatus(PayStatus.UNPAID)
-                .totalAmountCents(quoteResponse.getItemsTotalCents())
-                .discountAmountCents(quoteResponse.getDiscountAmountCents())
-                .payableAmountCents(quoteResponse.getPayableAmountCents())
-                .createdAt(LocalDateTime.now())
+            // 3.5. 更新 Trade，写入 inventory reservation ID
+            trade = Trade.builder()
+                .id(trade.getId())
+                .tradeId(trade.getTradeId())
+                .buyerId(trade.getBuyerId())
+                .buyerNick(trade.getBuyerNick())
+                .payStatus(trade.getPayStatus())
+                .totalAmountCents(trade.getTotalAmountCents())
+                .discountAmountCents(trade.getDiscountAmountCents())
+                .payableAmountCents(trade.getPayableAmountCents())
+                .promotionQuoteId(trade.getPromotionQuoteId())
+                .promotionInputHash(trade.getPromotionInputHash())
+                .couponCode(trade.getCouponCode())
+                .inventoryReservationId(preOccupyResponse.getReservationId())
+                .createdAt(trade.getCreatedAt())
+                .updatedAt(LocalDateTime.now())
                 .build();
             trade = tradeRepository.save(trade);
-            log.info("Trade created: tradeId={}", trade.getTradeId());
+            log.info("Trade updated with inventoryReservationId: {}", preOccupyResponse.getReservationId());
 
-            // 按 shopId/sellerId 分组生成 ShopOrder（拆店铺单）
+            // 4. promotion commit（现在 trade 已落库且有 inventoryReservationId，可以 commit 了）
+            PromotionCommitRequest promotionCommitRequest = PromotionCommitRequest.builder()
+                .quoteId(trade.getPromotionQuoteId())
+                .orderNo(trade.getTradeId())
+                .inputHash(trade.getPromotionInputHash())
+                .build();
+            try {
+                promotionClient.commit(idempotencyKey, promotionCommitRequest);
+                log.info("Promotion commit succeeded");
+            } catch (Exception e) {
+                log.error("Promotion commit failed", e);
+                // promotion commit 失败不阻断流程，允许后续重试
+            }
+
+            // 5. 按 shopId/sellerId 分组生成 ShopOrder（拆店铺单）
             Map<String, List<CreateTradeCommand.OrderLineCommand>> groupedByShop = command.getOrderLines()
                 .stream()
                 .collect(Collectors.groupingBy(CreateTradeCommand.OrderLineCommand::getShopId));
@@ -370,22 +409,33 @@ public class TradeApplicationService {
 
             // 同步补偿：释放库存和优惠
             try {
-                InventoryReleaseRequest inventoryReleaseRequest = InventoryReleaseRequest.builder()
-                    .reservationId(trade.getTradeId()) // TODO: 存储原始 reservationId
-                    .build();
-                inventoryClient.release(idempotencyKey, inventoryReleaseRequest);
-                log.info("Inventory released for cancelled trade: tradeId={}", trade.getTradeId());
+                // 校验 inventoryReservationId 已绑定
+                if (trade.getInventoryReservationId() == null || trade.getInventoryReservationId().isEmpty()) {
+                    log.warn("Missing inventoryReservationId for trade: {}, skipping inventory release", trade.getTradeId());
+                } else {
+                    InventoryReleaseRequest inventoryReleaseRequest = InventoryReleaseRequest.builder()
+                        .reservationId(trade.getInventoryReservationId())
+                        .build();
+                    inventoryClient.release(idempotencyKey, inventoryReleaseRequest);
+                    log.info("Inventory released for cancelled trade: tradeId={}", trade.getTradeId());
+                }
             } catch (Exception e) {
                 log.error("Failed to release inventory for cancelled trade: tradeId={}", trade.getTradeId(), e);
             }
 
             try {
-                PromotionReleaseRequest promotionReleaseRequest = PromotionReleaseRequest.builder()
-                    .buyerId(trade.getBuyerId())
-                    .couponId(command.getReason()) // TODO: 需要存储原始 couponId
-                    .build();
-                promotionClient.release(idempotencyKey, promotionReleaseRequest);
-                log.info("Promotion released for cancelled trade: tradeId={}", trade.getTradeId());
+                // 校验 promotionQuoteId 已绑定
+                if (trade.getPromotionQuoteId() == null || trade.getPromotionQuoteId().isEmpty()) {
+                    log.warn("Missing promotionQuoteId for trade: {}, skipping promotion release", trade.getTradeId());
+                } else {
+                    PromotionReleaseRequest promotionReleaseRequest = PromotionReleaseRequest.builder()
+                        .quoteId(trade.getPromotionQuoteId())
+                        .orderNo(trade.getTradeId())
+                        .reason(command.getReason())
+                        .build();
+                    promotionClient.release(idempotencyKey, promotionReleaseRequest);
+                    log.info("Promotion released for cancelled trade: tradeId={}", trade.getTradeId());
+                }
             } catch (Exception e) {
                 log.error("Failed to release promotion for cancelled trade: tradeId={}", trade.getTradeId(), e);
             }
@@ -469,13 +519,22 @@ public class TradeApplicationService {
             }
 
             try {
-                PromotionCommitRequest promotionCommitRequest = PromotionCommitRequest.builder()
-                    .buyerId(trade.getBuyerId())
-                    .shopId(shopOrders.get(0).getShopId())
-                    .couponCode("" + trade.getTradeId()) // TODO: 需要存储原始 couponCode
-                    .build();
-                promotionClient.commit(idempotencyKey, promotionCommitRequest);
-                log.info("Promotion committed for paid trade: tradeId={}", trade.getTradeId());
+                // 校验 promotionQuoteId/inputHash 已绑定
+                if (trade.getPromotionQuoteId() == null || trade.getPromotionQuoteId().isEmpty()) {
+                    log.warn("Missing promotionQuoteId for trade: {}, skipping promotion commit", trade.getTradeId());
+                } else if (trade.getPromotionInputHash() == null || trade.getPromotionInputHash().isEmpty()) {
+                    log.warn("Missing promotionInputHash for trade: {}, skipping promotion commit", trade.getTradeId());
+                } else {
+                    PromotionCommitRequest promotionCommitRequest = PromotionCommitRequest.builder()
+                        .quoteId(trade.getPromotionQuoteId())
+                        .orderNo(trade.getTradeId())
+                        .inputHash(trade.getPromotionInputHash())
+                        .payNo(command.getPaymentId())
+                        .paidAt(System.currentTimeMillis())
+                        .build();
+                    promotionClient.commit(idempotencyKey, promotionCommitRequest);
+                    log.info("Promotion committed for paid trade: tradeId={}", trade.getTradeId());
+                }
             } catch (Exception e) {
                 log.error("Failed to commit promotion for paid trade: tradeId={}", trade.getTradeId(), e);
                 // 不抛异常，允许重试

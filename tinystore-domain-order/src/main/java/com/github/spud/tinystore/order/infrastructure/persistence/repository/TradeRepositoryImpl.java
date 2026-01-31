@@ -47,6 +47,10 @@ public class TradeRepositoryImpl implements TradeRepository {
             .totalAmountCents(trade.getTotalAmountCents())
             .discountAmountCents(trade.getDiscountAmountCents())
             .payableAmountCents(trade.getPayableAmountCents())
+            .promotionQuoteId(trade.getPromotionQuoteId())
+            .promotionInputHash(trade.getPromotionInputHash())
+            .inventoryReservationId(trade.getInventoryReservationId())
+            .couponCode(trade.getCouponCode())
             .createdAt(trade.getCreatedAt())
             .updatedAt(trade.getUpdatedAt())
             .build();
@@ -62,6 +66,10 @@ public class TradeRepositoryImpl implements TradeRepository {
             .totalAmountCents(entity.getTotalAmountCents())
             .discountAmountCents(entity.getDiscountAmountCents())
             .payableAmountCents(entity.getPayableAmountCents())
+            .promotionQuoteId(entity.getPromotionQuoteId())
+            .promotionInputHash(entity.getPromotionInputHash())
+            .inventoryReservationId(entity.getInventoryReservationId())
+            .couponCode(entity.getCouponCode())
             .createdAt(entity.getCreatedAt())
             .updatedAt(entity.getUpdatedAt())
             .build();

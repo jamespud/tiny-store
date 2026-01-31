@@ -13,8 +13,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Builder
 public class PromotionCommitRequest {
-    private String quoteVersion;
-    private String buyerId;
-    private String shopId;
-    private String couponCode;
+    private String quoteId;
+    private String orderNo;
+    private String inputHash;
+    private String payNo;
+    private Long paidAt;
 }
