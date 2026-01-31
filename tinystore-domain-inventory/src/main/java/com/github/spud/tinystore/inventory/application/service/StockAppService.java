@@ -74,7 +74,7 @@ public class StockAppService {
 		List<InventoryStockEntity> lockedStocks = new ArrayList<>();
 		List<String> lackSkuIds = new ArrayList<>();
 		for (StockPreOccupyRequest.Line line : request.getLines()) {
-			Optional<InventoryStockEntity> stockOpt = stockRepository.findByTenantIdAndSkuIdForUpdate(request.getTenantId(), line.getSkuId());
+			Optional<InventoryStockEntity> stockOpt = stockRepository.findByShopIdAndSkuIdForUpdate(request.getShopId(), line.getSkuId());
 			if (stockOpt.isEmpty()) {
 				lackSkuIds.add(line.getSkuId());
 				continue;
@@ -103,7 +103,7 @@ public class StockAppService {
 			String reservationId = UUID.randomUUID().toString().replace("-", "");
 			InventoryReservationEntity reservation = new InventoryReservationEntity()
 				.setReservationId(reservationId)
-				.setTenantId(request.getTenantId())
+				.setShopId(request.getShopId())
 				.setTradeId(request.getTradeId())
 				.setSkuId(line.getSkuId())
 				.setQuantity(line.getQuantity())
@@ -130,7 +130,7 @@ public class StockAppService {
 			if (reservation == null) {
 				return StockCommitResponse.fail("RESERVATION_NOT_FOUND");
 			}
-			if (!reservation.getTenantId().equals(request.getTenantId()) || !reservation.getTradeId().equals(request.getTradeId())) {
+			if (!reservation.getShopId().equals(request.getShopId()) || !reservation.getTradeId().equals(request.getTradeId())) {
 				return StockCommitResponse.fail("RESERVATION_MISMATCH");
 			}
 			if (STATUS_COMMITTED.equals(reservation.getStatus())) {
@@ -139,7 +139,7 @@ public class StockAppService {
 			if (!STATUS_RESERVED.equals(reservation.getStatus())) {
 				return StockCommitResponse.fail("RESERVATION_NOT_RESERVED");
 			}
-			InventoryStockEntity stock = stockRepository.findByTenantIdAndSkuIdForUpdate(reservation.getTenantId(), reservation.getSkuId())
+			InventoryStockEntity stock = stockRepository.findByShopIdAndSkuIdForUpdate(reservation.getShopId(), reservation.getSkuId())
 				.orElse(null);
 			if (stock == null) {
 				return StockCommitResponse.fail("STOCK_NOT_FOUND");
@@ -161,7 +161,7 @@ public class StockAppService {
 			if (reservation == null) {
 				continue;
 			}
-			if (!reservation.getTenantId().equals(request.getTenantId()) || !reservation.getTradeId().equals(request.getTradeId())) {
+			if (!reservation.getShopId().equals(request.getShopId()) || !reservation.getTradeId().equals(request.getTradeId())) {
 				return StockReleaseResponse.fail("RESERVATION_MISMATCH");
 			}
 			if (STATUS_RELEASED.equals(reservation.getStatus()) || STATUS_EXPIRED.equals(reservation.getStatus())) {
@@ -174,7 +174,7 @@ public class StockAppService {
 				continue;
 			}
 
-			InventoryStockEntity stock = stockRepository.findByTenantIdAndSkuIdForUpdate(reservation.getTenantId(), reservation.getSkuId())
+			InventoryStockEntity stock = stockRepository.findByShopIdAndSkuIdForUpdate(reservation.getShopId(), reservation.getSkuId())
 				.orElse(null);
 			if (stock == null) {
 				return StockReleaseResponse.fail("STOCK_NOT_FOUND");
@@ -208,14 +208,14 @@ public class StockAppService {
 			totalDelta += line.getQuantity();
 		}
 		adjustmentRepository.save(new InventoryAdjustmentEntity()
-			.setTenantId(request.getTenantId())
+			.setShopId(request.getShopId())
 			.setSkuId(first.getSkuId())
 			.setDeltaTotal(totalDelta)
 			.setReason(ADJUST_REASON_RESTOCK_REFUND)
 			.setReferenceId(refundId));
 
 		for (StockRestockRequest.Line line : request.getItems()) {
-			InventoryStockEntity stock = stockRepository.findByTenantIdAndSkuIdForUpdate(request.getTenantId(), line.getSkuId())
+			InventoryStockEntity stock = stockRepository.findByShopIdAndSkuIdForUpdate(request.getShopId(), line.getSkuId())
 				.orElse(null);
 			if (stock == null) {
 				return StockRestockResponse.fail("STOCK_NOT_FOUND");
@@ -239,7 +239,7 @@ public class StockAppService {
 			if (!STATUS_RESERVED.equals(locked.getStatus())) {
 				continue;
 			}
-			InventoryStockEntity stock = stockRepository.findByTenantIdAndSkuIdForUpdate(locked.getTenantId(), locked.getSkuId()).orElse(null);
+			InventoryStockEntity stock = stockRepository.findByShopIdAndSkuIdForUpdate(locked.getShopId(), locked.getSkuId()).orElse(null);
 			if (stock == null) {
 				continue;
 			}
@@ -260,7 +260,7 @@ public class StockAppService {
 
 		Map<String, InventoryReservationEntity> bySku = new HashMap<>();
 		for (InventoryReservationEntity reservation : existing) {
-			if (!reservation.getTenantId().equals(request.getTenantId()) || !reservation.getTradeId().equals(request.getTradeId())) {
+			if (!reservation.getShopId().equals(request.getShopId()) || !reservation.getTradeId().equals(request.getTradeId())) {
 				return StockPreOccupyResponse.fail(List.of(), "IDEMPOTENCY_CONFLICT");
 			}
 			bySku.put(reservation.getSkuId(), reservation);

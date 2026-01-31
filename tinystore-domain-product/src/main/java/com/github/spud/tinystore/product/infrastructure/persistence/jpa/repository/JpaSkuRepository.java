@@ -13,9 +13,9 @@ import org.springframework.stereotype.Repository;
  * <p>
  * Query methods must always include tenant_id condition for multi-tenancy isolation
  * <p>
- * Derived query methods: - findByTenantIdAndId: Find SKU by tenant and ID -
- * findByTenantIdAndProductId: Find all SKUs for a product -
- * findByTenantIdAndProductIdAndSpecCombination: Find SKU by unique spec combination
+ * Derived query methods: - findByShopIdAndId: Find SKU by tenant and ID -
+ * findByShopIdAndProductId: Find all SKUs for a product -
+ * findByShopIdAndProductIdAndSpecCombination: Find SKU by unique spec combination
  * <p>
  * Note: spec_combination must be normalized before query to ensure uniqueness
  */
@@ -26,33 +26,33 @@ public interface JpaSkuRepository extends JpaRepository<SkuEntity, Long>,
 	/**
 	 * Find SKU by tenant ID and entity ID
 	 *
-	 * @param tenantId Tenant identifier
+	 * @param shopId Shop identifier
 	 * @param id       Entity primary key
 	 * @return Optional SKU entity
 	 */
-	Optional<SkuEntity> findByTenantIdAndId(String tenantId, Long id);
+	Optional<SkuEntity> findByShopIdAndId(String shopId, Long id);
 
 	/**
 	 * Find all SKUs for a product within tenant
 	 *
-	 * @param tenantId  Tenant identifier
+	 * @param shopId  Shop identifier
 	 * @param productId Product identifier
 	 * @return List of SKU entities
 	 */
-	List<SkuEntity> findByTenantIdAndProductId(String tenantId, String productId);
+	List<SkuEntity> findByShopIdAndProductId(String shopId, String productId);
 
-	Optional<SkuEntity> findByTenantIdAndSkuId(String tenantId, String skuId);
+	Optional<SkuEntity> findByShopIdAndSkuId(String shopId, String skuId);
 
-	List<SkuEntity> findByTenantIdAndSkuIdIn(String tenantId, Collection<String> skuIds);
+	List<SkuEntity> findByShopIdAndSkuIdIn(String shopId, Collection<String> skuIds);
 
 	/**
 	 * Find SKU by unique product and spec combination Enforces uniqueness constraint uk_product_spec
 	 *
-	 * @param tenantId        Tenant identifier
+	 * @param shopId        Shop identifier
 	 * @param productId       Product identifier
 	 * @param specCombination Normalized specification combination string
 	 * @return Optional SKU entity
 	 */
-	Optional<SkuEntity> findByTenantIdAndProductIdAndSpecCombination(
-		String tenantId, String productId, String specCombination);
+	Optional<SkuEntity> findByShopIdAndProductIdAndSpecCombination(
+		String shopId, String productId, String specCombination);
 }

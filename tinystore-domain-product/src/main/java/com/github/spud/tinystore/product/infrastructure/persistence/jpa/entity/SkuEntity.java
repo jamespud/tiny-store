@@ -17,7 +17,7 @@ import lombok.Data;
 /**
  * SkuEntity - JPA entity for SKU persistence
  * <p>
- * Fields: - id: Primary key - productId: Foreign key to product - tenantId: Multi-tenancy
+ * Fields: - id: Primary key - productId: Foreign key to product - shopId: Multi-shop
  * identifier - specCombination: Specification combination string (normalized, for uniqueness) -
  * price: SKU price - stock: Available stock quantity - barCode: Bar code - status: SKU status
  * (AVAILABLE, DISABLED) - version: Optimistic locking version - createdAt: Creation timestamp -
@@ -62,8 +62,8 @@ public class SkuEntity {
 	@Column(name = "promote_price_cents")
 	private Long promotePriceCents;
 
-	@Column(name = "tenant_id", nullable = false)
-	private String tenantId;
+	@Column(name = "shop_id", nullable = false)
+	private String shopId;
 
 	@Column(name = "spec_combination", nullable = false)
 	private String specCombination;

@@ -12,8 +12,8 @@ import org.springframework.stereotype.Component;
  * ProductEventCacheInvalidationListener - Event-driven cache invalidation
  * <p>
  * Listens to domain events and invalidates corresponding cache entries: - ProductCreatedEvent,
- * ProductUpdatedEvent -> Invalidate product:{tenantId}:{productId} - SkuCreatedEvent,
-	 * SkuUpdatedEvent -> Invalidate sku:{tenantId}:{skuId}
+ * ProductUpdatedEvent -> Invalidate product:{shopId}:{productId} - SkuCreatedEvent,
+	 * SkuUpdatedEvent -> Invalidate sku:{shopId}:{skuId}
  * <p>
  * Cache invalidation strategy: 1. Event-driven (immediate invalidation on domain changes) 2.
  * TTL-based expiration (fallback for missed events)
@@ -39,10 +39,10 @@ public class ProductEventCacheInvalidationListener {
 	 */
 	@EventListener
 	public void onProductCreated(ProductCreatedEvent event) {
-		// TODO: Extract tenantId and productId from event
-		// String tenantId = event.getTenantId();
+		// TODO: Extract shopId and productId from event
+		// String shopId = event.getShopId();
 		// String productId = event.getProductId();
-		// String cacheKey = CacheKeyUtil.productKey(tenantId, productId);
+		// String cacheKey = CacheKeyUtil.productKey(shopId, productId);
 		// evictCache("product", cacheKey);
 		logger.info("ProductCreatedEvent received, cache invalidation placeholder");
 	}

@@ -15,7 +15,7 @@ import lombok.Data;
 /**
  * ProductEntity - JPA entity for product persistence
  * <p>
- * Fields: - id: Primary key - tenantId: Multi-tenancy identifier (mandatory for all queries) -
+ * Fields: - id: Primary key - shopId: Multi-shop identifier (mandatory for all queries) -
  * name: Product name - status: Product status (DRAFT, PUBLISHED, ARCHIVED) - categoryId: Category
  * reference - version: Optimistic locking version - createdAt: Creation timestamp - updatedAt: Last
  * update timestamp
@@ -31,8 +31,8 @@ public class ProductEntity {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 
-	@Column(name = "tenant_id", nullable = false)
-	private String tenantId;
+	@Column(name = "shop_id", nullable = false)
+	private String shopId;
 
 	@Column(name = "product_id", nullable = false)
 	private String productId;

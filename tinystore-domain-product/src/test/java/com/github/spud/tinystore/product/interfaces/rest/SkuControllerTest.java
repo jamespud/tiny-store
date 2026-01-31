@@ -61,7 +61,7 @@ class SkuControllerTest {
         
         // When & Then
 		mockMvc.perform(post("/api/products/{productId}/skus", "prod-123")
-				.header("X-Tenant-Id", "tenant-1")
+				.header("X-Shop-Id", "shop-1")
 				.header("Idempotency-Key", "idem-1")
                 .contentType(MediaType.APPLICATION_JSON)
 				.content("{\"specCombination\":\"color:red;size:M\",\"price\":99.99}"))
@@ -86,7 +86,7 @@ class SkuControllerTest {
         
         // When & Then
         mockMvc.perform(put("/api/skus/{id}", skuId)
-				.header("X-Tenant-Id", "tenant-1")
+				.header("X-Shop-Id", "shop-1")
 				.header("Idempotency-Key", "idem-1")
                 .contentType(MediaType.APPLICATION_JSON)
 				.content("{\"specCombination\":\"color:red;size:M\",\"price\":99.99}"))
@@ -104,7 +104,7 @@ class SkuControllerTest {
         
         // When & Then
         mockMvc.perform(put("/api/skus/{id}", skuId)
-				.header("X-Tenant-Id", "tenant-1")
+				.header("X-Shop-Id", "shop-1")
 				.header("Idempotency-Key", "idem-1")
                 .contentType(MediaType.APPLICATION_JSON)
 				.content("{\"specCombination\":\"color:red;size:M\",\"price\":99.99}"))
@@ -125,7 +125,7 @@ class SkuControllerTest {
         
         // When & Then
 		mockMvc.perform(get("/api/skus/{id}", skuId)
-				.header("X-Tenant-Id", "tenant-1"))
+				.header("X-Shop-Id", "shop-1"))
             .andExpect(status().isOk());
         
         verify(skuService).getSku(any(SkuId.class));
@@ -141,7 +141,7 @@ class SkuControllerTest {
         
         // When & Then
 		mockMvc.perform(get("/api/skus/{id}", skuId)
-				.header("X-Tenant-Id", "tenant-1"))
+				.header("X-Shop-Id", "shop-1"))
 			.andExpect(status().isNotFound());
     }
     
@@ -159,7 +159,7 @@ class SkuControllerTest {
         
         // When & Then
         mockMvc.perform(put("/api/skus/{id}/attributes", skuId)
-				.header("X-Tenant-Id", "tenant-1")
+				.header("X-Shop-Id", "shop-1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"attributes\":{\"livePrice\":\"88.88\"}}"))
             .andExpect(status().isOk());

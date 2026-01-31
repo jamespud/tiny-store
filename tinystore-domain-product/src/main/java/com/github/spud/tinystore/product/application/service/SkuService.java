@@ -4,7 +4,7 @@ import com.github.spud.tinystore.product.domain.model.aggregate.Sku;
 import com.github.spud.tinystore.product.domain.model.valueobject.ProductId;
 import com.github.spud.tinystore.product.domain.model.valueobject.SkuId;
 import com.github.spud.tinystore.product.domain.repository.SkuRepository;
-import com.github.spud.tinystore.product.infrastructure.persistence.jpa.config.TenantRepositoryConfig;
+import com.github.spud.tinystore.product.infrastructure.persistence.jpa.config.ShopRepositoryConfig;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class SkuService {
 
 	private final SkuRepository skuRepository;
-	private final TenantRepositoryConfig.TenantContext tenantContext;
+	private final ShopRepositoryConfig.ShopContext shopContext;
 
 	/**
 	 * Create a new SKU
@@ -31,9 +31,9 @@ public class SkuService {
 	@Transactional
 	@CacheEvict(value = "skus", allEntries = true)
 	public Sku createSku(Sku sku) {
-		String tenantId = tenantContext.getTenantId();
+		String shopId = shopContext.getShopId();
 		log.info("Creating SKU: {} for product: {} tenant: {}", sku.getSkuId(), sku.getProductId(),
-			tenantId);
+			shopId);
 
 		// Validate product exists
 		// TODO: Add ProductRepository dependency and validation
@@ -47,8 +47,8 @@ public class SkuService {
 	@Transactional
 	@CacheEvict(value = "skus", key = "#skuId.value")
 	public Sku updateSku(SkuId skuId, Sku updatedSku) {
-		String tenantId = tenantContext.getTenantId();
-		log.info("Updating SKU: {} for tenant: {}", skuId, tenantId);
+		String shopId = shopContext.getShopId();
+		log.info("Updating SKU: {} for tenant: {}", skuId, shopId);
 
 		Optional<Sku> existing = skuRepository.findById(skuId);
 		if (existing.isEmpty()) {
@@ -69,8 +69,8 @@ public class SkuService {
 	 */
 	@Cacheable(value = "skus", key = "#skuId.value")
 	public Optional<Sku> getSku(SkuId skuId) {
-		String tenantId = tenantContext.getTenantId();
-		log.debug("Getting SKU: {} for tenant: {}", skuId, tenantId);
+		String shopId = shopContext.getShopId();
+		log.debug("Getting SKU: {} for tenant: {}", skuId, shopId);
 
 		return skuRepository.findById(skuId);
 	}
@@ -80,8 +80,8 @@ public class SkuService {
 	 */
 	@Cacheable(value = "product-skus", key = "#productId.value")
 	public List<Sku> getSkusByProduct(ProductId productId) {
-		String tenantId = tenantContext.getTenantId();
-		log.debug("Getting SKUs for product: {} tenant: {}", productId, tenantId);
+		String shopId = shopContext.getShopId();
+		log.debug("Getting SKUs for product: {} tenant: {}", productId, shopId);
 
 		return skuRepository.findByProductId(productId);
 	}
@@ -92,8 +92,8 @@ public class SkuService {
 	@Transactional
 	@CacheEvict(value = {"skus", "product-skus"}, allEntries = true)
 	public void disableSku(SkuId skuId) {
-		String tenantId = tenantContext.getTenantId();
-		log.info("Disabling SKU: {} for tenant: {}", skuId, tenantId);
+		String shopId = shopContext.getShopId();
+		log.info("Disabling SKU: {} for tenant: {}", skuId, shopId);
 
 		Optional<Sku> existing = skuRepository.findById(skuId);
 		if (existing.isEmpty()) {
@@ -112,8 +112,8 @@ public class SkuService {
 	@Transactional
 	@CacheEvict(value = {"skus", "product-skus"}, allEntries = true)
 	public void deleteSku(SkuId skuId) {
-		String tenantId = tenantContext.getTenantId();
-		log.info("Deleting SKU: {} for tenant: {}", skuId, tenantId);
+		String shopId = shopContext.getShopId();
+		log.info("Deleting SKU: {} for tenant: {}", skuId, shopId);
 
 		skuRepository.delete(skuId);
 	}

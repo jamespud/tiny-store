@@ -4,7 +4,7 @@ import com.github.spud.tinystore.product.domain.model.aggregate.Sku;
 import com.github.spud.tinystore.product.domain.model.value.Money;
 import com.github.spud.tinystore.product.domain.model.valueobject.*;
 import com.github.spud.tinystore.product.domain.repository.SkuRepository;
-import com.github.spud.tinystore.product.infrastructure.persistence.jpa.config.TenantRepositoryConfig;
+import com.github.spud.tinystore.product.infrastructure.persistence.jpa.config.ShopRepositoryConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,7 +30,7 @@ class SkuServiceTest {
     private SkuRepository skuRepository;
     
     @Mock
-    private TenantRepositoryConfig.TenantContext tenantContext;
+    private ShopRepositoryConfig.ShopContext shopContext;
     
     @InjectMocks
     private SkuService skuService;
@@ -56,7 +56,7 @@ class SkuServiceTest {
         testSku.setBasePrice(testPrice);
         
         // Mock tenant context
-        when(tenantContext.getTenantId()).thenReturn("test-tenant");
+        when(shopContext.getShopId()).thenReturn("test-tenant");
     }
     
     @Test

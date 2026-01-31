@@ -56,8 +56,8 @@ public class OutboxEntity {
 	@Column(name = "error_message", columnDefinition = "TEXT")
 	private String errorMessage;
 
-	@Column(name = "tenant_id", nullable = false)
-	private String tenantId;
+	@Column(name = "shop_id", nullable = false)
+	private String shopId;
 
 	@PrePersist
 	protected void onCreate() {

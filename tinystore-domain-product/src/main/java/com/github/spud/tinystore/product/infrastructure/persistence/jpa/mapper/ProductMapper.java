@@ -24,16 +24,16 @@ public class ProductMapper {
 	 * Convert domain Product to ProductEntity
 	 *
 	 * @param product  Domain product aggregate
-	 * @param tenantId Tenant identifier
+	 * @param shopId Shop identifier
 	 * @return ProductEntity for persistence
 	 */
-	public ProductEntity toEntity(Product product, String tenantId) {
+	public ProductEntity toEntity(Product product, String shopId) {
 		if (product == null) {
 			return null;
 		}
 
 		ProductEntity entity = new ProductEntity();
-		entity.setTenantId(tenantId);
+		entity.setShopId(shopId);
 		entity.setProductId(product.getProductId() != null ? product.getProductId().getId() : null);
 		entity.setName(product.getName());
 		entity.setStatus(

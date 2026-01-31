@@ -1,6 +1,6 @@
 package com.github.spud.tinystore.product.application.service;
 
-import com.github.spud.tinystore.product.infrastructure.persistence.jpa.config.TenantRepositoryConfig;
+import com.github.spud.tinystore.product.infrastructure.persistence.jpa.config.ShopRepositoryConfig;
 import com.github.spud.tinystore.product.infrastructure.persistence.jpa.entity.SkuEntity;
 import com.github.spud.tinystore.product.infrastructure.persistence.jpa.repository.JpaSkuRepository;
 import com.github.spud.tinystore.product.interfaces.internal.dto.InternalSkuBatchQueryResponse;
@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service;
 public class InternalSkuQueryService {
 
 	private final JpaSkuRepository jpaSkuRepository;
-	private final TenantRepositoryConfig.TenantContext tenantContext;
+	private final ShopRepositoryConfig.ShopContext shopContext;
 
 	public InternalSkuBatchQueryResponse batchGetSkuInfo(Set<String> skuIds) {
 		InternalSkuBatchQueryResponse resp = new InternalSkuBatchQueryResponse();
@@ -26,8 +26,8 @@ public class InternalSkuQueryService {
 		if (skuIds == null || skuIds.isEmpty()) {
 			return resp;
 		}
-		String tenantId = tenantContext.getTenantId();
-		List<SkuEntity> entities = jpaSkuRepository.findByTenantIdAndSkuIdIn(tenantId, skuIds);
+		String shopId = shopContext.getShopId();
+		List<SkuEntity> entities = jpaSkuRepository.findByShopIdAndSkuIdIn(shopId, skuIds);
 		for (SkuEntity e : entities) {
 			if (e == null || e.getSkuId() == null) {
 				continue;

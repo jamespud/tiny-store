@@ -1,5 +1,6 @@
 package com.github.spud.tinystore.inventory.interfaces.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -10,7 +11,8 @@ import lombok.Data;
 public class StockReleaseRequest {
 
 	@NotBlank
-	private String tenantId;
+	@JsonAlias("tenantId")
+	private String shopId;
 
 	@NotBlank
 	private String tradeId;

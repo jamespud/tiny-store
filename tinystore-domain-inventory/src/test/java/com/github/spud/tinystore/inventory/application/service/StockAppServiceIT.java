@@ -60,13 +60,13 @@ class StockAppServiceIT {
 	@Test
 	void preOccupy_isIdempotent() {
 		stockRepository.save(new InventoryStockEntity()
-			.setTenantId("T1")
+			.setShopId("T1")
 			.setSkuId("SKU1")
 			.setTotalQuantity(10)
 			.setReservedQuantity(0));
 
 		StockPreOccupyRequest req = new StockPreOccupyRequest();
-		req.setTenantId("T1");
+		req.setShopId("T1");
 		req.setTradeId("O1");
 		req.setExpiresAtEpochMs(Instant.now().plusSeconds(600).toEpochMilli());
 		StockPreOccupyRequest.Line l = new StockPreOccupyRequest.Line();
@@ -82,21 +82,21 @@ class StockAppServiceIT {
 		assertThat(resp2.isSuccess()).isTrue();
 		assertThat(resp1.getPreOccupyIds()).isEqualTo(resp2.getPreOccupyIds());
 
-		InventoryStockEntity stock = stockRepository.findByTenantIdAndSkuId("T1", "SKU1").orElseThrow();
+		InventoryStockEntity stock = stockRepository.findByShopIdAndSkuId("T1", "SKU1").orElseThrow();
 		assertThat(stock.getReservedQuantity()).isEqualTo(3);
 	}
 
 	@Test
 	void expireReservations_releasesReservedQuantity() {
 		stockRepository.save(new InventoryStockEntity()
-			.setTenantId("T1")
+			.setShopId("T1")
 			.setSkuId("SKU2")
 			.setTotalQuantity(10)
 			.setReservedQuantity(4));
 
 		reservationRepository.save(new InventoryReservationEntity()
 			.setReservationId(UUID.randomUUID().toString().replace("-", ""))
-			.setTenantId("T1")
+			.setShopId("T1")
 			.setSkuId("SKU2")
 			.setQuantity(4)
 			.setStatus(StockAppService.STATUS_RESERVED)
@@ -107,25 +107,25 @@ class StockAppServiceIT {
 		int expired = stockAppService.expireReservations();
 		assertThat(expired).isEqualTo(1);
 
-		InventoryStockEntity stock = stockRepository.findByTenantIdAndSkuId("T1", "SKU2").orElseThrow();
+		InventoryStockEntity stock = stockRepository.findByShopIdAndSkuId("T1", "SKU2").orElseThrow();
 		assertThat(stock.getReservedQuantity()).isEqualTo(0);
  	}
 
 	@Test
 	void restock_isIdempotentPerRefundId() {
 		stockRepository.save(new InventoryStockEntity()
-			.setTenantId("T1")
+			.setShopId("T1")
 			.setSkuId("SKU1")
 			.setTotalQuantity(10)
 			.setReservedQuantity(0));
 		stockRepository.save(new InventoryStockEntity()
-			.setTenantId("T1")
+			.setShopId("T1")
 			.setSkuId("SKU2")
 			.setTotalQuantity(20)
 			.setReservedQuantity(0));
 
 		StockRestockRequest req = new StockRestockRequest();
-		req.setTenantId("T1");
+		req.setShopId("T1");
 		req.setTradeId("O3");
 		req.setRefundId("R1");
 		StockRestockRequest.Line i1 = new StockRestockRequest.Line();
@@ -141,8 +141,8 @@ class StockAppServiceIT {
 		assertThat(r1.isSuccess()).isTrue();
 		assertThat(r2.isSuccess()).isTrue();
 
-		InventoryStockEntity s1 = stockRepository.findByTenantIdAndSkuId("T1", "SKU1").orElseThrow();
-		InventoryStockEntity s2 = stockRepository.findByTenantIdAndSkuId("T1", "SKU2").orElseThrow();
+		InventoryStockEntity s1 = stockRepository.findByShopIdAndSkuId("T1", "SKU1").orElseThrow();
+		InventoryStockEntity s2 = stockRepository.findByShopIdAndSkuId("T1", "SKU2").orElseThrow();
 		assertThat(s1.getTotalQuantity()).isEqualTo(12);
 		assertThat(s2.getTotalQuantity()).isEqualTo(23);
 		assertThat(adjustmentRepository.countByReasonAndReferenceId(StockAppService.ADJUST_REASON_RESTOCK_REFUND, "R1")).isEqualTo(1);

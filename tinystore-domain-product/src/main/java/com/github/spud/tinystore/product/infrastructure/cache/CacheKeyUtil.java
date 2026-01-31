@@ -3,8 +3,8 @@ package com.github.spud.tinystore.product.infrastructure.cache;
 /**
  * CacheKeyUtil - Utility for constructing cache keys
  * <p>
- * Key patterns: - product:{tenantId}:{productId} - sku:{tenantId}:{skuId} -
- * pricing:rules:{tenantId}:{productId} - sku:dynamic:{tenantId}:{skuId}:{channel}
+ * Key patterns: - product:{shopId}:{productId} - sku:{shopId}:{skuId} -
+ * pricing:rules:{shopId}:{productId} - sku:dynamic:{shopId}:{skuId}:{channel}
  * <p>
  * All cache keys include tenant ID for proper isolation
  */
@@ -19,65 +19,65 @@ public class CacheKeyUtil {
 	/**
 	 * Generate cache key for product
 	 *
-	 * @param tenantId  Tenant identifier
+	 * @param shopId  Shop identifier
 	 * @param productId Product identifier
-	 * @return Cache key: product:{tenantId}:{productId}
+	 * @return Cache key: product:{shopId}:{productId}
 	 */
-	public static String productKey(String tenantId, String productId) {
-		return String.join(DELIMITER, PRODUCT_PREFIX, tenantId, productId);
+	public static String productKey(String shopId, String productId) {
+		return String.join(DELIMITER, PRODUCT_PREFIX, shopId, productId);
 	}
 
 	/**
 	 * Generate cache key for SKU
 	 *
-	 * @param tenantId Tenant identifier
+	 * @param shopId Shop identifier
 	 * @param skuId    SKU identifier
-	 * @return Cache key: sku:{tenantId}:{skuId}
+	 * @return Cache key: sku:{shopId}:{skuId}
 	 */
-	public static String skuKey(String tenantId, String skuId) {
-		return String.join(DELIMITER, SKU_PREFIX, tenantId, skuId);
+	public static String skuKey(String shopId, String skuId) {
+		return String.join(DELIMITER, SKU_PREFIX, shopId, skuId);
 	}
 
 	/**
 	 * Generate cache key for pricing rules by product
 	 *
-	 * @param tenantId  Tenant identifier
+	 * @param shopId  Shop identifier
 	 * @param productId Product identifier
-	 * @return Cache key: pricing:rules:{tenantId}:{productId}
+	 * @return Cache key: pricing:rules:{shopId}:{productId}
 	 */
-	public static String pricingRulesKey(String tenantId, String productId) {
-		return String.join(DELIMITER, PRICING_RULES_PREFIX, tenantId, productId);
+	public static String pricingRulesKey(String shopId, String productId) {
+		return String.join(DELIMITER, PRICING_RULES_PREFIX, shopId, productId);
 	}
 
 	/**
 	 * Generate cache key for SKU with dynamic attributes (channel-specific)
 	 *
-	 * @param tenantId Tenant identifier
+	 * @param shopId Shop identifier
 	 * @param skuId    SKU identifier
 	 * @param channel  Channel identifier
-	 * @return Cache key: sku:dynamic:{tenantId}:{skuId}:{channel}
+	 * @return Cache key: sku:dynamic:{shopId}:{skuId}:{channel}
 	 */
-	public static String skuDynamicKey(String tenantId, String skuId, String channel) {
-		return String.join(DELIMITER, SKU_DYNAMIC_PREFIX, tenantId, skuId, channel);
+	public static String skuDynamicKey(String shopId, String skuId, String channel) {
+		return String.join(DELIMITER, SKU_DYNAMIC_PREFIX, shopId, skuId, channel);
 	}
 
 	/**
 	 * Generate pattern for deleting all product keys in tenant
 	 *
-	 * @param tenantId Tenant identifier
-	 * @return Pattern: product:{tenantId}:*
+	 * @param shopId Shop identifier
+	 * @return Pattern: product:{shopId}:*
 	 */
-	public static String productPattern(String tenantId) {
-		return String.join(DELIMITER, PRODUCT_PREFIX, tenantId, "*");
+	public static String productPattern(String shopId) {
+		return String.join(DELIMITER, PRODUCT_PREFIX, shopId, "*");
 	}
 
 	/**
 	 * Generate pattern for deleting all SKU keys in tenant
 	 *
-	 * @param tenantId Tenant identifier
-	 * @return Pattern: sku:{tenantId}:*
+	 * @param shopId Shop identifier
+	 * @return Pattern: sku:{shopId}:*
 	 */
-	public static String skuPattern(String tenantId) {
-		return String.join(DELIMITER, SKU_PREFIX, tenantId, "*");
+	public static String skuPattern(String shopId) {
+		return String.join(DELIMITER, SKU_PREFIX, shopId, "*");
 	}
 }

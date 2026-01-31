@@ -13,8 +13,8 @@ import org.springframework.stereotype.Repository;
  * Query methods must always include tenant_id condition for multi-tenancy isolation Use
  * JpaSpecificationExecutor for complex queries with tenant predicate injection
  * <p>
- * Derived query methods: - findByTenantIdAndId: Find product by tenant and ID -
- * findByTenantIdAndCategoryId: Find products by tenant and category - findByTenantIdAndStatus: Find
+ * Derived query methods: - findByShopIdAndId: Find product by tenant and ID -
+ * findByShopIdAndCategoryId: Find products by tenant and category - findByShopIdAndStatus: Find
  * products by tenant and status
  * <p>
  * Complex queries should use Specification with BaseRepository tenant injection
@@ -26,36 +26,36 @@ public interface JpaProductRepository extends JpaRepository<ProductEntity, Long>
 	/**
 	 * Find product by tenant ID and entity ID
 	 *
-	 * @param tenantId Tenant identifier
+	 * @param shopId Shop identifier
 	 * @param id       Entity primary key
 	 * @return Optional product entity
 	 */
-	Optional<ProductEntity> findByTenantIdAndId(String tenantId, Long id);
+	Optional<ProductEntity> findByShopIdAndId(String shopId, Long id);
 
 	/**
 	 * Find product by tenant ID and product ID (domain ID string)
 	 *
 	 * @param productId Product domain identifier (string)
-	 * @param tenantId  Tenant identifier
+	 * @param shopId  Shop identifier
 	 * @return Optional product entity
 	 */
-	Optional<ProductEntity> findByProductIdAndTenantId(String productId, String tenantId);
+	Optional<ProductEntity> findByProductIdAndShopId(String productId, String shopId);
 
 	/**
 	 * Find all products by tenant and category
 	 *
-	 * @param tenantId   Tenant identifier
+	 * @param shopId   Shop identifier
 	 * @param categoryId Category identifier
 	 * @return List of product entities
 	 */
-	List<ProductEntity> findByTenantIdAndCategoryId(String tenantId, String categoryId);
+	List<ProductEntity> findByShopIdAndCategoryId(String shopId, String categoryId);
 
 	/**
 	 * Find all products by tenant and status
 	 *
-	 * @param tenantId Tenant identifier
+	 * @param shopId Shop identifier
 	 * @param status   Product status
 	 * @return List of product entities
 	 */
-	List<ProductEntity> findByTenantIdAndStatus(String tenantId, String status);
+	List<ProductEntity> findByShopIdAndStatus(String shopId, String status);
 }

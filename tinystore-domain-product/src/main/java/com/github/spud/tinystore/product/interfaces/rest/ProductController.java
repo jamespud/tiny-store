@@ -37,7 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
  * PLATFORM_ADMIN role - Idempotency-Key header required for write operations (validated by
  * gateway)
  * <p>
- * Multi-tenancy: - TenantId extracted from header and validated - All operations scoped to tenant
+ * Multi-shop: - TenantId extracted from header and validated - All operations scoped to tenant
  */
 @Slf4j
 @RestController
@@ -52,7 +52,7 @@ public class ProductController {
 	 * Create a new product
 	 *
 	 * @param request        Product creation request
-	 * @param tenantId       Tenant identifier from X-Tenant-Id header
+	 * @param shopId       Shop identifier from X-Tenant-Id header
 	 * @param idempotencyKey Idempotency key from Idempotency-Key header
 	 * @return Created product details
 	 */
@@ -60,11 +60,11 @@ public class ProductController {
 	@PreAuthorize("hasAnyRole('MERCHANT_ADMIN', 'PLATFORM_ADMIN')")
 	public ResponseEntity<ProductResponseDTO> createProduct(
 		@Valid @RequestBody ProductCreateDTO request,
-		@RequestHeader("X-Tenant-Id") String tenantId,
+		@RequestHeader("X-Shop-Id") String shopId,
 		@RequestHeader("Idempotency-Key") String idempotencyKey) {
 
-		log.info("Creating product: {} for tenant: {} with idempotency key: {}",
-			request.getName(), tenantId, idempotencyKey);
+		log.info("Creating product: {} for shop: {} with idempotency key: {}",
+			request.getName(), shopId, idempotencyKey);
 
 		// Convert DTO to domain object
 		Product product = productDTOMapper.toDomain(request);
@@ -86,7 +86,7 @@ public class ProductController {
 	 *
 	 * @param id             Product ID
 	 * @param request        Product update request
-	 * @param tenantId       Tenant identifier
+	 * @param shopId       Shop identifier
 	 * @param idempotencyKey Idempotency key
 	 * @return Updated product details
 	 */
@@ -95,10 +95,10 @@ public class ProductController {
 	public ResponseEntity<ProductResponseDTO> updateProduct(
 		@PathVariable("id") String id,
 		@Valid @RequestBody ProductUpdateDTO request,
-		@RequestHeader("X-Tenant-Id") String tenantId,
+		@RequestHeader("X-Shop-Id") String shopId,
 		@RequestHeader("Idempotency-Key") String idempotencyKey) {
 
-		log.info("Updating product: {} for tenant: {}", id, tenantId);
+		log.info("Updating product: {} for shop: {}", id, shopId);
 
 		// Convert DTO to domain object
 		Product updatedProduct = productDTOMapper.toDomain(request);
@@ -117,16 +117,16 @@ public class ProductController {
 	 * Publish a product (make it available for sale)
 	 *
 	 * @param id       Product ID
-	 * @param tenantId Tenant identifier
+	 * @param shopId Shop identifier
 	 * @return Updated product status
 	 */
 	@PostMapping("/{id}/publish")
 	@PreAuthorize("hasRole('MERCHANT_ADMIN')")
 	public ResponseEntity<ProductResponseDTO> publishProduct(
 		@PathVariable("id") String id,
-		@RequestHeader("X-Tenant-Id") String tenantId) {
+		@RequestHeader("X-Shop-Id") String shopId) {
 
-		log.info("Publishing product: {} for tenant: {}", id, tenantId);
+		log.info("Publishing product: {} for shop: {}", id, shopId);
 
 		ProductId productId = ProductId.of(id);
 
@@ -143,16 +143,16 @@ public class ProductController {
 	 * Archive a product (soft delete)
 	 *
 	 * @param id       Product ID
-	 * @param tenantId Tenant identifier
+	 * @param shopId Shop identifier
 	 * @return Archived product status
 	 */
 	@PostMapping("/{id}/archive")
 	@PreAuthorize("hasRole('MERCHANT_ADMIN')")
 	public ResponseEntity<Void> archiveProduct(
 		@PathVariable("id") String id,
-		@RequestHeader("X-Tenant-Id") String tenantId) {
+		@RequestHeader("X-Shop-Id") String shopId) {
 
-		log.info("Archiving product: {} for tenant: {}", id, tenantId);
+		log.info("Archiving product: {} for shop: {}", id, shopId);
 
 		ProductId productId = ProductId.of(id);
 
@@ -166,15 +166,15 @@ public class ProductController {
 	 * Get product details
 	 *
 	 * @param id       Product ID
-	 * @param tenantId Tenant identifier
+	 * @param shopId Shop identifier
 	 * @return Product details
 	 */
 	@GetMapping("/{id}")
 	public ResponseEntity<ProductResponseDTO> getProduct(
 		@PathVariable("id") String id,
-		@RequestHeader("X-Tenant-Id") String tenantId) {
+		@RequestHeader("X-Shop-Id") String shopId) {
 
-		log.debug("Getting product: {} for tenant: {}", id, tenantId);
+		log.debug("Getting product: {} for shop: {}", id, shopId);
 
 		ProductId productId = ProductId.of(id);
 
@@ -196,7 +196,7 @@ public class ProductController {
 	 *
 	 * @param id       Product ID
 	 * @param request  Tag update request
-	 * @param tenantId Tenant identifier
+	 * @param shopId Shop identifier
 	 * @return Updated product
 	 */
 	@PutMapping("/{id}/tags")
@@ -204,9 +204,9 @@ public class ProductController {
 	public ResponseEntity<ProductResponseDTO> updateTags(
 		@PathVariable("id") String id,
 		@Valid @RequestBody ProductTagUpdateDTO request,
-		@RequestHeader("X-Tenant-Id") String tenantId) {
+		@RequestHeader("X-Shop-Id") String shopId) {
 
-		log.info("Updating tags for product: {} for tenant: {}", id, tenantId);
+		log.info("Updating tags for product: {} for shop: {}", id, shopId);
 
 		ProductId productId = ProductId.of(id);
 

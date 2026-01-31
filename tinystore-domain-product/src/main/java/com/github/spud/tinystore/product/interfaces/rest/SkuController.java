@@ -34,7 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Security: - All endpoints require X-Tenant-Id header - Write operations require MERCHANT_ADMIN
  * role
  * <p>
- * Multi-tenancy: - All operations scoped to tenant - Validates product ownership within tenant
+ * Multi-shop: - All operations scoped to tenant - Validates product ownership within tenant
  */
 @Slf4j
 @RestController
@@ -50,7 +50,7 @@ public class SkuController {
 	 *
 	 * @param productId      Product ID
 	 * @param request        SKU creation request
-	 * @param tenantId       Tenant identifier
+	 * @param shopId       Shop identifier
 	 * @param idempotencyKey Idempotency key
 	 * @return Created SKU details
 	 */
@@ -59,11 +59,11 @@ public class SkuController {
 	public ResponseEntity<SkuResponseDTO> createSku(
 		@PathVariable("productId") String productId,
 		@Valid @RequestBody SkuCreateDTO request,
-		@RequestHeader("X-Tenant-Id") String tenantId,
+		@RequestHeader("X-Shop-Id") String shopId,
 		@RequestHeader("Idempotency-Key") String idempotencyKey) {
 
-		log.info("Creating SKU for product: {} with spec: {} for tenant: {}",
-			productId, request.getSpecCombination(), tenantId);
+		log.info("Creating SKU for product: {} with spec: {} for shop: {}",
+			productId, request.getSpecCombination(), shopId);
 
 		// Convert DTO to domain object
 		Sku sku = skuDTOMapper.toDomain(request, productId);
@@ -85,7 +85,7 @@ public class SkuController {
 	 *
 	 * @param id             SKU ID
 	 * @param request        SKU update request
-	 * @param tenantId       Tenant identifier
+	 * @param shopId       Shop identifier
 	 * @param idempotencyKey Idempotency key
 	 * @return Updated SKU details
 	 */
@@ -94,10 +94,10 @@ public class SkuController {
 	public ResponseEntity<SkuResponseDTO> updateSku(
 		@PathVariable("id") String id,
 		@Valid @RequestBody SkuUpdateDTO request,
-		@RequestHeader("X-Tenant-Id") String tenantId,
+		@RequestHeader("X-Shop-Id") String shopId,
 		@RequestHeader("Idempotency-Key") String idempotencyKey) {
 
-		log.info("Updating SKU: {} for tenant: {}", id, tenantId);
+		log.info("Updating SKU: {} for shop: {}", id, shopId);
 
 		SkuId skuId = SkuId.of(id);
 
@@ -125,15 +125,15 @@ public class SkuController {
 	 * Get SKU details
 	 *
 	 * @param id       SKU ID
-	 * @param tenantId Tenant identifier
+	 * @param shopId Shop identifier
 	 * @return SKU details
 	 */
 	@GetMapping("/skus/{id}")
 	public ResponseEntity<SkuResponseDTO> getSku(
 		@PathVariable("id") String id,
-		@RequestHeader("X-Tenant-Id") String tenantId) {
+		@RequestHeader("X-Shop-Id") String shopId) {
 
-		log.debug("Getting SKU: {} for tenant: {}", id, tenantId);
+		log.debug("Getting SKU: {} for shop: {}", id, shopId);
 
 		SkuId skuId = SkuId.of(id);
 
@@ -155,7 +155,7 @@ public class SkuController {
 	 *
 	 * @param id       SKU ID
 	 * @param request  Attributes update request
-	 * @param tenantId Tenant identifier
+	 * @param shopId Shop identifier
 	 * @return Updated SKU
 	 */
 	@PutMapping("/skus/{id}/attributes")
@@ -163,9 +163,9 @@ public class SkuController {
 	public ResponseEntity<SkuResponseDTO> updateAttributes(
 		@PathVariable("id") String id,
 		@Valid @RequestBody SkuAttributeUpdateDTO request,
-		@RequestHeader("X-Tenant-Id") String tenantId) {
+		@RequestHeader("X-Shop-Id") String shopId) {
 
-		log.info("Updating attributes for SKU: {} for tenant: {}", id, tenantId);
+		log.info("Updating attributes for SKU: {} for shop: {}", id, shopId);
 
 		SkuId skuId = SkuId.of(id);
 
