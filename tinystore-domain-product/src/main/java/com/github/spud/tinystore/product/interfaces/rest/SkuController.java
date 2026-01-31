@@ -31,10 +31,10 @@ import org.springframework.web.bind.annotation.RestController;
  * Endpoints: - POST /api/products/{productId}/skus - Create SKU - PUT /api/skus/{id} - Update SKU -
  * GET /api/skus/{id} - Get SKU details - PUT /api/skus/{id}/attributes - Update dynamic attributes
  * <p>
- * Security: - All endpoints require X-Tenant-Id header - Write operations require MERCHANT_ADMIN
+ * Security: - All endpoints require X-Shop-Id header - Write operations require MERCHANT_ADMIN
  * role
  * <p>
- * Multi-shop: - All operations scoped to tenant - Validates product ownership within tenant
+ * Multi-shop: - All operations scoped to shop - Validates product ownership within shop
  */
 @Slf4j
 @RestController

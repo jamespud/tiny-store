@@ -55,8 +55,8 @@ class SkuServiceTest {
         );
         testSku.setBasePrice(testPrice);
         
-        // Mock tenant context
-        when(shopContext.getShopId()).thenReturn("test-tenant");
+        // Mock shop context
+        when(shopContext.getShopId()).thenReturn("test-shop");
     }
     
     @Test

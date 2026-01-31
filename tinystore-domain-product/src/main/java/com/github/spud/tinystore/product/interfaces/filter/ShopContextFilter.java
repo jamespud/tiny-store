@@ -23,8 +23,7 @@ import org.springframework.util.StringUtils;
  * This filter runs with highest precedence to ensure shop context is available for all subsequent
  * processing.
  * <p>
- * Shop ID extraction order: 1. X-Shop-Id request header (preferred) 2. X-Tenant-Id (fallback for 
- * compatibility) 3. If missing both, return 400 Bad Request
+ * Shop ID extraction order: X-Shop-Id request header 
  * <p>
  * The shop ID is injected into request-scoped ShopContext bean for use by repositories and
  * services.
@@ -36,7 +35,6 @@ import org.springframework.util.StringUtils;
 public class ShopContextFilter implements Filter {
 
 	private static final String SHOP_HEADER = "X-Shop-Id";
-	private static final String TENANT_HEADER = "X-Tenant-Id"; // Fallback for compatibility
 
 	private final ObjectProvider<ShopContext> shopContextProvider;
 
@@ -60,14 +58,6 @@ public class ShopContextFilter implements Filter {
 		try {
 			// Preferred: X-Shop-Id header
 			String shopId = httpRequest.getHeader(SHOP_HEADER);
-			
-			// Fallback: X-Tenant-Id header for compatibility
-			if (!StringUtils.hasText(shopId)) {
-				shopId = httpRequest.getHeader(TENANT_HEADER);
-				if (StringUtils.hasText(shopId)) {
-					log.debug("Shop ID resolved from legacy X-Tenant-Id header");
-				}
-			}
 
 			if (!StringUtils.hasText(shopId)) {
 				log.warn("Missing shop ID in request header: {}", httpRequest.getRequestURI());

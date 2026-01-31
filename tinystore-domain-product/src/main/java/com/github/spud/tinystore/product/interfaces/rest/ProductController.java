@@ -31,13 +31,13 @@ import org.springframework.web.bind.annotation.RestController;
  * /api/products/{id} - Update product (MERCHANT_ADMIN/PLATFORM_ADMIN) - POST
  * /api/products/{id}/publish - Publish product (MERCHANT_ADMIN) - POST /api/products/{id}/archive -
  * Archive product (MERCHANT_ADMIN) - GET /api/products/{id} - Get product details (requires
- * X-Tenant-Id) - PUT /api/products/{id}/tags - Update product tags (MERCHANT_ADMIN)
+ * X-Shop-Id) - PUT /api/products/{id}/tags - Update product tags (MERCHANT_ADMIN)
  * <p>
- * Security: - All endpoints require X-Tenant-Id header - Write operations require MERCHANT_ADMIN or
+ * Security: - All endpoints require X-Shop-Id header - Write operations require MERCHANT_ADMIN or
  * PLATFORM_ADMIN role - Idempotency-Key header required for write operations (validated by
  * gateway)
  * <p>
- * Multi-shop: - TenantId extracted from header and validated - All operations scoped to tenant
+ * Multi-shop: - ShopId extracted from header and validated - All operations scoped to shop
  */
 @Slf4j
 @RestController
@@ -52,7 +52,7 @@ public class ProductController {
 	 * Create a new product
 	 *
 	 * @param request        Product creation request
-	 * @param shopId       Shop identifier from X-Tenant-Id header
+	 * @param shopId       Shop identifier from X-Shop-Id header
 	 * @param idempotencyKey Idempotency key from Idempotency-Key header
 	 * @return Created product details
 	 */

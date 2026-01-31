@@ -33,7 +33,7 @@ public class ProductService {
 	@CacheEvict(value = "products", allEntries = true)
 	public Product createProduct(Product product) {
 		String shopId = shopContext.getShopId();
-		log.info("Creating product for tenant: {}, productId: {}", shopId, product.getProductId());
+		log.info("Creating product for shop: {}, productId: {}", shopId, product.getProductId());
 
 		return productRepository.save(product);
 	}
@@ -45,7 +45,7 @@ public class ProductService {
 	@CacheEvict(value = "products", key = "#productId.id")
 	public Product updateProduct(ProductId productId, Product updatedProduct) {
 		String shopId = shopContext.getShopId();
-		log.info("Updating product: {} for tenant: {}", productId, shopId);
+		log.info("Updating product: {} for shop: {}", productId, shopId);
 
 		Optional<Product> existing = productRepository.findById(productId);
 		if (existing.isEmpty()) {
@@ -73,7 +73,7 @@ public class ProductService {
 	@CacheEvict(value = "products", key = "#productId.id")
 	public Product publishProduct(ProductId productId) {
 		String shopId = shopContext.getShopId();
-		log.info("Publishing product: {} for tenant: {}", productId, shopId);
+		log.info("Publishing product: {} for shop: {}", productId, shopId);
 
 		Optional<Product> existing = productRepository.findById(productId);
 		if (existing.isEmpty()) {
@@ -94,7 +94,7 @@ public class ProductService {
 	@CacheEvict(value = "products", key = "#productId.id")
 	public void archiveProduct(ProductId productId) {
 		String shopId = shopContext.getShopId();
-		log.info("Archiving product: {} for tenant: {}", productId, shopId);
+		log.info("Archiving product: {} for shop: {}", productId, shopId);
 
 		Optional<Product> existing = productRepository.findById(productId);
 		if (existing.isEmpty()) {
@@ -110,7 +110,7 @@ public class ProductService {
 	@Cacheable(value = "products", key = "#productId.id")
 	public Optional<Product> getProduct(ProductId productId) {
 		String shopId = shopContext.getShopId();
-		log.debug("Getting product: {} for tenant: {}", productId, shopId);
+		log.debug("Getting product: {} for shop: {}", productId, shopId);
 
 		return productRepository.findById(productId);
 	}
@@ -122,7 +122,7 @@ public class ProductService {
 	@CacheEvict(value = "products", key = "#productId.id")
 	public Product updateTags(ProductId productId, List<String> tags) {
 		String shopId = shopContext.getShopId();
-		log.info("Updating tags for product: {} for tenant: {}", productId, shopId);
+		log.info("Updating tags for product: {} for shop: {}", productId, shopId);
 
 		Optional<Product> existing = productRepository.findById(productId);
 		if (existing.isEmpty()) {

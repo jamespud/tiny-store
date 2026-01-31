@@ -30,10 +30,10 @@ import org.springframework.context.annotation.Configuration;
 			Product Service provides comprehensive product management capabilities including:
 			- Product CRUD operations (create, update, publish, archive)
 			- SKU management with dynamic specifications and attributes
-			- Multi-tenant isolation with tenant-scoped data access
+			- Multi-shop isolation with shop-scoped data access
 			- Event-driven architecture with outbox pattern
 			
-			All endpoints require authentication via JWT Bearer token and tenant identification via X-Shop-Id header.
+			All endpoints require authentication via JWT Bearer token and shop identification via X-Shop-Id header.
 			""",
 		contact = @Contact(
 			name = "TinyStore Team",

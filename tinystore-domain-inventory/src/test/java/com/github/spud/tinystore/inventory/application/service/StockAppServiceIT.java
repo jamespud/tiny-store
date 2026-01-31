@@ -32,9 +32,9 @@ class StockAppServiceIT {
 
 	@Container
 	static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:15-alpine")
-		.withDatabaseName("tinystore")
-		.withUsername("postgres")
-		.withPassword("postgres");
+			.withDatabaseName("tinystore")
+			.withUsername("postgres")
+			.withPassword("postgres");
 
 	@DynamicPropertySource
 	static void registerProps(DynamicPropertyRegistry registry) {
@@ -60,10 +60,10 @@ class StockAppServiceIT {
 	@Test
 	void preOccupy_isIdempotent() {
 		stockRepository.save(new InventoryStockEntity()
-			.setShopId("T1")
-			.setSkuId("SKU1")
-			.setTotalQuantity(10)
-			.setReservedQuantity(0));
+				.setShopId("T1")
+				.setSkuId("SKU1")
+				.setTotalQuantity(10)
+				.setReservedQuantity(0));
 
 		StockPreOccupyRequest req = new StockPreOccupyRequest();
 		req.setShopId("T1");
@@ -89,40 +89,40 @@ class StockAppServiceIT {
 	@Test
 	void expireReservations_releasesReservedQuantity() {
 		stockRepository.save(new InventoryStockEntity()
-			.setShopId("T1")
-			.setSkuId("SKU2")
-			.setTotalQuantity(10)
-			.setReservedQuantity(4));
+				.setShopId("T1")
+				.setSkuId("SKU2")
+				.setTotalQuantity(10)
+				.setReservedQuantity(4));
 
 		reservationRepository.save(new InventoryReservationEntity()
-			.setReservationId(UUID.randomUUID().toString().replace("-", ""))
-			.setShopId("T1")
-			.setSkuId("SKU2")
-			.setQuantity(4)
-			.setStatus(StockAppService.STATUS_RESERVED)
-			.setExpireAt(OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1))
-			.setTradeId("O2")
-			.setOperationId(UUID.randomUUID().toString()));
+				.setReservationId(UUID.randomUUID().toString().replace("-", ""))
+				.setShopId("T1")
+				.setSkuId("SKU2")
+				.setQuantity(4)
+				.setStatus(StockAppService.STATUS_RESERVED)
+				.setExpireAt(OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1))
+				.setTradeId("O2")
+				.setOperationId(UUID.randomUUID().toString()));
 
 		int expired = stockAppService.expireReservations();
 		assertThat(expired).isEqualTo(1);
 
 		InventoryStockEntity stock = stockRepository.findByShopIdAndSkuId("T1", "SKU2").orElseThrow();
 		assertThat(stock.getReservedQuantity()).isEqualTo(0);
- 	}
+	}
 
 	@Test
 	void restock_isIdempotentPerRefundId() {
 		stockRepository.save(new InventoryStockEntity()
-			.setShopId("T1")
-			.setSkuId("SKU1")
-			.setTotalQuantity(10)
-			.setReservedQuantity(0));
+				.setShopId("T1")
+				.setSkuId("SKU1")
+				.setTotalQuantity(10)
+				.setReservedQuantity(0));
 		stockRepository.save(new InventoryStockEntity()
-			.setShopId("T1")
-			.setSkuId("SKU2")
-			.setTotalQuantity(20)
-			.setReservedQuantity(0));
+				.setShopId("T1")
+				.setSkuId("SKU2")
+				.setTotalQuantity(20)
+				.setReservedQuantity(0));
 
 		StockRestockRequest req = new StockRestockRequest();
 		req.setShopId("T1");
@@ -145,6 +145,7 @@ class StockAppServiceIT {
 		InventoryStockEntity s2 = stockRepository.findByShopIdAndSkuId("T1", "SKU2").orElseThrow();
 		assertThat(s1.getTotalQuantity()).isEqualTo(12);
 		assertThat(s2.getTotalQuantity()).isEqualTo(23);
-		assertThat(adjustmentRepository.countByReasonAndReferenceId(StockAppService.ADJUST_REASON_RESTOCK_REFUND, "R1")).isEqualTo(1);
+		assertThat(adjustmentRepository.countByReasonAndReferenceId(StockAppService.ADJUST_REASON_RESTOCK_REFUND, "R1"))
+				.isEqualTo(1);
 	}
 }

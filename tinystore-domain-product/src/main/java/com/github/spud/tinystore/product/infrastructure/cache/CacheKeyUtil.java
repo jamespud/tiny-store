@@ -6,7 +6,7 @@ package com.github.spud.tinystore.product.infrastructure.cache;
  * Key patterns: - product:{shopId}:{productId} - sku:{shopId}:{skuId} -
  * pricing:rules:{shopId}:{productId} - sku:dynamic:{shopId}:{skuId}:{channel}
  * <p>
- * All cache keys include tenant ID for proper isolation
+ * All cache keys include shop ID for proper isolation
  */
 public class CacheKeyUtil {
 
@@ -62,7 +62,7 @@ public class CacheKeyUtil {
 	}
 
 	/**
-	 * Generate pattern for deleting all product keys in tenant
+	 * Generate pattern for deleting all product keys in shop
 	 *
 	 * @param shopId Shop identifier
 	 * @return Pattern: product:{shopId}:*
@@ -72,7 +72,7 @@ public class CacheKeyUtil {
 	}
 
 	/**
-	 * Generate pattern for deleting all SKU keys in tenant
+	 * Generate pattern for deleting all SKU keys in shop
 	 *
 	 * @param shopId Shop identifier
 	 * @return Pattern: sku:{shopId}:*

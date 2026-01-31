@@ -15,7 +15,7 @@ import org.springframework.stereotype.Repository;
  * <p>
  * Responsibilities: - Implement domain ProductRepository interface - Delegate to
  * JpaProductRepository for persistence - Use ProductMapper for entity/domain conversions - Inject
- * tenant ID from context for all operations
+ * shop ID from context for all operations
  */
 @Repository
 public class ProductRepositoryAdapter implements ProductRepository {
