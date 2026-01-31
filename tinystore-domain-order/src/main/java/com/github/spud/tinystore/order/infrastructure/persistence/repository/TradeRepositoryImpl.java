@@ -53,6 +53,7 @@ public class TradeRepositoryImpl implements TradeRepository {
             .couponCode(trade.getCouponCode())
             .createdAt(trade.getCreatedAt())
             .updatedAt(trade.getUpdatedAt())
+            .closedAt(trade.getClosedAt())
             .build();
     }
     
@@ -72,6 +73,7 @@ public class TradeRepositoryImpl implements TradeRepository {
             .couponCode(entity.getCouponCode())
             .createdAt(entity.getCreatedAt())
             .updatedAt(entity.getUpdatedAt())
+            .closedAt(entity.getClosedAt())
             .build();
     }
 }
