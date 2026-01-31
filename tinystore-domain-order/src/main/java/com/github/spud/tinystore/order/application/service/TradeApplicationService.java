@@ -355,17 +355,22 @@ public class TradeApplicationService {
             // 获取所有子单
             List<ShopOrder> shopOrders = shopOrderRepository.findByTradeId(trade.getTradeId());
 
-            // 更新 Trade 状态（注意：Trade 没有 close() 方法，这里需要添加或直接设置）
-            // 暂时保持直接设置，后续可优化为 trade.cancel()
+            // 更新 Trade 状态（保留所有字段，仅设置 closedAt）
             trade = Trade.builder()
+                .id(trade.getId())
                 .tradeId(trade.getTradeId())
                 .buyerId(trade.getBuyerId())
                 .buyerNick(trade.getBuyerNick())
-                .payStatus(PayStatus.UNPAID)
+                .payStatus(trade.getPayStatus())
                 .totalAmountCents(trade.getTotalAmountCents())
                 .discountAmountCents(trade.getDiscountAmountCents())
                 .payableAmountCents(trade.getPayableAmountCents())
+                .promotionQuoteId(trade.getPromotionQuoteId())
+                .promotionInputHash(trade.getPromotionInputHash())
+                .inventoryReservationId(trade.getInventoryReservationId())
+                .couponCode(trade.getCouponCode())
                 .createdAt(trade.getCreatedAt())
+                .updatedAt(LocalDateTime.now())
                 .closedAt(LocalDateTime.now())
                 .build();
             tradeRepository.save(trade);
