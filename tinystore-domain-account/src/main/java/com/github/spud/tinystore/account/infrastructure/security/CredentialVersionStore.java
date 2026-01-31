@@ -16,7 +16,7 @@ public class CredentialVersionStore {
         this.stringRedisTemplate = stringRedisTemplate;
     }
 
-    public void save(Long userId, Long version) {
+    public void save(String userId, Long version) {
         if (userId == null || version == null) {
             return;
         }

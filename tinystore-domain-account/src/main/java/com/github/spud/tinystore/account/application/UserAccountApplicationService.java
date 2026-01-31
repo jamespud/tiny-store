@@ -2,6 +2,7 @@ package com.github.spud.tinystore.account.application;
 
 import com.github.spud.tinystore.account.infrastructure.persistence.entity.UserCore;
 import com.github.spud.tinystore.account.infrastructure.persistence.repository.UserCoreRepository;
+import com.github.spud.tinystore.account.infrastructure.id.UserIdGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import com.github.spud.tinystore.account.infrastructure.event.AccountEventPublisher;
@@ -30,9 +31,10 @@ public class UserAccountApplicationService {
     private final PasswordEncoder passwordEncoder;
     private final AccountEventPublisher eventPublisher;
     private final CredentialVersionStore credentialVersionStore;
+    private final UserIdGenerator userIdGenerator;
 
     @Cacheable(value = "users", keyGenerator = "userKeyGenerator")
-    public Optional<UserCore> getUserById(Long userId) {
+    public Optional<UserCore> getUserById(String userId) {
         return userCoreRepository.findById(userId);
     }
 
@@ -54,6 +56,7 @@ public class UserAccountApplicationService {
         }
 
         UserCore userCore = new UserCore();
+        userCore.setUserId(userIdGenerator.generate());
         userCore.setAccount(phone);
         userCore.setPassword(passwordEncoder.encode(password));
         userCore.setNickname(nickname);
@@ -83,7 +86,7 @@ public class UserAccountApplicationService {
 
     @Transactional
     @CacheEvict(value = {"users", "usersByPhone", "usersByUsername"}, keyGenerator = "userKeyGenerator")
-    public UserCore updateUserProfile(Long userId, String nickname, String avatarUrl, String extJson) {
+    public UserCore updateUserProfile(String userId, String nickname, String avatarUrl, String extJson) {
         UserCore userCore = userCoreRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
 
@@ -115,7 +118,7 @@ public class UserAccountApplicationService {
 
     @Transactional
     @CacheEvict(value = {"users", "usersByPhone", "usersByUsername"}, keyGenerator = "userKeyGenerator")
-    public void resetPassword(Long userId, String newPassword) {
+    public void resetPassword(String userId, String newPassword) {
         UserCore userCore = userCoreRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
 
@@ -137,7 +140,7 @@ public class UserAccountApplicationService {
 
     @Transactional
     @CacheEvict(value = {"users", "usersByPhone", "usersByUsername"}, keyGenerator = "userKeyGenerator")
-    public void updateUserStatus(Long userId, Integer accountStatus) {
+    public void updateUserStatus(String userId, Integer accountStatus) {
         UserCore userCore = userCoreRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
 
@@ -170,7 +173,7 @@ public class UserAccountApplicationService {
 
     @Transactional
     @CacheEvict(value = {"users", "usersByPhone", "usersByUsername"}, keyGenerator = "userKeyGenerator")
-    public void deleteUser(Long userId) {
+    public void deleteUser(String userId) {
         UserCore userCore = userCoreRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
 

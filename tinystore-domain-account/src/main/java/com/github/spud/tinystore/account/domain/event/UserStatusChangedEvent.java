@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @ToString
 public class UserStatusChangedEvent {
-    private final Long userId;
+    private final String userId;
     private final Integer oldStatus;
     private final Integer newStatus;
     private final LocalDateTime changeTime;

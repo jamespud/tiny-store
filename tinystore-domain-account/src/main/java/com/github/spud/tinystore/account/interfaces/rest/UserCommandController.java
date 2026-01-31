@@ -30,7 +30,7 @@ public class UserCommandController {
 
     @PutMapping("/{userId}/profile")
     public ResponseEntity<UserView> updateUserProfile(
-            @PathVariable Long userId,
+            @PathVariable String userId,
             @RequestBody UpdateProfileRequest request) {
         try {
             UserCore userCore = userAccountApplicationService.updateUserProfile(
@@ -47,7 +47,7 @@ public class UserCommandController {
 
     @PutMapping("/{userId}/password")
     public ResponseEntity<Void> resetPassword(
-            @PathVariable Long userId,
+            @PathVariable String userId,
             @RequestBody ResetPasswordRequest request) {
         try {
             userAccountApplicationService.resetPassword(userId, request.newPassword());
@@ -59,7 +59,7 @@ public class UserCommandController {
 
     @PutMapping("/{userId}/status")
     public ResponseEntity<Void> updateUserStatus(
-            @PathVariable Long userId,
+            @PathVariable String userId,
             @RequestBody UpdateStatusRequest request) {
         try {
             userAccountApplicationService.updateUserStatus(userId, request.accountStatus());
@@ -70,7 +70,7 @@ public class UserCommandController {
     }
 
     @DeleteMapping("/{userId}")
-    public ResponseEntity<Void> deleteUser(@PathVariable Long userId) {
+    public ResponseEntity<Void> deleteUser(@PathVariable String userId) {
         try {
             userAccountApplicationService.deleteUser(userId);
             return ResponseEntity.ok().build();

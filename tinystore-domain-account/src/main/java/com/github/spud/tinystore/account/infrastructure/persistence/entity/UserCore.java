@@ -18,9 +18,9 @@ import org.hibernate.annotations.Comment;
 public class UserCore {
 
 	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	@Comment("用户唯一ID")
-	private Long userId;
+	@Column(name = "user_id", length = 64, nullable = false)
+	@Comment("用户唯一ID（支持雪花等分布式ID）")
+	private String userId;
 
 	@Column(nullable = false, length = 64)
 	@Comment("登录账号（手机号/邮箱/抖音号/第三方映射）")

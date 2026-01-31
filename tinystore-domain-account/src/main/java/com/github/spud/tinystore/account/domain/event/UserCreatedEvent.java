@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @ToString
 public class UserCreatedEvent {
-    private final Long userId;
+    private final String userId;
     private final String phone;
     private final String nickname;
     private final LocalDateTime createTime;
