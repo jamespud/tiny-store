@@ -117,7 +117,7 @@ class PasswordApplicationServiceTest {
 
     when(accountServiceFeignClient.verifyCredentials(any(), any()))
       .thenReturn(new AccountServiceFeignClient.CredentialVerifyResponse(
-        1L, phone, "测试用户", "avatar.jpg", 1, 5L
+        "1", phone, "测试用户", "avatar.jpg", 1, 5L
       ));
 
     // When

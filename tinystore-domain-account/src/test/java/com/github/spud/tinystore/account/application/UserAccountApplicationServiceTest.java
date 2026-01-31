@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.account.application;
 
 import com.github.spud.tinystore.account.infrastructure.event.AccountEventPublisher;
+import com.github.spud.tinystore.account.infrastructure.id.UserIdGenerator;
 import com.github.spud.tinystore.account.infrastructure.persistence.entity.UserCore;
 import com.github.spud.tinystore.account.infrastructure.persistence.repository.UserCoreRepository;
 import com.github.spud.tinystore.account.infrastructure.security.CredentialVersionStore;
@@ -43,6 +44,9 @@ class UserAccountApplicationServiceTest {
     @Mock
     private CredentialVersionStore credentialVersionStore;
 
+    @Mock
+    private UserIdGenerator userIdGenerator;
+
     @InjectMocks
     private UserAccountApplicationService service;
 
@@ -76,9 +80,10 @@ class UserAccountApplicationServiceTest {
 
         when(userCoreRepository.findByAccount(phone)).thenReturn(Optional.empty());
         when(passwordEncoder.encode(password)).thenReturn(encodedPassword);
+        when(userIdGenerator.generate()).thenReturn("1");
 
         UserCore savedUser = new UserCore();
-        savedUser.setUserId(1L);
+        savedUser.setUserId("1");
         savedUser.setAccount(phone);
         savedUser.setPassword(encodedPassword);
         savedUser.setNickname(nickname);
@@ -93,7 +98,7 @@ class UserAccountApplicationServiceTest {
 
         // Then
         assertThat(result).isNotNull();
-        assertThat(result.getUserId()).isEqualTo(1L);
+        assertThat(result.getUserId()).isEqualTo("1");
 
         ArgumentCaptor<UserCore> userCaptor = ArgumentCaptor.forClass(UserCore.class);
         verify(userCoreRepository).save(userCaptor.capture());
@@ -108,19 +113,19 @@ class UserAccountApplicationServiceTest {
         ArgumentCaptor<UserCreatedEvent> eventCaptor = ArgumentCaptor.forClass(UserCreatedEvent.class);
         verify(eventPublisher).publishUserCreatedEvent(eventCaptor.capture());
         UserCreatedEvent event = eventCaptor.getValue();
-        assertThat(event.userId()).isEqualTo(1L);
+        assertThat(event.userId()).isEqualTo("1");
         assertThat(event.phone()).isEqualTo(phone);
         assertThat(event.nickname()).isEqualTo(nickname);
         assertThat(event.createTime()).isEqualTo(savedUser.getRegisterTime().atOffset(ZoneOffset.UTC));
 
-        verify(credentialVersionStore).save(1L, 1L);
+        verify(credentialVersionStore).save("1", 1L);
     }
 
     @Test
     @DisplayName("updateUserProfile - 用户不存在应抛出异常")
     void updateUserProfile_UserNotFound_ThrowsException() {
         // Given
-        Long userId = 1L;
+        String userId = "1";
         when(userCoreRepository.findById(userId)).thenReturn(Optional.empty());
 
         // When & Then
@@ -136,7 +141,7 @@ class UserAccountApplicationServiceTest {
     @DisplayName("updateUserProfile - 只更新昵称")
     void updateUserProfile_OnlyNickname_UpdatesNicknameOnly() {
         // Given
-        Long userId = 1L;
+        String userId = "1";
         UserCore existingUser = new UserCore();
         existingUser.setUserId(userId);
         existingUser.setNickname("old nickname");
@@ -164,7 +169,7 @@ class UserAccountApplicationServiceTest {
     @DisplayName("updateUserProfile - 更新所有字段")
     void updateUserProfile_AllFields_UpdatesAll() {
         // Given
-        Long userId = 1L;
+        String userId = "1";
         UserCore existingUser = new UserCore();
         existingUser.setUserId(userId);
         existingUser.setNickname("old");
@@ -192,7 +197,7 @@ class UserAccountApplicationServiceTest {
     @DisplayName("resetPassword - 用户不存在应抛出异常")
     void resetPassword_UserNotFound_ThrowsException() {
         // Given
-        Long userId = 1L;
+        String userId = "1";
         when(userCoreRepository.findById(userId)).thenReturn(Optional.empty());
 
         // When & Then
@@ -209,7 +214,7 @@ class UserAccountApplicationServiceTest {
     @DisplayName("resetPassword - 成功重置密码")
     void resetPassword_Success_EncodesAndSaves() {
         // Given
-        Long userId = 1L;
+        String userId = "1";
         String newPassword = "newPassword123";
         String encodedPassword = "encoded_new_password";
 
@@ -238,7 +243,7 @@ class UserAccountApplicationServiceTest {
     @DisplayName("updateUserStatus - 用户不存在应抛出异常")
     void updateUserStatus_UserNotFound_ThrowsException() {
         // Given
-        Long userId = 1L;
+        String userId = "1";
         when(userCoreRepository.findById(userId)).thenReturn(Optional.empty());
 
         // When & Then
@@ -256,7 +261,7 @@ class UserAccountApplicationServiceTest {
     @DisplayName("updateUserStatus - 成功更新状态并发布事件")
     void updateUserStatus_Success_UpdatesAndPublishesEvent() {
         // Given
-        Long userId = 1L;
+        String userId = "1";
         Integer oldStatus = 1;
         Integer newStatus = 0;
 
@@ -294,7 +299,7 @@ class UserAccountApplicationServiceTest {
     @DisplayName("deleteUser - 用户不存在应抛出异常")
     void deleteUser_UserNotFound_ThrowsException() {
         // Given
-        Long userId = 1L;
+        String userId = "1";
         when(userCoreRepository.findById(userId)).thenReturn(Optional.empty());
 
         // When & Then
@@ -309,7 +314,7 @@ class UserAccountApplicationServiceTest {
     @DisplayName("deleteUser - 成功删除用户（逻辑删除）")
     void deleteUser_Success_SetsDeleteFlag() {
         // Given
-        Long userId = 1L;
+        String userId = "1";
         UserCore existingUser = new UserCore();
         existingUser.setUserId(userId);
         existingUser.setIsDelete(0);
