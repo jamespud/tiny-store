@@ -58,6 +58,18 @@ public class TradeEntity {
     @Column(name = "finished_at")
     private LocalDateTime finishedAt;
 
+    @Column(name = "promotion_quote_id", length = 128)
+    private String promotionQuoteId;
+
+    @Column(name = "promotion_input_hash", length = 255)
+    private String promotionInputHash;
+
+    @Column(name = "inventory_reservation_id", length = 128)
+    private String inventoryReservationId;
+
+    @Column(name = "coupon_code", length = 128)
+    private String couponCode;
+
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {

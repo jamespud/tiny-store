@@ -107,13 +107,19 @@ public class PaymentApplicationService {
             }
 
             // 4. 调用促销释放
-            PromotionReleaseRequest releaseRequest = PromotionReleaseRequest.builder()
-                .couponId(refundId) // 暂用 refundId，实际应该用原 couponId
-                .buyerId(trade.getBuyerId())
-                .build();
             try {
-                promotionClient.release(idempotencyKey, releaseRequest);
-                log.info("Promotion release succeeded: refundId={}", refundId);
+                // 校验 promotionQuoteId 已绑定
+                if (trade.getPromotionQuoteId() == null || trade.getPromotionQuoteId().isEmpty()) {
+                    log.warn("Missing promotionQuoteId for trade: {}, skipping promotion release", tradeId);
+                } else {
+                    PromotionReleaseRequest releaseRequest = PromotionReleaseRequest.builder()
+                        .quoteId(trade.getPromotionQuoteId())
+                        .orderNo(trade.getTradeId())
+                        .reason(reason)
+                        .build();
+                    promotionClient.release(idempotencyKey, releaseRequest);
+                    log.info("Promotion release succeeded: refundId={}", refundId);
+                }
             } catch (Exception e) {
                 log.warn("Promotion release failed for refundId={}, continuing anyway", refundId, e);
                 // 不抛异常，继续流程（库存已回补，促销释放可重试）

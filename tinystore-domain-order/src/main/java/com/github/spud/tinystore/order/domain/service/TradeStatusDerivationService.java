@@ -29,6 +29,11 @@ public class TradeStatusDerivationService {
         List<AfterSaleCaseEntity> afterSaleCases,
         List<FulfillmentPackageEntity> packages) {
 
+        // 优先判定：如果 closedAt 不为空，直接返回 CLOSED（优先级最高）
+        if (trade.getClosedAt() != null) {
+            return TradeViewStatus.CLOSED;
+        }
+
         // 基础状态：优先看支付状态
         if ("UNPAID".equals(trade.getPayStatus())) {
             return TradeViewStatus.WAITING_PAYMENT;

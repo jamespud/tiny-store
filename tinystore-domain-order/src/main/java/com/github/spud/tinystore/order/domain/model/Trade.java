@@ -38,6 +38,39 @@ public class Trade {
     private LocalDateTime updatedAt;
     private LocalDateTime closedAt;
     
+    private String promotionQuoteId;
+    private String promotionInputHash;
+    private String inventoryReservationId;
+    private String couponCode;
+    
+    /**
+     * 检查交易是否已关闭（优先判定 closedAt）
+     */
+    public boolean isClosed() {
+        return this.closedAt != null;
+    }
+    
+    /**
+     * 校验 promotion quote 关联已绑定（关键路径使用前校验）
+     */
+    public void requirePromotionQuoteBound() {
+        if (this.promotionQuoteId == null || this.promotionQuoteId.isEmpty()) {
+            throw new IllegalStateException("Promotion quote ID not bound for trade: " + tradeId);
+        }
+        if (this.promotionInputHash == null || this.promotionInputHash.isEmpty()) {
+            throw new IllegalStateException("Promotion input hash not bound for trade: " + tradeId);
+        }
+    }
+    
+    /**
+     * 校验 inventory reservation 关联已绑定（关键路径使用前校验）
+     */
+    public void requireInventoryReservationBound() {
+        if (this.inventoryReservationId == null || this.inventoryReservationId.isEmpty()) {
+            throw new IllegalStateException("Inventory reservation ID not bound for trade: " + tradeId);
+        }
+    }
+    
     /**
      * 支付成功
      */
