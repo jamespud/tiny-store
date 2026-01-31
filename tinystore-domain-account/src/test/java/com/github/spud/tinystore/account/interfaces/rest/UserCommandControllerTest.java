@@ -40,7 +40,7 @@ class UserCommandControllerTest {
     void registerUser_Success_Returns200() throws Exception {
         // Given
         UserCore mockUser = new UserCore();
-        mockUser.setUserId(1L);
+        mockUser.setUserId("1");
         mockUser.setAccount("13800138000");
         mockUser.setNickname("测试用户");
 
@@ -60,7 +60,7 @@ class UserCommandControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.userId").value(1))
+                .andExpect(jsonPath("$.userId").value("1"))
                 .andExpect(jsonPath("$.account").value("13800138000"))
                 .andExpect(jsonPath("$.nickname").value("测试用户"));
 
@@ -95,7 +95,7 @@ class UserCommandControllerTest {
     @DisplayName("PUT /api/account/users/{userId}/profile - 成功更新返回200")
     void updateUserProfile_Success_Returns200() throws Exception {
         // Given
-        Long userId = 1L;
+        String userId = "1";
         UserCore mockUser = new UserCore();
         mockUser.setUserId(userId);
         mockUser.setNickname("新昵称");
@@ -126,7 +126,7 @@ class UserCommandControllerTest {
     @DisplayName("PUT /api/account/users/{userId}/profile - 用户不存在返回404")
     void updateUserProfile_NotFound_Returns404() throws Exception {
         // Given
-        Long userId = 999L;
+        String userId = "999";
         when(userAccountApplicationService.updateUserProfile(eq(userId), nullable(String.class), nullable(String.class), nullable(String.class)))
                 .thenThrow(new IllegalArgumentException("用户不存在"));
 
@@ -147,7 +147,7 @@ class UserCommandControllerTest {
     @DisplayName("PUT /api/account/users/{userId}/password - 成功重置密码返回200")
     void resetPassword_Success_Returns200() throws Exception {
         // Given
-        Long userId = 1L;
+        String userId = "1";
         doNothing().when(userAccountApplicationService).resetPassword(eq(userId), anyString());
 
         String requestBody = """
@@ -169,7 +169,7 @@ class UserCommandControllerTest {
     @DisplayName("PUT /api/account/users/{userId}/password - 用户不存在返回404")
     void resetPassword_NotFound_Returns404() throws Exception {
         // Given
-        Long userId = 999L;
+        String userId = "999";
         doThrow(new IllegalArgumentException("用户不存在"))
                 .when(userAccountApplicationService).resetPassword(eq(userId), anyString());
 
@@ -190,7 +190,7 @@ class UserCommandControllerTest {
     @DisplayName("PUT /api/account/users/{userId}/status - 成功更新状态返回200")
     void updateUserStatus_Success_Returns200() throws Exception {
         // Given
-        Long userId = 1L;
+        String userId = "1";
         doNothing().when(userAccountApplicationService).updateUserStatus(eq(userId), anyInt());
 
         String requestBody = """
@@ -212,7 +212,7 @@ class UserCommandControllerTest {
     @DisplayName("PUT /api/account/users/{userId}/status - 用户不存在返回404")
     void updateUserStatus_NotFound_Returns404() throws Exception {
         // Given
-        Long userId = 999L;
+        String userId = "999";
         doThrow(new IllegalArgumentException("用户不存在"))
                 .when(userAccountApplicationService).updateUserStatus(eq(userId), anyInt());
 
@@ -233,7 +233,7 @@ class UserCommandControllerTest {
     @DisplayName("DELETE /api/account/users/{userId} - 成功删除返回200")
     void deleteUser_Success_Returns200() throws Exception {
         // Given
-        Long userId = 1L;
+        String userId = "1";
         doNothing().when(userAccountApplicationService).deleteUser(eq(userId));
 
         // When & Then
@@ -247,7 +247,7 @@ class UserCommandControllerTest {
     @DisplayName("DELETE /api/account/users/{userId} - 用户不存在返回404")
     void deleteUser_NotFound_Returns404() throws Exception {
         // Given
-        Long userId = 999L;
+        String userId = "999";
         doThrow(new IllegalArgumentException("用户不存在"))
                 .when(userAccountApplicationService).deleteUser(eq(userId));
 
