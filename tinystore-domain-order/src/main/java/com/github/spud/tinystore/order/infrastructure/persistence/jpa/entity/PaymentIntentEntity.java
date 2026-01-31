@@ -40,6 +40,38 @@ public class PaymentIntentEntity {
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
 
+    // ========== 新增字段：支持命令型事件与支付域协同 ==========
+
+    /**
+     * 买家ID（用于支付域创建支付单）
+     */
+    @Column(name = "buyer_id", length = 64)
+    private String buyerId;
+
+    /**
+     * 支付渠道（WECHAT/ALIPAY/UNIONPAY等）
+     */
+    @Column(name = "pay_channel", length = 32)
+    private String payChannel;
+
+    /**
+     * 支付超时时间（支付域据此关闭支付单）
+     */
+    @Column(name = "expire_at")
+    private LocalDateTime expireAt;
+
+    /**
+     * 支付域支付单ID（支付域回写，用于关联与对账）
+     */
+    @Column(name = "payment_order_id", length = 64)
+    private String paymentOrderId;
+
+    /**
+     * 第三方支付流水号（支付成功后回写，用于幂等与对账）
+     */
+    @Column(name = "third_trade_no", length = 128)
+    private String thirdTradeNo;
+
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {
