@@ -11,6 +11,7 @@ import com.github.spud.tinystore.order.domain.model.AfterSaleCase;
 import com.github.spud.tinystore.order.domain.repository.AfterSaleCaseRepository;
 import com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService;
 import com.github.spud.tinystore.order.infrastructure.idempotency.IdempotencyService;
+import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.PaymentIntentJpaRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -37,6 +38,9 @@ public class AfterSaleApplicationService {
 
     @Autowired
     private IdempotencyService idempotencyService;
+
+    @Autowired
+    private PaymentIntentJpaRepository paymentIntentJpaRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -186,6 +190,17 @@ public class AfterSaleApplicationService {
             afterSaleCaseRepository.save(caseEntity);
 
             // 写入 Outbox 事件（退款请求）
+            // 需要查询 PaymentIntent 以获取 paymentIntentId（供支付域消费事件使用）
+            String paymentIntentId = null;
+            try {
+                var paymentIntent = paymentIntentJpaRepository.findByTradeId(caseEntity.getTradeId());
+                if (paymentIntent.isPresent()) {
+                    paymentIntentId = paymentIntent.get().getPaymentId();
+                }
+            } catch (Exception e) {
+                log.warn("Failed to fetch paymentIntentId for tradeId={}", caseEntity.getTradeId(), e);
+            }
+            
             OrderDomainEvent refundRequestEvent = OrderDomainEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .eventType(OrderEventType.REFUND_REQUESTED)
@@ -197,7 +212,8 @@ public class AfterSaleApplicationService {
                     "caseId", caseId,
                     "refundId", refundId,
                     "refundAmountCents", refundAmountCents,
-                    "tradeId", caseEntity.getTradeId()
+                    "tradeId", caseEntity.getTradeId(),
+                    "paymentIntentId", paymentIntentId != null ? paymentIntentId : "" // 补齐支付意图ID
                 )))
                 .build();
             outboxEventService.saveEvent(refundRequestEvent);

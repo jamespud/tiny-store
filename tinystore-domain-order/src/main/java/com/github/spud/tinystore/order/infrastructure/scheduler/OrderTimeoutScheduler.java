@@ -4,6 +4,7 @@ import com.github.spud.tinystore.order.application.command.CancelTradeCommand;
 import com.github.spud.tinystore.order.application.service.TradeApplicationService;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.TradeEntity;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.TradeJpaRepository;
+import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.PaymentIntentJpaRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.Optional;
 
 /**
  * 订单超时调度器（支付超时关闭、自动收货等）
@@ -38,6 +40,12 @@ public class OrderTimeoutScheduler {
     @Autowired
     private com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.ShopOrderJpaRepository shopOrderJpaRepository;
 
+    @Autowired
+    private PaymentIntentJpaRepository paymentIntentJpaRepository;
+
+    @Autowired
+    private com.github.spud.tinystore.infrastructure.rpc.payment.PaymentClient paymentClient;
+
     /**
      * 定时检查支付超时订单并关闭
      * 默认每 1 分钟扫描一次，超时阈值为 900 秒（15 分钟）
@@ -59,6 +67,21 @@ public class OrderTimeoutScheduler {
 
             for (TradeEntity trade : expiredTrades) {
                 try {
+                    // 先调用 pay-service 关闭支付单（幂等操作）
+                    try {
+                        var paymentIntent = paymentIntentJpaRepository.findByTradeId(trade.getTradeId());
+                        if (paymentIntent.isPresent()) {
+                            String paymentIntentId = paymentIntent.get().getPaymentId();
+                            paymentClient.closePayOrder(paymentIntentId);
+                            log.info("Closed payment order in pay-service: paymentIntentId={}, tradeId={}", 
+                                paymentIntentId, trade.getTradeId());
+                        }
+                    } catch (Exception payCloseEx) {
+                        log.warn("Failed to close payment order in pay-service (will continue order cancellation): tradeId={}", 
+                            trade.getTradeId(), payCloseEx);
+                    }
+
+                    // 再取消订单侧交易
                     CancelTradeCommand command = CancelTradeCommand.builder()
                         .tradeId(trade.getTradeId())
                         .reason("Payment timeout")

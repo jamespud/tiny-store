@@ -5,6 +5,7 @@ import com.github.spud.tinystore.order.application.command.CreateTradeCommand;
 import com.github.spud.tinystore.order.application.command.CancelTradeCommand;
 import com.github.spud.tinystore.order.application.command.PaymentSucceededCommand;
 import com.github.spud.tinystore.order.application.service.TradeApplicationService;
+import com.github.spud.tinystore.order.application.service.PaymentApplicationService;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.TradeJpaRepository;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.ShopOrderJpaRepository;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.OrderLineJpaRepository;
@@ -31,6 +32,9 @@ public class TradeController {
 
     @Autowired
     private TradeApplicationService tradeApplicationService;
+
+    @Autowired
+    private PaymentApplicationService paymentApplicationService;
 
     @Autowired
     private TradeJpaRepository tradeJpaRepository;
@@ -272,7 +276,11 @@ public class TradeController {
         @RequestHeader("Idempotency-Key") String idempotencyKey) {
 
         try {
-            String paymentId = (String) request.get("paymentId");
+            // 兼容旧字段 paymentId 与新字段 paymentIntentId
+            String paymentId = request.containsKey("paymentIntentId") 
+                ? (String) request.get("paymentIntentId")
+                : (String) request.get("paymentId");
+                
             Long amountCents = ((Number) request.get("amountCents")).longValue();
 
             PaymentSucceededCommand command = PaymentSucceededCommand.builder()
@@ -292,6 +300,54 @@ public class TradeController {
         } catch (Exception e) {
             log.error("Payment callback failed: tradeId={}", tradeId, e);
             return buildErrorResponse(500, "Payment callback failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * POST /order/trades/{tradeId}/refund/callback - 退款结果通知（支付域回调）
+     */
+    @PostMapping("/{tradeId}/refund/callback")
+    public ResponseEntity<Map<String, Object>> refundCallback(
+        @PathVariable String tradeId,
+        @RequestBody Map<String, Object> request,
+        @RequestHeader("Idempotency-Key") String idempotencyKey) {
+
+        try {
+            String refundId = (String) request.get("refundId");
+            String refundStatus = (String) request.get("refundStatus");  // SUCCESS/FAIL/PROCESSING
+            Long refundAmountCents = ((Number) request.get("refundAmountCents")).longValue();
+            
+            if (refundId == null || refundStatus == null) {
+                return buildErrorResponse(400, "Missing required fields: refundId or refundStatus");
+            }
+
+            // 仅 SUCCESS 状态才触发业务收尾
+            if ("SUCCESS".equals(refundStatus)) {
+                String reason = (String) request.getOrDefault("reason", "Refund succeeded");
+                paymentApplicationService.processRefund(
+                    idempotencyKey, 
+                    tradeId, 
+                    refundId, 
+                    refundAmountCents, 
+                    reason, 
+                    (String) request.getOrDefault("traceId", UUID.randomUUID().toString())
+                );
+                
+                log.info("Refund callback SUCCESS processed: tradeId={}, refundId={}", tradeId, refundId);
+            } else {
+                // FAIL/PROCESSING 状态记录日志，允许后续补偿
+                log.warn("Refund callback non-SUCCESS status: tradeId={}, refundId={}, status={}", 
+                    tradeId, refundId, refundStatus);
+            }
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", 0);
+            response.put("msg", "Refund callback received");
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            log.error("Refund callback failed: tradeId={}", tradeId, e);
+            return buildErrorResponse(500, "Refund callback failed: " + e.getMessage());
         }
     }
 

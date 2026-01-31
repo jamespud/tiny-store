@@ -201,10 +201,17 @@ public class TradeApplicationService {
 
             // 5. 生成 PaymentIntent
             String paymentId = UUID.randomUUID().toString();
+            
+            // 计算支付超时时间（默认15分钟）
+            LocalDateTime expireAt = LocalDateTime.now().plusSeconds(900);
+            
             PaymentIntentEntity paymentIntent = PaymentIntentEntity.builder()
                 .paymentId(paymentId)
                 .tradeId(trade.getTradeId())
                 .amountCents(trade.getPayableAmountCents())
+                .buyerId(trade.getBuyerId())  // 新增：买家ID
+                .payChannel("DEFAULT")  // 新增：默认支付渠道（可由前端传入）
+                .expireAt(expireAt)  // 新增：支付超时时间
                 .status("CREATED")
                 .createdAt(LocalDateTime.now())
                 .build();
@@ -255,9 +262,13 @@ public class TradeApplicationService {
                 .occurredAt(LocalDateTime.now())
                 .traceId(command.getTraceId())
                 .payloadJson(objectMapper.writeValueAsString(Map.of(
-                    "paymentId", paymentId,
+                    "paymentId", paymentId,  // 保留旧字段名兼容
+                    "paymentIntentId", paymentId,  // 新增：明确语义
                     "tradeId", trade.getTradeId(),
-                    "amountCents", trade.getPayableAmountCents()
+                    "amountCents", trade.getPayableAmountCents(),
+                    "buyerId", trade.getBuyerId(),  // 新增：买家ID
+                    "payChannel", paymentIntent.getPayChannel(),  // 新增：支付渠道
+                    "expireAt", expireAt.toString()  // 新增：支付超时时间
                 )))
                 .build();
             outboxEventService.saveEvent(paymentIntentEvent);
