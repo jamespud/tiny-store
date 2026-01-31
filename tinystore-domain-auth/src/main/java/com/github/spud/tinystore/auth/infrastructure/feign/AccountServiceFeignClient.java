@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 public interface AccountServiceFeignClient {
 
   @GetMapping("/api/account/users/{userId}")
-  UserCoreDto getUserById(@PathVariable("userId") Long userId);
+  UserCoreDto getUserById(@PathVariable("userId") String userId);
 
   @GetMapping("/api/account/users/phone/{phone}")
   UserCoreDto getUserByPhone(@PathVariable("phone") String phone);
@@ -26,7 +26,7 @@ public interface AccountServiceFeignClient {
 
   // DTO类
   record UserCoreDto(
-    Long userId,
+    String userId,
     String account,
     String nickname,
     String avatarUrl,
@@ -42,7 +42,7 @@ public interface AccountServiceFeignClient {
   }
 
   record CredentialVerifyResponse(
-    Long userId,
+    String userId,
     String phone,
     String nickname,
     String avatarUrl,

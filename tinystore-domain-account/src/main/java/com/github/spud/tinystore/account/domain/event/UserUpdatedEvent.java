@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @ToString
 public class UserUpdatedEvent {
-    private final Long userId;
+    private final String userId;
     private final String nickname;
     private final String avatarUrl;
     private final String extJson;

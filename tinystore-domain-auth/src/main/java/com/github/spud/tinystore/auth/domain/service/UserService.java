@@ -35,14 +35,8 @@ public class UserService implements UserDetailsService {
   }
 
   public Optional<MallUser> findById(String id) {
-    try {
-      Long userId = Long.parseLong(id);
-      AccountServiceFeignClient.UserCoreDto dto = accountServiceFeignClient.getUserById(userId);
-      return dto != null ? Optional.of(convertToMallUser(dto)) : Optional.empty();
-    } catch (NumberFormatException e) {
-      log.error("Invalid user ID format: {}", id, e);
-      return Optional.empty();
-    }
+    AccountServiceFeignClient.UserCoreDto dto = accountServiceFeignClient.getUserById(id);
+    return dto != null ? Optional.of(convertToMallUser(dto)) : Optional.empty();
   }
 
   public long incrementRtVersion(String id) {
@@ -60,7 +54,7 @@ public class UserService implements UserDetailsService {
   private MallUser convertToMallUser(AccountServiceFeignClient.UserCoreDto userCoreDto) {
     long rtVersion = userCoreDto.credentialVersion() == null ? 1L : userCoreDto.credentialVersion();
     return MallUser.restore(
-      UserId.of(String.valueOf(userCoreDto.userId())),
+      UserId.of(userCoreDto.userId()),
       PhoneNumber.of(userCoreDto.account()),
       userCoreDto.nickname(),
       userCoreDto.avatarUrl(),

@@ -20,7 +20,7 @@ public class UserQueryController {
     private final UserAccountApplicationService userAccountApplicationService;
 
     @GetMapping("/{userId}")
-    public ResponseEntity<UserView> getUserById(@PathVariable Long userId) {
+    public ResponseEntity<UserView> getUserById(@PathVariable String userId) {
         Optional<UserCore> user = userAccountApplicationService.getUserById(userId);
         return user.map(UserView::from).map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
