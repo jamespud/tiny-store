@@ -67,7 +67,7 @@ class StockAppServiceIT {
 
 		StockPreOccupyRequest req = new StockPreOccupyRequest();
 		req.setTenantId("T1");
-		req.setOrderNo("O1");
+		req.setTradeId("O1");
 		req.setExpiresAtEpochMs(Instant.now().plusSeconds(600).toEpochMilli());
 		StockPreOccupyRequest.Line l = new StockPreOccupyRequest.Line();
 		l.setSkuId("SKU1");
@@ -101,7 +101,7 @@ class StockAppServiceIT {
 			.setQuantity(4)
 			.setStatus(StockAppService.STATUS_RESERVED)
 			.setExpireAt(OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1))
-			.setOrderNo("O2")
+			.setTradeId("O2")
 			.setOperationId(UUID.randomUUID().toString()));
 
 		int expired = stockAppService.expireReservations();
@@ -126,7 +126,7 @@ class StockAppServiceIT {
 
 		StockRestockRequest req = new StockRestockRequest();
 		req.setTenantId("T1");
-		req.setOrderNo("O3");
+		req.setTradeId("O3");
 		req.setRefundId("R1");
 		StockRestockRequest.Line i1 = new StockRestockRequest.Line();
 		i1.setSkuId("SKU1");

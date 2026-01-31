@@ -14,7 +14,7 @@ import lombok.NoArgsConstructor;
 @Builder
 public class PromotionCommitRequest {
     private String quoteId;
-    private String orderNo;
+    private String tradeId;
     private String inputHash;
     private String payNo;
     private Long paidAt;

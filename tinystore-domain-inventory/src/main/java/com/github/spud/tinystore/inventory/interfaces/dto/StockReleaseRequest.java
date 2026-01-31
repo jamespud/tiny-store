@@ -13,7 +13,7 @@ public class StockReleaseRequest {
 	private String tenantId;
 
 	@NotBlank
-	private String orderNo;
+	private String tradeId;
 
 	@NotBlank
 	private String reason;

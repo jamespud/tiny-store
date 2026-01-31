@@ -13,7 +13,7 @@ public class UserCoupon {
 	private UserCouponStatus useStatus;
 	private String lockId;
 	private OffsetDateTime lockExpireTime;
-	private String usedOrderNo;
+	private String usedTradeId;
 	private OffsetDateTime usedTime;
 
 	public UUID getId() {
@@ -80,12 +80,12 @@ public class UserCoupon {
 		this.lockExpireTime = lockExpireTime;
 	}
 
-	public String getUsedOrderNo() {
-		return usedOrderNo;
+	public String getUsedTradeId() {
+		return usedTradeId;
 	}
 
-	public void setUsedOrderNo(String usedOrderNo) {
-		this.usedOrderNo = usedOrderNo;
+	public void setUsedTradeId(String usedTradeId) {
+		this.usedTradeId = usedTradeId;
 	}
 
 	public OffsetDateTime getUsedTime() {

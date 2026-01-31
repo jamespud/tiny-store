@@ -114,7 +114,7 @@ public class PaymentApplicationService {
                 } else {
                     PromotionReleaseRequest releaseRequest = PromotionReleaseRequest.builder()
                         .quoteId(trade.getPromotionQuoteId())
-                        .orderNo(trade.getTradeId())
+                        .tradeId(trade.getTradeId())
                         .reason(reason)
                         .build();
                     promotionClient.release(idempotencyKey, releaseRequest);

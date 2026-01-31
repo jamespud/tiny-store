@@ -8,7 +8,7 @@ public class CheckoutCommitRequest {
 	private String quoteId;
 
 	@NotBlank
-	private String orderNo;
+	private String tradeId;
 
 	@NotBlank
 	private String inputHash;
@@ -25,12 +25,12 @@ public class CheckoutCommitRequest {
 		this.quoteId = quoteId;
 	}
 
-	public String getOrderNo() {
-		return orderNo;
+	public String getTradeId() {
+		return tradeId;
 	}
 
-	public void setOrderNo(String orderNo) {
-		this.orderNo = orderNo;
+	public void setTradeId(String tradeId) {
+		this.tradeId = tradeId;
 	}
 
 	public String getInputHash() {

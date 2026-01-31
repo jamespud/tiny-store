@@ -24,8 +24,8 @@ public interface JpaCheckoutQuoteRepository extends JpaRepository<CheckoutQuoteE
 		@Param("now") LocalDateTime now);
 
 	@Modifying
-	@Query("UPDATE CheckoutQuoteEntity q SET q.status = 'COMMITTED', q.orderNo = :orderNo, q.updatedAt = :now " +
+	@Query("UPDATE CheckoutQuoteEntity q SET q.status = 'COMMITTED', q.tradeId = :tradeId, q.updatedAt = :now " +
 		"WHERE q.id = :id AND q.status = 'QUOTED'")
-	int markCommitted(@Param("id") UUID id, @Param("orderNo") String orderNo, @Param("now") LocalDateTime now);
+	int markCommitted(@Param("id") UUID id, @Param("tradeId") String tradeId, @Param("now") LocalDateTime now);
 }
 

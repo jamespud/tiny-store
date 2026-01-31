@@ -13,7 +13,7 @@ public class StockCommitRequest {
 	private String tenantId;
 
 	@NotBlank
-	private String orderNo;
+	private String tradeId;
 
 	private String payNo;
 

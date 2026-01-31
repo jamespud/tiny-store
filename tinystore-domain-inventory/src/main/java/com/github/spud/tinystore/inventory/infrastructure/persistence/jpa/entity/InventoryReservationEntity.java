@@ -36,8 +36,8 @@ public class InventoryReservationEntity {
 	@Column(name = "expire_at", nullable = false)
 	private OffsetDateTime expireAt;
 
-	@Column(name = "order_no", nullable = false, length = 64)
-	private String orderNo;
+	@Column(name = "trade_id", nullable = false, length = 64)
+	private String tradeId;
 
 	@Column(name = "operation_id", nullable = false, length = 128)
 	private String operationId;

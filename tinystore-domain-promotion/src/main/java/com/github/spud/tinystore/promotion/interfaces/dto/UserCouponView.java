@@ -7,7 +7,7 @@ public class UserCouponView {
 	private String couponNo;
 	private String useStatus;
 	private Long receiveAtEpochMs;
-	private String usedOrderNo;
+	private String usedTradeId;
 	private Long usedAtEpochMs;
 
 	public String getUserCouponId() {
@@ -50,12 +50,12 @@ public class UserCouponView {
 		this.receiveAtEpochMs = receiveAtEpochMs;
 	}
 
-	public String getUsedOrderNo() {
-		return usedOrderNo;
+	public String getUsedTradeId() {
+		return usedTradeId;
 	}
 
-	public void setUsedOrderNo(String usedOrderNo) {
-		this.usedOrderNo = usedOrderNo;
+	public void setUsedTradeId(String usedTradeId) {
+		this.usedTradeId = usedTradeId;
 	}
 
 	public Long getUsedAtEpochMs() {

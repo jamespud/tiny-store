@@ -151,7 +151,7 @@ public class TradeApplicationService {
                 try {
                     promotionClient.release(idempotencyKey, PromotionReleaseRequest.builder()
                         .quoteId(trade.getPromotionQuoteId())
-                        .orderNo(trade.getTradeId())
+                        .tradeId(trade.getTradeId())
                         .reason("INVENTORY_PREOCCUPY_FAILED")
                         .build());
                 } catch (Exception releaseE) {
@@ -183,7 +183,7 @@ public class TradeApplicationService {
             // 4. promotion commit（现在 trade 已落库且有 inventoryReservationId，可以 commit 了）
             PromotionCommitRequest promotionCommitRequest = PromotionCommitRequest.builder()
                 .quoteId(trade.getPromotionQuoteId())
-                .orderNo(trade.getTradeId())
+                .tradeId(trade.getTradeId())
                 .inputHash(trade.getPromotionInputHash())
                 .build();
             try {
@@ -435,7 +435,7 @@ public class TradeApplicationService {
                 } else {
                     PromotionReleaseRequest promotionReleaseRequest = PromotionReleaseRequest.builder()
                         .quoteId(trade.getPromotionQuoteId())
-                        .orderNo(trade.getTradeId())
+                        .tradeId(trade.getTradeId())
                         .reason(command.getReason())
                         .build();
                     promotionClient.release(idempotencyKey, promotionReleaseRequest);
@@ -532,7 +532,7 @@ public class TradeApplicationService {
                 } else {
                     PromotionCommitRequest promotionCommitRequest = PromotionCommitRequest.builder()
                         .quoteId(trade.getPromotionQuoteId())
-                        .orderNo(trade.getTradeId())
+                        .tradeId(trade.getTradeId())
                         .inputHash(trade.getPromotionInputHash())
                         .payNo(command.getPaymentId())
                         .paidAt(System.currentTimeMillis())

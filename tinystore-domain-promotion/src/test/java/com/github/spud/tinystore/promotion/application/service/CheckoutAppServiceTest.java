@@ -221,7 +221,7 @@ class CheckoutAppServiceTest {
 
 		CheckoutCommitRequest commitReq = new CheckoutCommitRequest();
 		commitReq.setQuoteId(quoteId.toString());
-		commitReq.setOrderNo("O1");
+		commitReq.setTradeId("O1");
 		commitReq.setInputHash("IH");
 
 		CheckoutCommitResponse resp = svc.commit("c1", commitReq);

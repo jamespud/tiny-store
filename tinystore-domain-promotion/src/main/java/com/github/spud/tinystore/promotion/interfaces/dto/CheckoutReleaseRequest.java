@@ -7,7 +7,7 @@ public class CheckoutReleaseRequest {
 	@NotBlank
 	private String quoteId;
 
-	private String orderNo;
+	private String tradeId;
 
 	private String reason;
 
@@ -19,12 +19,12 @@ public class CheckoutReleaseRequest {
 		this.quoteId = quoteId;
 	}
 
-	public String getOrderNo() {
-		return orderNo;
+	public String getTradeId() {
+		return tradeId;
 	}
 
-	public void setOrderNo(String orderNo) {
-		this.orderNo = orderNo;
+	public void setTradeId(String tradeId) {
+		this.tradeId = tradeId;
 	}
 
 	public String getReason() {
