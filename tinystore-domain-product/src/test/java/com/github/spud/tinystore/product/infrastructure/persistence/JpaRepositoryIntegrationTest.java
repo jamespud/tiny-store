@@ -12,8 +12,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * 
  * Tests:
  * 1. Flyway migrations execute successfully
- * 2. Unique constraints enforced (uk_product_spec, uk_tenant_rule_code)
- * 3. Multi-tenant isolation (queries with wrong tenantId return empty)
+ * 2. Unique constraints enforced (uk_product_spec, uk_shop_rule_code)
+ * 3. Multi-shop isolation (queries with wrong shopId return empty)
  * 4. Optimistic locking (version conflicts)
  * 5. JSONB storage and retrieval (pricing rule content)
  * 
@@ -51,12 +51,12 @@ public class JpaRepositoryIntegrationTest {
     }
     
     /**
-     * Test multi-tenant isolation in queries
+     * Test multi-shop isolation in queries
      */
     @Test
-    public void multiTenantIsolationEnforced() {
-        // TODO: Insert product for tenant A
-        // Query with tenant B identifier
+    public void multiShopIdIsolationEnforced() {
+        // TODO: Insert product for shop A
+        // Query with shop B identifier
         // Verify product not returned
         org.junit.jupiter.api.Assertions.assertTrue(true, "Placeholder test");
     }

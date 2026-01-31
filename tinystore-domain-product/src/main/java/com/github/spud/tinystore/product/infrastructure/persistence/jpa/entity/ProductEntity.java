@@ -20,7 +20,7 @@ import lombok.Data;
  * reference - version: Optimistic locking version - createdAt: Creation timestamp - updatedAt: Last
  * update timestamp
  * <p>
- * Indexes: - idx_tenant_category_status: (tenant_id, category_id, status)
+ * Indexes: - idx_shop_category_status: (shop_id, category_id, status)
  */
 @Entity
 @Table(name = "product")

@@ -35,7 +35,7 @@ public class OutboxServiceBridge implements DomainEventPublisher {
 	@Override
 	public void publish(DomainEvent event) {
 		// TODO: Implement outbox publishing:
-		// 1. Extract event metadata (type, aggregate ID, tenant)
+		// 1. Extract event metadata (type, aggregate ID, shop)
 		// 2. Serialize event payload to JSON
 		// 3. Create OutboxEntity
 		// 4. Save to outbox table

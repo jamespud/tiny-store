@@ -11,9 +11,9 @@ import org.springframework.stereotype.Repository;
 /**
  * JpaSkuRepository - Spring Data JPA repository for SkuEntity
  * <p>
- * Query methods must always include tenant_id condition for multi-tenancy isolation
+ * Query methods must always include shop_id condition for multi-tenancy isolation
  * <p>
- * Derived query methods: - findByShopIdAndId: Find SKU by tenant and ID -
+ * Derived query methods: - findByShopIdAndId: Find SKU by shop and ID -
  * findByShopIdAndProductId: Find all SKUs for a product -
  * findByShopIdAndProductIdAndSpecCombination: Find SKU by unique spec combination
  * <p>
@@ -24,7 +24,7 @@ public interface JpaSkuRepository extends JpaRepository<SkuEntity, Long>,
 	JpaSpecificationExecutor<SkuEntity> {
 
 	/**
-	 * Find SKU by tenant ID and entity ID
+	 * Find SKU by shop ID and entity ID
 	 *
 	 * @param shopId Shop identifier
 	 * @param id       Entity primary key
@@ -33,7 +33,7 @@ public interface JpaSkuRepository extends JpaRepository<SkuEntity, Long>,
 	Optional<SkuEntity> findByShopIdAndId(String shopId, Long id);
 
 	/**
-	 * Find all SKUs for a product within tenant
+	 * Find all SKUs for a product within shop
 	 *
 	 * @param shopId  Shop identifier
 	 * @param productId Product identifier

@@ -32,7 +32,7 @@ public class SkuService {
 	@CacheEvict(value = "skus", allEntries = true)
 	public Sku createSku(Sku sku) {
 		String shopId = shopContext.getShopId();
-		log.info("Creating SKU: {} for product: {} tenant: {}", sku.getSkuId(), sku.getProductId(),
+		log.info("Creating SKU: {} for product: {} shop: {}", sku.getSkuId(), sku.getProductId(),
 			shopId);
 
 		// Validate product exists
@@ -48,7 +48,7 @@ public class SkuService {
 	@CacheEvict(value = "skus", key = "#skuId.value")
 	public Sku updateSku(SkuId skuId, Sku updatedSku) {
 		String shopId = shopContext.getShopId();
-		log.info("Updating SKU: {} for tenant: {}", skuId, shopId);
+		log.info("Updating SKU: {} for shop: {}", skuId, shopId);
 
 		Optional<Sku> existing = skuRepository.findById(skuId);
 		if (existing.isEmpty()) {
@@ -70,7 +70,7 @@ public class SkuService {
 	@Cacheable(value = "skus", key = "#skuId.value")
 	public Optional<Sku> getSku(SkuId skuId) {
 		String shopId = shopContext.getShopId();
-		log.debug("Getting SKU: {} for tenant: {}", skuId, shopId);
+		log.debug("Getting SKU: {} for shop: {}", skuId, shopId);
 
 		return skuRepository.findById(skuId);
 	}
@@ -81,7 +81,7 @@ public class SkuService {
 	@Cacheable(value = "product-skus", key = "#productId.value")
 	public List<Sku> getSkusByProduct(ProductId productId) {
 		String shopId = shopContext.getShopId();
-		log.debug("Getting SKUs for product: {} tenant: {}", productId, shopId);
+		log.debug("Getting SKUs for product: {} shop: {}", productId, shopId);
 
 		return skuRepository.findByProductId(productId);
 	}
@@ -93,7 +93,7 @@ public class SkuService {
 	@CacheEvict(value = {"skus", "product-skus"}, allEntries = true)
 	public void disableSku(SkuId skuId) {
 		String shopId = shopContext.getShopId();
-		log.info("Disabling SKU: {} for tenant: {}", skuId, shopId);
+		log.info("Disabling SKU: {} for shop: {}", skuId, shopId);
 
 		Optional<Sku> existing = skuRepository.findById(skuId);
 		if (existing.isEmpty()) {
@@ -113,7 +113,7 @@ public class SkuService {
 	@CacheEvict(value = {"skus", "product-skus"}, allEntries = true)
 	public void deleteSku(SkuId skuId) {
 		String shopId = shopContext.getShopId();
-		log.info("Deleting SKU: {} for tenant: {}", skuId, shopId);
+		log.info("Deleting SKU: {} for shop: {}", skuId, shopId);
 
 		skuRepository.delete(skuId);
 	}

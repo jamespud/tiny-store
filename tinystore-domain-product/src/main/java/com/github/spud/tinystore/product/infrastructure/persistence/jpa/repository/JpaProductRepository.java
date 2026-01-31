@@ -10,21 +10,21 @@ import org.springframework.stereotype.Repository;
 /**
  * JpaProductRepository - Spring Data JPA repository for ProductEntity
  * <p>
- * Query methods must always include tenant_id condition for multi-tenancy isolation Use
- * JpaSpecificationExecutor for complex queries with tenant predicate injection
+ * Query methods must always include shop_id condition for multi-tenancy isolation Use
+ * JpaSpecificationExecutor for complex queries with shop predicate injection
  * <p>
- * Derived query methods: - findByShopIdAndId: Find product by tenant and ID -
- * findByShopIdAndCategoryId: Find products by tenant and category - findByShopIdAndStatus: Find
- * products by tenant and status
+ * Derived query methods: - findByShopIdAndId: Find product by shop and ID -
+ * findByShopIdAndCategoryId: Find products by shop and category - findByShopIdAndStatus: Find
+ * products by shop and status
  * <p>
- * Complex queries should use Specification with BaseRepository tenant injection
+ * Complex queries should use Specification with BaseRepository shop injection
  */
 @Repository
 public interface JpaProductRepository extends JpaRepository<ProductEntity, Long>,
 	JpaSpecificationExecutor<ProductEntity> {
 
 	/**
-	 * Find product by tenant ID and entity ID
+	 * Find product by shop ID and entity ID
 	 *
 	 * @param shopId Shop identifier
 	 * @param id       Entity primary key
@@ -33,7 +33,7 @@ public interface JpaProductRepository extends JpaRepository<ProductEntity, Long>
 	Optional<ProductEntity> findByShopIdAndId(String shopId, Long id);
 
 	/**
-	 * Find product by tenant ID and product ID (domain ID string)
+	 * Find product by shop ID and product ID (domain ID string)
 	 *
 	 * @param productId Product domain identifier (string)
 	 * @param shopId  Shop identifier
@@ -42,7 +42,7 @@ public interface JpaProductRepository extends JpaRepository<ProductEntity, Long>
 	Optional<ProductEntity> findByProductIdAndShopId(String productId, String shopId);
 
 	/**
-	 * Find all products by tenant and category
+	 * Find all products by shop and category
 	 *
 	 * @param shopId   Shop identifier
 	 * @param categoryId Category identifier
@@ -51,7 +51,7 @@ public interface JpaProductRepository extends JpaRepository<ProductEntity, Long>
 	List<ProductEntity> findByShopIdAndCategoryId(String shopId, String categoryId);
 
 	/**
-	 * Find all products by tenant and status
+	 * Find all products by shop and status
 	 *
 	 * @param shopId Shop identifier
 	 * @param status   Product status

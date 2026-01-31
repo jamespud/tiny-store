@@ -45,8 +45,8 @@ public class GlobalExceptionHandler {
 	}
 
 	/**
-	 * Handle IllegalStateException - Invalid operation for current state Includes tenant-related
-	 * errors (missing tenant context) Returns 400 Bad Request
+	 * Handle IllegalStateException - Invalid operation for current state Includes shop-related
+	 * errors (missing shop context) Returns 400 Bad Request
 	 */
 	@ExceptionHandler(IllegalStateException.class)
 	public ResponseEntity<Map<String, Object>> handleIllegalState(IllegalStateException e) {
