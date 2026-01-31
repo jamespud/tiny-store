@@ -4,7 +4,7 @@ import com.github.spud.tinystore.product.domain.model.aggregate.Product;
 import com.github.spud.tinystore.product.domain.model.valueobject.ProductId;
 import com.github.spud.tinystore.product.domain.model.valueobject.ProductStatus;
 import com.github.spud.tinystore.product.domain.repository.ProductRepository;
-import com.github.spud.tinystore.product.infrastructure.persistence.jpa.config.TenantRepositoryConfig;
+import com.github.spud.tinystore.product.infrastructure.persistence.jpa.config.ShopRepositoryConfig;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ProductService {
 
 	private final ProductRepository productRepository;
-	private final TenantRepositoryConfig.TenantContext tenantContext;
+	private final ShopRepositoryConfig.ShopContext shopContext;
 
 	/**
 	 * Create a new product (Draft status)
@@ -32,8 +32,8 @@ public class ProductService {
 	@Transactional
 	@CacheEvict(value = "products", allEntries = true)
 	public Product createProduct(Product product) {
-		String tenantId = tenantContext.getTenantId();
-		log.info("Creating product for tenant: {}, productId: {}", tenantId, product.getProductId());
+		String shopId = shopContext.getShopId();
+		log.info("Creating product for tenant: {}, productId: {}", shopId, product.getProductId());
 
 		return productRepository.save(product);
 	}
@@ -44,8 +44,8 @@ public class ProductService {
 	@Transactional
 	@CacheEvict(value = "products", key = "#productId.id")
 	public Product updateProduct(ProductId productId, Product updatedProduct) {
-		String tenantId = tenantContext.getTenantId();
-		log.info("Updating product: {} for tenant: {}", productId, tenantId);
+		String shopId = shopContext.getShopId();
+		log.info("Updating product: {} for tenant: {}", productId, shopId);
 
 		Optional<Product> existing = productRepository.findById(productId);
 		if (existing.isEmpty()) {
@@ -72,8 +72,8 @@ public class ProductService {
 	@Transactional
 	@CacheEvict(value = "products", key = "#productId.id")
 	public Product publishProduct(ProductId productId) {
-		String tenantId = tenantContext.getTenantId();
-		log.info("Publishing product: {} for tenant: {}", productId, tenantId);
+		String shopId = shopContext.getShopId();
+		log.info("Publishing product: {} for tenant: {}", productId, shopId);
 
 		Optional<Product> existing = productRepository.findById(productId);
 		if (existing.isEmpty()) {
@@ -93,8 +93,8 @@ public class ProductService {
 	@Transactional
 	@CacheEvict(value = "products", key = "#productId.id")
 	public void archiveProduct(ProductId productId) {
-		String tenantId = tenantContext.getTenantId();
-		log.info("Archiving product: {} for tenant: {}", productId, tenantId);
+		String shopId = shopContext.getShopId();
+		log.info("Archiving product: {} for tenant: {}", productId, shopId);
 
 		Optional<Product> existing = productRepository.findById(productId);
 		if (existing.isEmpty()) {
@@ -109,8 +109,8 @@ public class ProductService {
 	 */
 	@Cacheable(value = "products", key = "#productId.id")
 	public Optional<Product> getProduct(ProductId productId) {
-		String tenantId = tenantContext.getTenantId();
-		log.debug("Getting product: {} for tenant: {}", productId, tenantId);
+		String shopId = shopContext.getShopId();
+		log.debug("Getting product: {} for tenant: {}", productId, shopId);
 
 		return productRepository.findById(productId);
 	}
@@ -121,8 +121,8 @@ public class ProductService {
 	@Transactional
 	@CacheEvict(value = "products", key = "#productId.id")
 	public Product updateTags(ProductId productId, List<String> tags) {
-		String tenantId = tenantContext.getTenantId();
-		log.info("Updating tags for product: {} for tenant: {}", productId, tenantId);
+		String shopId = shopContext.getShopId();
+		log.info("Updating tags for product: {} for tenant: {}", productId, shopId);
 
 		Optional<Product> existing = productRepository.findById(productId);
 		if (existing.isEmpty()) {

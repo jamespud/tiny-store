@@ -22,16 +22,16 @@ public class SkuMapper {
 	 * Convert domain Sku to SkuEntity
 	 *
 	 * @param sku      Domain sku aggregate
-	 * @param tenantId Tenant identifier
+	 * @param shopId Shop identifier
 	 * @return SkuEntity for persistence
 	 */
-	public SkuEntity toEntity(Sku sku, String tenantId) {
+	public SkuEntity toEntity(Sku sku, String shopId) {
 		if (sku == null) {
 			return null;
 		}
 
 		SkuEntity entity = new SkuEntity();
-		entity.setTenantId(tenantId);
+		entity.setShopId(shopId);
 		entity.setProductId(sku.getProductId());
 		entity.setSkuId(sku.getSkuId());
 		entity.setBarCode(sku.getBarCode());

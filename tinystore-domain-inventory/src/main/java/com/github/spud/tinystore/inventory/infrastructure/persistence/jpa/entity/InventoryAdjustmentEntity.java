@@ -21,8 +21,8 @@ public class InventoryAdjustmentEntity {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 
-	@Column(name = "tenant_id", nullable = false, length = 100)
-	private String tenantId;
+	@Column(name = "shop_id", nullable = false, length = 100)
+	private String shopId;
 
 	@Column(name = "sku_id", nullable = false, length = 128)
 	private String skuId;

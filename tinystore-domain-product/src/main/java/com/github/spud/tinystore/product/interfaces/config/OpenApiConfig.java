@@ -33,7 +33,7 @@ import org.springframework.context.annotation.Configuration;
 			- Multi-tenant isolation with tenant-scoped data access
 			- Event-driven architecture with outbox pattern
 			
-			All endpoints require authentication via JWT Bearer token and tenant identification via X-Tenant-Id header.
+			All endpoints require authentication via JWT Bearer token and tenant identification via X-Shop-Id header.
 			""",
 		contact = @Contact(
 			name = "TinyStore Team",
@@ -79,7 +79,7 @@ import org.springframework.context.annotation.Configuration;
 		
 		Token claims should include:
 		- sub: User ID
-		- tenant_id: Tenant identifier
+		- shop_id: Shop identifier
 		- roles: User roles (MERCHANT_ADMIN, PLATFORM_ADMIN, etc.)
 		
 		Token expiration: 1 hour (configurable)

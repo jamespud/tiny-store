@@ -10,10 +10,10 @@ import org.springframework.data.repository.query.Param;
 
 public interface JpaInventoryStockRepository extends JpaRepository<InventoryStockEntity, Long> {
 
-	Optional<InventoryStockEntity> findByTenantIdAndSkuId(String tenantId, String skuId);
+	Optional<InventoryStockEntity> findByShopIdAndSkuId(String shopId, String skuId);
 
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	@Query("select s from InventoryStockEntity s where s.tenantId = :tenantId and s.skuId = :skuId")
-	Optional<InventoryStockEntity> findByTenantIdAndSkuIdForUpdate(@Param("tenantId") String tenantId, @Param("skuId") String skuId);
+	@Query("select s from InventoryStockEntity s where s.shopId = :shopId and s.skuId = :skuId")
+	Optional<InventoryStockEntity> findByShopIdAndSkuIdForUpdate(@Param("shopId") String shopId, @Param("skuId") String skuId);
 }
 

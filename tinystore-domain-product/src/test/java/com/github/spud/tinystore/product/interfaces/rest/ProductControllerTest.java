@@ -65,7 +65,7 @@ class ProductControllerTest {
         
         // When & Then
         mockMvc.perform(post("/api/products")
-				.header("X-Tenant-Id", "tenant-1")
+				.header("X-Shop-Id", "shop-1")
 				.header("Idempotency-Key", "idem-1")
                 .contentType(MediaType.APPLICATION_JSON)
 				.content("{\"name\":\"Test Product\",\"categoryId\":\"cat-1\"}"))
@@ -83,7 +83,7 @@ class ProductControllerTest {
     void createProduct_InvalidData_Returns400() throws Exception {
         // When & Then - Empty request body
         mockMvc.perform(post("/api/products")
-				.header("X-Tenant-Id", "tenant-1")
+				.header("X-Shop-Id", "shop-1")
 				.header("Idempotency-Key", "idem-1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{}"))
@@ -111,7 +111,7 @@ class ProductControllerTest {
         
         // When & Then
         mockMvc.perform(put("/api/products/{id}", productId)
-				.header("X-Tenant-Id", "tenant-1")
+				.header("X-Shop-Id", "shop-1")
 				.header("Idempotency-Key", "idem-1")
                 .contentType(MediaType.APPLICATION_JSON)
 				.content("{\"name\":\"Updated Product\",\"categoryId\":\"cat-1\"}"))
@@ -135,7 +135,7 @@ class ProductControllerTest {
         
         // When & Then
         mockMvc.perform(put("/api/products/{id}", productId)
-				.header("X-Tenant-Id", "tenant-1")
+				.header("X-Shop-Id", "shop-1")
 				.header("Idempotency-Key", "idem-1")
                 .contentType(MediaType.APPLICATION_JSON)
 				.content("{\"name\":\"Updated Product\",\"categoryId\":\"cat-1\"}"))
@@ -161,7 +161,7 @@ class ProductControllerTest {
         
         // When & Then
 		mockMvc.perform(post("/api/products/{id}/publish", productId)
-				.header("X-Tenant-Id", "tenant-1"))
+				.header("X-Shop-Id", "shop-1"))
             .andExpect(status().isOk())
 			.andExpect(jsonPath("$.id").value(productId));
         
@@ -176,7 +176,7 @@ class ProductControllerTest {
         
         // When & Then
 		mockMvc.perform(post("/api/products/{id}/archive", productId)
-				.header("X-Tenant-Id", "tenant-1"))
+				.header("X-Shop-Id", "shop-1"))
             .andExpect(status().isNoContent());
         
         verify(productService).archiveProduct(any(ProductId.class));
@@ -201,7 +201,7 @@ class ProductControllerTest {
         
         // When & Then
 		mockMvc.perform(get("/api/products/{id}", productId)
-				.header("X-Tenant-Id", "tenant-1"))
+				.header("X-Shop-Id", "shop-1"))
             .andExpect(status().isOk())
 			.andExpect(jsonPath("$.id").value(productId))
             .andExpect(jsonPath("$.name").value("Test Product"));
@@ -220,7 +220,7 @@ class ProductControllerTest {
         
         // When & Then
 		mockMvc.perform(get("/api/products/{id}", productId)
-				.header("X-Tenant-Id", "tenant-1"))
+				.header("X-Shop-Id", "shop-1"))
 			.andExpect(status().isNotFound());
     }
     
@@ -241,7 +241,7 @@ class ProductControllerTest {
         
         // When & Then
         mockMvc.perform(put("/api/products/{id}/tags", productId)
-				.header("X-Tenant-Id", "tenant-1")
+				.header("X-Shop-Id", "shop-1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"tags\":[\"tag1\",\"tag2\"]}"))
             .andExpect(status().isOk())

@@ -4,7 +4,7 @@ import com.github.spud.tinystore.product.domain.model.aggregate.Product;
 import com.github.spud.tinystore.product.domain.model.valueobject.ProductStatus;
 import com.github.spud.tinystore.product.domain.model.valueobject.ProductId;
 import com.github.spud.tinystore.product.infrastructure.persistence.jpa.adapter.ProductRepositoryAdapter;
-import com.github.spud.tinystore.product.infrastructure.persistence.jpa.config.TenantRepositoryConfig;
+import com.github.spud.tinystore.product.infrastructure.persistence.jpa.config.ShopRepositoryConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,7 +30,7 @@ class ProductServiceTest {
     private ProductRepositoryAdapter productRepository;
 
 	@Mock
-	private TenantRepositoryConfig.TenantContext tenantContext;
+	private ShopRepositoryConfig.ShopContext shopContext;
     
     @InjectMocks
     private ProductService productService;
@@ -42,7 +42,7 @@ class ProductServiceTest {
     void setUp() {
         testProduct = mock(Product.class);
 		testProductId = ProductId.of("prod-123");
-		when(tenantContext.getTenantId()).thenReturn("tenant-1");
+		when(shopContext.getShopId()).thenReturn("shop-1");
     }
     
     @Test
