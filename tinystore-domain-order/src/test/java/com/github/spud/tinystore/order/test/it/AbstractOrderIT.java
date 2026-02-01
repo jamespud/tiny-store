@@ -34,13 +34,13 @@ public abstract class AbstractOrderIT {
     protected static final AtomicBoolean SCHEDULING_ENABLED = new AtomicBoolean(false);
 
     @Container
-    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
+    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1")
         .withDatabaseName("tinystore_order_test")
         .withUsername("postgres")
         .withPassword("postgres");
 
     @Container
-    static final GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
+    static final GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7.4.0"))
         .withExposedPorts(6379)
         .waitingFor(Wait.forListeningPort());
 
