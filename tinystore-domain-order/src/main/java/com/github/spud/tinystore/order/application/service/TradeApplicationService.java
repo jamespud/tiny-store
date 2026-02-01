@@ -23,6 +23,7 @@ import com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventSe
 import com.github.spud.tinystore.order.infrastructure.idempotency.IdempotencyService;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.PaymentIntentEntity;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.PaymentIntentJpaRepository;
+import com.github.spud.tinystore.order.interfaces.dto.response.CreateTradeData;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -76,10 +77,10 @@ public class TradeApplicationService {
      *
      * @param idempotencyKey 幂等键
      * @param command 创建交易命令
-     * @return 返回 tradeId, payableAmountCents, paymentIntentId 等
+     * @return 返回 CreateTradeData（tradeId, payableAmountCents, paymentIntentId）
      */
     @Transactional
-    public Map<String, Object> createTrade(String idempotencyKey, CreateTradeCommand command) throws Exception {
+    public CreateTradeData createTrade(String idempotencyKey, CreateTradeCommand command) throws Exception {
         try {
             // 1. 幂等性检查与获取缓存
             String fingerprint = command.getTradeId() + ":" + command.getBuyerId();
@@ -87,7 +88,7 @@ public class TradeApplicationService {
                 String cachedResponse = idempotencyService.getCachedResponse("trade:create", idempotencyKey);
                 if (cachedResponse != null) {
                     log.info("Idempotent trade creation: returning cached response");
-                    return objectMapper.readValue(cachedResponse, Map.class);
+                    return objectMapper.readValue(cachedResponse, CreateTradeData.class);
                 }
                 throw new DomainConflictException("IDEMPOTENT_CONFLICT",
                     "Trade creation already in progress with this idempotency key");
@@ -364,10 +365,11 @@ public class TradeApplicationService {
             outboxEventService.saveEvent(paymentIntentEvent);
 
             // 7. 构建返回结果
-            Map<String, Object> result = new HashMap<>();
-            result.put("tradeId", trade.getTradeId());
-            result.put("payableAmountCents", trade.getPayableAmountCents());
-            result.put("paymentIntentId", paymentId);
+            CreateTradeData result = CreateTradeData.builder()
+                .tradeId(trade.getTradeId())
+                .payableAmountCents(trade.getPayableAmountCents())
+                .paymentIntentId(paymentId)
+                .build();
 
             // 缓存幂等响应
             idempotencyService.storeResponse("trade:create", idempotencyKey, 

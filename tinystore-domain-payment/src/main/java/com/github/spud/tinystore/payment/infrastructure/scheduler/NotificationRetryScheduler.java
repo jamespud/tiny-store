@@ -1,6 +1,8 @@
 package com.github.spud.tinystore.payment.infrastructure.scheduler;
 
 import com.github.spud.tinystore.infrastructure.rpc.order.OrderClient;
+import com.github.spud.tinystore.infrastructure.rpc.order.dto.request.OrderPaymentCallbackRequest;
+import com.github.spud.tinystore.infrastructure.rpc.order.dto.request.OrderRefundCallbackRequest;
 import com.github.spud.tinystore.payment.infrastructure.persistence.jpa.entity.PaymentOrderEntity;
 import com.github.spud.tinystore.payment.infrastructure.persistence.jpa.entity.RefundRecordEntity;
 import com.github.spud.tinystore.payment.infrastructure.persistence.jpa.repository.PaymentOrderJpaRepository;
@@ -71,14 +73,11 @@ public class NotificationRetryScheduler {
             for (PaymentOrderEntity paymentOrder : pendingNotifications) {
                 try {
                     // 构造通知请求
-                    Map<String, Object> request = new HashMap<>();
-                    request.put("paymentIntentId", paymentOrder.getPaymentIntentId());
-                    request.put("paymentId", paymentOrder.getPaymentIntentId()); // 兼容旧字段
-                    request.put("amountCents", paymentOrder.getAmountCents());
-                    if (paymentOrder.getThirdTradeNo() != null) {
-                        request.put("tradeNo", paymentOrder.getThirdTradeNo());
-                    }
-                    request.put("paidAt", paymentOrder.getPaidAt() != null ? paymentOrder.getPaidAt().toString() : null);
+                    OrderPaymentCallbackRequest request = OrderPaymentCallbackRequest.builder()
+                        .paymentIntentId(paymentOrder.getPaymentIntentId())
+                        .amountCents(paymentOrder.getAmountCents())
+                        .traceId(paymentOrder.getPaidAt() != null ? paymentOrder.getPaidAt().toString() : null)
+                        .build();
 
                     String idempotencyKey = "pay-retry-" + paymentOrder.getPaymentIntentId() + "-" + System.currentTimeMillis();
                     
@@ -131,14 +130,12 @@ public class NotificationRetryScheduler {
             for (RefundRecordEntity refundRecord : pendingNotifications) {
                 try {
                     // 构造通知请求
-                    Map<String, Object> request = new HashMap<>();
-                    request.put("refundId", refundRecord.getRefundId());
-                    request.put("refundStatus", "SUCCESS");
-                    request.put("refundAmountCents", refundRecord.getRefundAmountCents());
-                    request.put("refundAt", refundRecord.getRefundedAt() != null ? refundRecord.getRefundedAt().toString() : null);
-                    if (refundRecord.getThirdRefundNo() != null) {
-                        request.put("thirdRefundNo", refundRecord.getThirdRefundNo());
-                    }
+                    OrderRefundCallbackRequest request = OrderRefundCallbackRequest.builder()
+                        .refundId(refundRecord.getRefundId())
+                        .refundStatus("SUCCESS")
+                        .refundAmountCents(refundRecord.getRefundAmountCents())
+                        .traceId(refundRecord.getRefundedAt() != null ? refundRecord.getRefundedAt().toString() : null)
+                        .build();
 
                     String idempotencyKey = "refund-retry-" + refundRecord.getRefundId() + "-" + System.currentTimeMillis();
                     

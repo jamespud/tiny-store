@@ -4,6 +4,7 @@ import com.github.spud.tinystore.order.domain.model.FulfillmentPackage;
 import com.github.spud.tinystore.order.domain.repository.FulfillmentPackageRepository;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.FulfillmentPackageEntity;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.FulfillmentPackageJpaRepository;
+import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.PackageOrderRefJpaRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
@@ -25,6 +26,9 @@ public class FulfillmentPackageRepositoryImpl implements FulfillmentPackageRepos
     @Autowired
     private FulfillmentPackageJpaRepository fulfillmentPackageJpaRepository;
 
+    @Autowired
+    private PackageOrderRefJpaRepository packageOrderRefJpaRepository;
+
     @Override
     public FulfillmentPackage save(FulfillmentPackage fulfillmentPackage) {
         FulfillmentPackageEntity entity = toEntity(fulfillmentPackage);
@@ -41,6 +45,25 @@ public class FulfillmentPackageRepositoryImpl implements FulfillmentPackageRepos
     @Override
     public List<FulfillmentPackage> findByTradeId(String tradeId) {
         return fulfillmentPackageJpaRepository.findByTradeId(tradeId).stream()
+            .map(this::toDomain)
+            .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<FulfillmentPackage> findByOrderId(String orderId) {
+        // 通过包裹-订单关联表查询该订单的所有包裹ID
+        List<String> packageIds = packageOrderRefJpaRepository.findByOrderId(orderId).stream()
+            .map(ref -> ref.getPackageId())
+            .collect(Collectors.toList());
+        
+        // 批量查询包裹实体（使用 packageId 而非主键 ID）
+        if (packageIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return packageIds.stream()
+            .map(packageId -> fulfillmentPackageJpaRepository.findByPackageId(packageId))
+            .filter(Optional::isPresent)
+            .map(Optional::get)
             .map(this::toDomain)
             .collect(Collectors.toList());
     }
