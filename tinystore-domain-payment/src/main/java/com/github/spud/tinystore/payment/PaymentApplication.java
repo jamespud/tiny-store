@@ -7,7 +7,10 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * @author Spud
  * @date 2025/8/15
  */
-@SpringBootApplication(scanBasePackages = "com.github.spud.tinystore")
+@SpringBootApplication(scanBasePackages = {
+		"com.github.spud.tinystore.payment",
+		"com.github.spud.tinystore.infrastructure"
+})
 public class PaymentApplication {
 
 	public static void main(String[] args) {

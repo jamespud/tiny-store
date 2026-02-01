@@ -23,11 +23,13 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.core.Authentication;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = OtpController.class)
 @AutoConfigureMockMvc(addFilters = false)
+@ActiveProfiles("test")
 @DisplayName("OtpController Web层测试")
 class OtpControllerTest {
 

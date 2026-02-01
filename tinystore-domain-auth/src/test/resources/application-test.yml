@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: auth-service-test
+  
+  # 禁用 Spring Cloud Config 导入（测试环境不需要）
+  cloud:
+    config:
+      enabled: false
+      import-check:
+        enabled: false
+    nacos:
+      config:
+        enabled: false
+      discovery:
+        enabled: false
+  
+  # 空配置导入（防止 Spring Cloud 检查失败，但不实际导入任何内容）
+  config:
+    import: ""
+

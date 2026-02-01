@@ -3,11 +3,11 @@ package com.github.spud.tinystore.order.test.it;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -45,7 +45,8 @@ public abstract class AbstractOrderIT {
         .waitingFor(Wait.forListeningPort());
 
     @Container
-    static final KafkaContainer kafka = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.5.0"));
+    static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer("confluentinc/cp-kafka:8.1.1")
+        .withEnv("KAFKA_PROCESS_ROLES", "broker,controller");
 
     /**
      * 动态注入测试环境配置
@@ -102,7 +103,7 @@ public abstract class AbstractOrderIT {
         return redis;
     }
 
-    protected static KafkaContainer getKafka() {
+    protected static ConfluentKafkaContainer getKafka() {
         return kafka;
     }
 }

@@ -19,7 +19,7 @@ spring:
 
   flyway:
     enabled: true
-    locations: classpath:db/migration
+    locations: classpath:db/migration/inventory
     baseline-on-migrate: true
 
   data:

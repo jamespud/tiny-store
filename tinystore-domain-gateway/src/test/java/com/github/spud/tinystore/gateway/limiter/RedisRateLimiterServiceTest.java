@@ -10,6 +10,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.spud.tinystore.gateway.config.GatewayRoutesDefinition;
@@ -23,15 +29,26 @@ import static org.mockito.Mockito.when;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
+@Testcontainers(disabledWithoutDocker = true)
 @ExtendWith(MockitoExtension.class)
 class RedisRateLimiterServiceTest {
 
 	@Mock
 	private ReactiveStringRedisTemplate redisTemplate;
 
+	@Container
+	static final GenericContainer<?> redisContainer = new GenericContainer<>(DockerImageName.parse("redis:7.4.0"))
+		.withExposedPorts(6379);
+
 	private LocalRateLimiterService localRateLimiterService;
 	private RedisRateLimiterService redisRateLimiterService;
 	private GatewayRoutesDefinition.RateLimitPolicy policy;
+
+	@DynamicPropertySource
+	static void registerProps(DynamicPropertyRegistry registry) {
+		registry.add("spring.data.redis.host", redisContainer::getHost);
+		registry.add("spring.data.redis.port", () -> redisContainer.getMappedPort(6379).toString());
+	}
 
 	@BeforeEach
 	void setUp() {

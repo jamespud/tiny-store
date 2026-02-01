@@ -18,9 +18,11 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 import com.github.spud.tinystore.promotion.PromotionApplication;
 import com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.entity.CouponEntity;
@@ -33,27 +35,28 @@ import com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.reposi
 class UserCouponLockConcurrencyTest {
 
 	@Container
-	static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:15-alpine")
+	static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1")
 		.withDatabaseName("tinystore")
 		.withUsername("postgres")
 		.withPassword("postgres");
 
+	@Container
+	static final GenericContainer<?> redisContainer = new GenericContainer<>(DockerImageName.parse("redis:7.4.0"))
+		.withExposedPorts(6379);
+
 	@DynamicPropertySource
 	static void registerProps(DynamicPropertyRegistry registry) {
-		registry.add("spring.datasource.url", () -> POSTGRES.getJdbcUrl());
-		registry.add("spring.datasource.username", POSTGRES::getUsername);
-		registry.add("spring.datasource.password", POSTGRES::getPassword);
-		registry.add("spring.autoconfigure.exclude", () -> String.join(",",
-			"org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration",
-			"org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration",
-			"org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration",
-			"org.springframework.boot.autoconfigure.kafka.KafkaReactiveAutoConfiguration",
-			"org.springframework.boot.autoconfigure.kafka.KafkaStreamsAutoConfiguration"
-		));
+		registry.add("spring.datasource.url", () -> postgres.getJdbcUrl());
+		registry.add("spring.datasource.username", postgres::getUsername);
+		registry.add("spring.datasource.password", postgres::getPassword);
+
 		registry.add("spring.cloud.discovery.enabled", () -> "false");
 		registry.add("spring.flyway.enabled", () -> "true");
 		registry.add("spring.flyway.locations", () -> "classpath:db/migration/promotion");
 		registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
+
+		registry.add("spring.data.redis.host", redisContainer::getHost);
+		registry.add("spring.data.redis.port", () -> redisContainer.getMappedPort(6379).toString());
 	}
 
 	@Autowired
