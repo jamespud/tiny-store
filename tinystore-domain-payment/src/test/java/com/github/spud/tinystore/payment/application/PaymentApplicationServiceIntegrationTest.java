@@ -1,15 +1,21 @@
 package com.github.spud.tinystore.payment.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.spud.tinystore.infrastructure.rpc.order.OrderClient;
 import com.github.spud.tinystore.payment.infrastructure.persistence.jpa.entity.PaymentOrderEntity;
 import com.github.spud.tinystore.payment.infrastructure.persistence.jpa.repository.PaymentOrderJpaRepository;
+import com.github.spud.tinystore.payment.test.it.AbstractPaymentIT;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -23,20 +29,17 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @SpringBootTest
 @ActiveProfiles("test")
-class PaymentApplicationServiceIntegrationTest {
+class PaymentApplicationServiceIntegrationTest extends AbstractPaymentIT {
 
     @Autowired
     private PaymentApplicationService paymentApplicationService;
 
     @Autowired
     private PaymentOrderJpaRepository paymentOrderRepository;
-
-    @Autowired
-    private ObjectMapper objectMapper;
     
     // Mock OrderClient 避免实际网络调用
-    @MockBean
-    private com.github.spud.tinystore.infrastructure.rpc.order.OrderClient orderClient;
+    @MockitoBean
+    private OrderClient orderClient;
 
     /**
      * 测试：从 PAYMENT_INTENT_CREATED 事件创建支付单

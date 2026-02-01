@@ -100,6 +100,7 @@ public abstract class AbstractMallE2EIT extends AbstractOrderIT {
 
     private ConfigurableApplicationContext startOrderContext() {
         Map<String, Object> props = baseProps("tinystore_order");
+        props.put("spring.flyway.locations", "classpath:db/migration/order");
         props.put("order.feign.inventory-url", "http://localhost:" + getPort(inventoryContext));
         props.put("order.feign.promotion-url", "http://localhost:" + getPort(promotionContext));
         props.put("spring.task.scheduling.enabled", "false");
@@ -111,16 +112,19 @@ public abstract class AbstractMallE2EIT extends AbstractOrderIT {
 
     private ConfigurableApplicationContext startInventoryContext() {
         Map<String, Object> props = baseProps("tinystore_inventory");
+        props.put("spring.flyway.locations", "classpath:db/migration/inventory");
         return startContext(InventoryApplication.class, props);
     }
 
     private ConfigurableApplicationContext startPromotionContext() {
         Map<String, Object> props = baseProps("tinystore_promotion");
+        props.put("spring.flyway.locations", "classpath:db/migration/promotion");
         return startContext(PromotionApplication.class, props);
     }
 
     private ConfigurableApplicationContext startPaymentContext() {
         Map<String, Object> props = baseProps("tinystore_payment");
+        props.put("spring.flyway.locations", "classpath:db/migration/payment");
         props.put("feign.client.url.order", "http://localhost:" + getPort(orderContext));
         props.put("payment.kafka.topic.order-events", "tinystore.order.general");
         props.put("spring.task.scheduling.enabled", "false");

@@ -22,7 +22,7 @@ spring:
   # Flyway configuration
   flyway:
     enabled: true
-    locations: classpath:db/migration
+    locations: classpath:db/migration/product
     baseline-on-migrate: true
     
   # Kafka configuration

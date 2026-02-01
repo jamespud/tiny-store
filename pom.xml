@@ -85,6 +85,7 @@
 					<artifactId>maven-failsafe-plugin</artifactId>
 					<version>3.2.5</version>
 					<configuration>
+						<failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
 						<skipTests>false</skipTests>
 						<skipITs>${skipITs}</skipITs>
 						<argLine>${argLine} -Dapi.version=1.53</argLine>
@@ -147,9 +148,22 @@
 						</execution>
 					</executions>
 				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-compiler-plugin</artifactId>
+					<version>3.13.0</version>
+					<configuration>
+						<release>17</release>
+						<parameters>true</parameters>
+					</configuration>
+				</plugin>
 			</plugins>
 		</pluginManagement>
 		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
