@@ -15,4 +15,11 @@ public interface FulfillmentPackageRepository {
     Optional<FulfillmentPackage> findByPackageId(String packageId);
     
     List<FulfillmentPackage> findByTradeId(String tradeId);
+    
+    /**
+     * 查询订单的所有包裹
+     * @param orderId 订单ID
+     * @return 包裹列表
+     */
+    List<FulfillmentPackage> findByOrderId(String orderId);
 }

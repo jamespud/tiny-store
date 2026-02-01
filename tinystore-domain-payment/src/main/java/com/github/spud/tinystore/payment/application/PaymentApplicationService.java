@@ -1,6 +1,8 @@
 package com.github.spud.tinystore.payment.application;
 
 import com.github.spud.tinystore.infrastructure.rpc.order.OrderClient;
+import com.github.spud.tinystore.infrastructure.rpc.order.dto.request.OrderPaymentCallbackRequest;
+import com.github.spud.tinystore.infrastructure.rpc.order.dto.request.OrderRefundCallbackRequest;
 import com.github.spud.tinystore.payment.infrastructure.persistence.jpa.entity.PaymentOrderEntity;
 import com.github.spud.tinystore.payment.infrastructure.persistence.jpa.entity.RefundRecordEntity;
 import com.github.spud.tinystore.payment.infrastructure.persistence.jpa.repository.PaymentOrderJpaRepository;
@@ -168,11 +170,12 @@ public class PaymentApplicationService {
     public void notifyOrderRefundResult(String refundId, String tradeId, 
                                         Long refundAmountCents, String refundStatus) {
         try {
-            Map<String, Object> request = new HashMap<>();
-            request.put("refundId", refundId);
-            request.put("refundStatus", refundStatus);
-            request.put("refundAmountCents", refundAmountCents);
-            request.put("refundAt", LocalDateTime.now().toString());
+            OrderRefundCallbackRequest request = OrderRefundCallbackRequest.builder()
+                .refundId(refundId)
+                .refundStatus(refundStatus)
+                .refundAmountCents(refundAmountCents)
+                .traceId(LocalDateTime.now().toString())
+                .build();
 
             String idempotencyKey = "refund-notify-" + refundId;
             orderClient.refundCallback(tradeId, idempotencyKey, request);
@@ -266,14 +269,11 @@ public class PaymentApplicationService {
     public void notifyOrderPaymentSuccess(String paymentIntentId, String tradeId, 
                                           Long amountCents, String thirdTradeNo) {
         try {
-            Map<String, Object> request = new HashMap<>();
-            request.put("paymentIntentId", paymentIntentId);
-            request.put("paymentId", paymentIntentId); // 兼容旧字段
-            request.put("amountCents", amountCents);
-            if (thirdTradeNo != null) {
-                request.put("tradeNo", thirdTradeNo);
-            }
-            request.put("paidAt", LocalDateTime.now().toString());
+            OrderPaymentCallbackRequest request = OrderPaymentCallbackRequest.builder()
+                .paymentIntentId(paymentIntentId)
+                .amountCents(amountCents)
+                .traceId(LocalDateTime.now().toString())
+                .build();
 
             String idempotencyKey = "pay-notify-" + paymentIntentId;
             orderClient.paymentCallback(tradeId, idempotencyKey, request);

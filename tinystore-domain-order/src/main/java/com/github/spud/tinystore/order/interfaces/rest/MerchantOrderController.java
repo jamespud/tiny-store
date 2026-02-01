@@ -1,14 +1,14 @@
 package com.github.spud.tinystore.order.interfaces.rest;
 
 import com.github.spud.tinystore.order.application.service.MerchantFulfillmentService;
-import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.ShopOrderJpaRepository;
+import com.github.spud.tinystore.order.application.query.MerchantOrderQueryService;
+import com.github.spud.tinystore.order.interfaces.dto.request.*;
+import com.github.spud.tinystore.order.interfaces.dto.response.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -24,34 +24,21 @@ public class MerchantOrderController {
     private MerchantFulfillmentService merchantFulfillmentService;
 
     @Autowired
-    private ShopOrderJpaRepository shopOrderJpaRepository;
+    private MerchantOrderQueryService merchantOrderQueryService;
 
     /**
      * GET /order/merchant/orders/{orderId} - 获取商家订单详情
      */
     @GetMapping("/orders/{orderId}")
-    public ResponseEntity<Map<String, Object>> getOrder(@PathVariable String orderId) {
+    public ResponseEntity<OrderHttpResponse<MerchantOrderData>> getOrder(@PathVariable String orderId) {
         try {
-            var order = shopOrderJpaRepository.findByOrderId(orderId)
-                .map(o -> Map.of(
-                    "orderId", o.getOrderId(),
-                    "tradeId", o.getTradeId(),
-                    "shopId", o.getShopId(),
-                    "sellerId", o.getSellerId(),
-                    "orderStatus", o.getOrderStatus(),
-                    "createdAt", o.getCreatedAt().toString()
-                ))
-                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("code", 0);
-            response.put("msg", "OK");
-            response.put("data", order);
-            return ResponseEntity.ok(response);
+            MerchantOrderData order = merchantOrderQueryService.getMerchantOrder(orderId);
+            return ResponseEntity.ok(OrderHttpResponse.ok(order));
 
         } catch (Exception e) {
             log.error("Get order failed: orderId={}", orderId, e);
-            return buildErrorResponse(404, "Order not found: " + orderId);
+            return ResponseEntity.status(404).body(
+                OrderHttpResponse.fail(404, "Order not found: " + orderId));
         }
     }
 
@@ -59,60 +46,58 @@ public class MerchantOrderController {
      * POST /order/merchant/orders/{orderId}/accept - 商家同意订单
      */
     @PostMapping("/orders/{orderId}/accept")
-    public ResponseEntity<Map<String, Object>> acceptOrder(
+    public ResponseEntity<OrderHttpResponse<Void>> acceptOrder(
         @PathVariable String orderId,
-        @RequestBody(required = false) Map<String, Object> request,
+        @RequestBody(required = false) MerchantAcceptOrderRequest request,
         @RequestHeader("Idempotency-Key") String idempotencyKey) {
 
         try {
-            String traceId = request != null ? (String) request.get("traceId") : UUID.randomUUID().toString();
+            String traceId = (request != null && request.getTraceId() != null) 
+                ? request.getTraceId() : UUID.randomUUID().toString();
+            
             merchantFulfillmentService.merchantAcceptOrder(orderId, traceId);
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("code", 0);
-            response.put("msg", "Order accepted");
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(OrderHttpResponse.ok("Order accepted"));
 
         } catch (Exception e) {
             log.error("Accept order failed: orderId={}", orderId, e);
-            return buildErrorResponse(500, "Accept order failed: " + e.getMessage());
+            return ResponseEntity.status(500).body(
+                OrderHttpResponse.fail(500, "Accept order failed: " + e.getMessage()));
         }
     }
 
     /**
      * POST /order/merchant/orders/{orderId}/ship - 商家发货
-     *
-     * Request body:
-     * {
-     *   "packageId": "pkg_001",
-     *   "waybillNo": "SF123456789",
-     *   "logistics": "SFEXPRESS",
-     *   "traceId": "trace_xxx"
-     * }
      */
     @PostMapping("/orders/{orderId}/ship")
-    public ResponseEntity<Map<String, Object>> shipOrder(
+    public ResponseEntity<OrderHttpResponse<ShipOrderData>> shipOrder(
         @PathVariable String orderId,
-        @RequestBody Map<String, Object> request,
+        @RequestBody ShipOrderRequest request,
         @RequestHeader("Idempotency-Key") String idempotencyKey) {
 
         try {
-            String packageId = (String) request.get("packageId");
-            String waybillNo = (String) request.get("waybillNo");
-            String logistics = (String) request.get("logistics");
-            String traceId = (String) request.getOrDefault("traceId", UUID.randomUUID().toString());
+            String traceId = request.getTraceId() != null 
+                ? request.getTraceId() : UUID.randomUUID().toString();
 
-            merchantFulfillmentService.shipOrder(orderId, packageId, waybillNo, logistics, traceId);
+            merchantFulfillmentService.shipOrder(
+                orderId, 
+                request.getPackageId(), 
+                request.getWaybillNo(), 
+                request.getLogistics(), 
+                traceId
+            );
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("code", 0);
-            response.put("msg", "Order shipped");
-            response.put("data", Map.of("packageId", packageId, "waybillNo", waybillNo));
-            return ResponseEntity.ok(response);
+            ShipOrderData data = ShipOrderData.builder()
+                .packageId(request.getPackageId())
+                .waybillNo(request.getWaybillNo())
+                .build();
+
+            return ResponseEntity.ok(OrderHttpResponse.ok("Order shipped", data));
 
         } catch (Exception e) {
             log.error("Ship order failed: orderId={}", orderId, e);
-            return buildErrorResponse(500, "Ship order failed: " + e.getMessage());
+            return ResponseEntity.status(500).body(
+                OrderHttpResponse.fail(500, "Ship order failed: " + e.getMessage()));
         }
     }
 
@@ -120,32 +105,23 @@ public class MerchantOrderController {
      * POST /order/merchant/packages/{packageId}/delivered - 包裹签收
      */
     @PostMapping("/packages/{packageId}/delivered")
-    public ResponseEntity<Map<String, Object>> packageDelivered(
+    public ResponseEntity<OrderHttpResponse<Void>> packageDelivered(
         @PathVariable String packageId,
-        @RequestBody(required = false) Map<String, Object> request,
+        @RequestBody(required = false) PackageDeliveredRequest request,
         @RequestHeader("Idempotency-Key") String idempotencyKey) {
 
         try {
-            String traceId = request != null ? (String) request.get("traceId") : UUID.randomUUID().toString();
+            String traceId = (request != null && request.getTraceId() != null) 
+                ? request.getTraceId() : UUID.randomUUID().toString();
+            
             merchantFulfillmentService.markPackageDelivered(packageId, traceId);
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("code", 0);
-            response.put("msg", "Package delivered");
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(OrderHttpResponse.ok("Package delivered"));
 
         } catch (Exception e) {
             log.error("Mark package delivered failed: packageId={}", packageId, e);
-            return buildErrorResponse(500, "Mark package delivered failed: " + e.getMessage());
+            return ResponseEntity.status(500).body(
+                OrderHttpResponse.fail(500, "Mark package delivered failed: " + e.getMessage()));
         }
-    }
-
-    // ============ 辅助方法 ============
-
-    private ResponseEntity<Map<String, Object>> buildErrorResponse(int code, String msg) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("code", code);
-        response.put("msg", msg);
-        return ResponseEntity.status(code).body(response);
     }
 }
