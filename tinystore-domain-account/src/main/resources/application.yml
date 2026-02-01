@@ -34,20 +34,6 @@ spring:
         userCredentialChanged-out-0:
           destination: user-credential-changed
           content-type: application/json
-      rabbit:
-        bindings:
-          userCreated-out-0:
-            producer:
-              transacted: true
-          userUpdated-out-0:
-            producer:
-              transacted: true
-          userStatusChanged-out-0:
-            producer:
-              transacted: true
-          userCredentialChanged-out-0:
-            producer:
-              transacted: true
     nacos:
       config:
         server-addr: 127.0.0.1:8848
@@ -57,6 +43,9 @@ spring:
       discovery:
         server-addr: 127.0.0.1:8848
         access-key:
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/account
 # Actuator配置
 management:
   endpoints:
@@ -66,7 +55,6 @@ management:
   endpoint:
     health:
       show-details: always
-
 tinystore:
   internal:
     call-token: ${TINYSTORE_INTERNAL_CALL_TOKEN:changeit}
