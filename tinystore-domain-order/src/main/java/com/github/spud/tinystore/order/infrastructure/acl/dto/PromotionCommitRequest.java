@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Promotion 域 Commit 请求 DTO
+ * Promotion 域 Commit 请求 DTO（对齐 CheckoutCommitRequest）
  */
 @Data
 @NoArgsConstructor

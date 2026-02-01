@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.spud.tinystore.order.domain.enums.PayStatus;
 import com.github.spud.tinystore.order.domain.exception.DomainConflictException;
 import com.github.spud.tinystore.order.domain.exception.IdempotencyConflictException;
+import com.github.spud.tinystore.order.domain.model.ShopOrder;
 import com.github.spud.tinystore.order.domain.model.Trade;
+import com.github.spud.tinystore.order.domain.repository.ShopOrderRepository;
 import com.github.spud.tinystore.order.domain.repository.TradeRepository;
 import com.github.spud.tinystore.order.infrastructure.acl.InventoryClient;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient;
@@ -19,9 +21,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 支付应用服务（处理退款逻辑）
@@ -32,6 +37,9 @@ public class PaymentApplicationService {
 
     @Autowired
     private TradeRepository tradeRepository;
+
+    @Autowired
+    private ShopOrderRepository shopOrderRepository;
 
     @Autowired
     private OutboxEventService outboxEventService;
@@ -92,18 +100,36 @@ public class PaymentApplicationService {
                     "Can only refund PAID trades, current status: " + trade.getPayStatus());
             }
 
-            // 3. 调用库存回补
-            InventoryRestockRequest restockRequest = InventoryRestockRequest.builder()
-                .refundId(refundId)
-                .orderId(tradeId) // 暂用 tradeId，实际应该关联 ShopOrder
-                .build();
-            try {
-                inventoryClient.restock(idempotencyKey, restockRequest);
-                log.info("Inventory restock succeeded: refundId={}", refundId);
-            } catch (Exception e) {
-                log.error("Inventory restock failed for refundId={}", refundId, e);
-                throw new DomainConflictException("INVENTORY_RESTOCK_FAILED",
-                    "Failed to restock inventory: " + e.getMessage());
+            // 3. 获取所有子单，按 ShopOrder 聚合生成 restock items
+            List<ShopOrder> shopOrders = shopOrderRepository.findByTradeId(tradeId);
+            
+            // 按 shop 遍历调用 inventory restock
+            for (ShopOrder shopOrder : shopOrders) {
+                // 聚合该 shop 的所有订单行为 restock items
+                List<InventoryRestockRequest.LineItem> restockItems = shopOrder.getOrderLines().stream()
+                    .map(orderLine -> InventoryRestockRequest.LineItem.builder()
+                        .skuId(orderLine.getSkuId())
+                        .quantity(orderLine.getQuantity())
+                        .build())
+                    .collect(Collectors.toList());
+
+                InventoryRestockRequest restockRequest = InventoryRestockRequest.builder()
+                    .shopId(shopOrder.getShopId())
+                    .tradeId(tradeId)
+                    .refundId(refundId)
+                    .items(restockItems)
+                    .build();
+                
+                try {
+                    String shopIdempotencyKey = idempotencyKey + ":inv:res:" + shopOrder.getShopId();
+                    inventoryClient.restock(shopIdempotencyKey, restockRequest);
+                    log.info("Inventory restock succeeded: refundId={}, shopId={}, items={}", 
+                        refundId, shopOrder.getShopId(), restockItems.size());
+                } catch (Exception e) {
+                    log.error("Inventory restock failed for refundId={}, shopId={}", refundId, shopOrder.getShopId(), e);
+                    throw new DomainConflictException("INVENTORY_RESTOCK_FAILED",
+                        "Failed to restock inventory for shop " + shopOrder.getShopId() + ": " + e.getMessage());
+                }
             }
 
             // 4. 调用促销释放

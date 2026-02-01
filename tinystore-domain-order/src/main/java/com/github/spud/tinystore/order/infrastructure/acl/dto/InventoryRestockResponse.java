@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Inventory 域 Restock 响应 DTO
+ * Inventory 域 Restock 响应 DTO（对齐 StockRestockResponse）
  */
 @Data
 @NoArgsConstructor
@@ -14,4 +14,5 @@ import lombok.NoArgsConstructor;
 @Builder
 public class InventoryRestockResponse {
     private Boolean success;
+    private String message;
 }

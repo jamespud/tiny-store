@@ -16,7 +16,7 @@ import java.util.Map;
  * @author Spud
  * @date 2026/01/30
  */
-@FeignClient(value = "order-service", contextId = "orderClient")
+@FeignClient(value = "order-service", contextId = "orderClient", url = "${feign.client.url.order:}")
 public interface OrderClient {
 
 	/**

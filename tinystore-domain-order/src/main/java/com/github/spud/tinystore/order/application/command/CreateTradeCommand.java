@@ -17,6 +17,7 @@ public class CreateTradeCommand {
     private String tradeId;
     private String buyerId;
     private String buyerNick;
+    private String addressId;
     private String couponCode;
     private List<OrderLineCommand> orderLines;
     private String traceId;
@@ -33,5 +34,6 @@ public class CreateTradeCommand {
         private String sellerId;
         private Integer quantity;
         private Long priceCents;
+        private Long weightGrams;
     }
 }

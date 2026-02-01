@@ -43,6 +43,9 @@ public class ShopOrderEntity {
     @Column(name = "promotion_status", nullable = false, length = 32)
     private String promotionStatus;
 
+    @Column(name = "inventory_pre_occupy_ids_json", columnDefinition = "TEXT")
+    private String inventoryPreOccupyIdsJson;
+
     @Column(name = "logistics_status", length = 32)
     private String logisticsStatus;
 

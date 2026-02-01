@@ -93,6 +93,7 @@ public class TradeController {
                 .tradeId((String) request.get("tradeId"))
                 .buyerId((String) request.get("buyerId"))
                 .buyerNick((String) request.get("buyerNick"))
+                .addressId((String) request.get("addressId"))
                 .couponCode((String) request.get("couponCode"))
                 .traceId((String) request.getOrDefault("traceId", UUID.randomUUID().toString()));
 
@@ -103,6 +104,9 @@ public class TradeController {
                 java.util.List<CreateTradeCommand.OrderLineCommand> lineCommands = new java.util.ArrayList<>();
 
                 for (Map<String, Object> line : lines) {
+                    Long weightGrams = line.containsKey("weightGrams") && line.get("weightGrams") != null
+                        ? ((Number) line.get("weightGrams")).longValue()
+                        : 0L;
                     CreateTradeCommand.OrderLineCommand lineCmd = CreateTradeCommand.OrderLineCommand.builder()
                         .skuId((String) line.get("skuId"))
                         .productId((String) line.get("productId"))
@@ -111,6 +115,7 @@ public class TradeController {
                         .sellerId((String) line.get("sellerId"))
                         .quantity(((Number) line.get("quantity")).intValue())
                         .priceCents(((Number) line.get("priceCents")).longValue())
+                        .weightGrams(weightGrams)
                         .build();
                     lineCommands.add(lineCmd);
                 }

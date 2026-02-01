@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Inventory 域 Commit 响应 DTO
+ * Inventory 域 Commit 响应 DTO（对齐 StockCommitResponse）
  */
 @Data
 @NoArgsConstructor
@@ -14,4 +14,5 @@ import lombok.NoArgsConstructor;
 @Builder
 public class InventoryCommitResponse {
     private Boolean success;
+    private String message;
 }

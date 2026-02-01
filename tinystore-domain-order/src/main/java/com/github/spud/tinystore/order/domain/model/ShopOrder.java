@@ -31,6 +31,9 @@ public class ShopOrder {
     private String inventoryStatus;
     private String promotionStatus;
     
+    @Builder.Default
+    private List<String> inventoryPreOccupyIds = new ArrayList<>();
+    
     private Long totalAmountCents;
     
     @Builder.Default
