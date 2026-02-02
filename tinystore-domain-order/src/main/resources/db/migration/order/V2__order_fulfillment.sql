@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS tinystore_order.fulfillment_package (
     delivered_at TIMESTAMP
 );
 
-CREATE INDEX idx_fulfillment_package_seller_id ON tinystore_order.fulfillment_package(seller_id);
-CREATE INDEX idx_fulfillment_package_logistics_status ON tinystore_order.fulfillment_package(logistics_status);
+CREATE INDEX IF NOT EXISTS idx_fulfillment_package_seller_id ON tinystore_order.fulfillment_package(seller_id);
+CREATE INDEX IF NOT EXISTS idx_fulfillment_package_logistics_status ON tinystore_order.fulfillment_package(logistics_status);
 
 -- 包裹与订单关联表（支持一个包裹关联多个订单、一个订单可拆分多个包裹）
 CREATE TABLE IF NOT EXISTS tinystore_order.package_order_ref (
@@ -28,8 +28,8 @@ CREATE TABLE IF NOT EXISTS tinystore_order.package_order_ref (
     UNIQUE(package_id, order_id)
 );
 
-CREATE INDEX idx_package_order_ref_package_id ON tinystore_order.package_order_ref(package_id);
-CREATE INDEX idx_package_order_ref_order_id ON tinystore_order.package_order_ref(order_id);
+CREATE INDEX IF NOT EXISTS idx_package_order_ref_package_id ON tinystore_order.package_order_ref(package_id);
+CREATE INDEX IF NOT EXISTS idx_package_order_ref_order_id ON tinystore_order.package_order_ref(order_id);
 
 COMMENT ON TABLE tinystore_order.fulfillment_package IS '履约包裹表';
 COMMENT ON TABLE tinystore_order.package_order_ref IS '包裹与订单关联表';

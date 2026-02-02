@@ -20,9 +20,9 @@ CREATE TABLE IF NOT EXISTS tinystore_order.trade (
     finished_at TIMESTAMP
 );
 
-CREATE INDEX idx_trade_buyer_id ON tinystore_order.trade(buyer_id);
-CREATE INDEX idx_trade_pay_status ON tinystore_order.trade(pay_status);
-CREATE INDEX idx_trade_created_at ON tinystore_order.trade(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_trade_buyer_id ON tinystore_order.trade(buyer_id);
+CREATE INDEX IF NOT EXISTS idx_trade_pay_status ON tinystore_order.trade(pay_status);
+CREATE INDEX IF NOT EXISTS idx_trade_created_at ON tinystore_order.trade(created_at DESC);
 
 -- 店铺子单表
 CREATE TABLE IF NOT EXISTS tinystore_order.shop_order (
@@ -40,10 +40,10 @@ CREATE TABLE IF NOT EXISTS tinystore_order.shop_order (
     closed_at TIMESTAMP
 );
 
-CREATE INDEX idx_shop_order_trade_id ON tinystore_order.shop_order(trade_id);
-CREATE INDEX idx_shop_order_seller_id ON tinystore_order.shop_order(seller_id);
-CREATE INDEX idx_shop_order_order_status ON tinystore_order.shop_order(order_status);
-CREATE INDEX idx_shop_order_created_at ON tinystore_order.shop_order(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_shop_order_trade_id ON tinystore_order.shop_order(trade_id);
+CREATE INDEX IF NOT EXISTS idx_shop_order_seller_id ON tinystore_order.shop_order(seller_id);
+CREATE INDEX IF NOT EXISTS idx_shop_order_order_status ON tinystore_order.shop_order(order_status);
+CREATE INDEX IF NOT EXISTS idx_shop_order_created_at ON tinystore_order.shop_order(created_at DESC);
 
 -- 订单行表
 CREATE TABLE IF NOT EXISTS tinystore_order.order_line (
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS tinystore_order.order_line (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_order_line_order_id ON tinystore_order.order_line(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_line_order_id ON tinystore_order.order_line(order_id);
 
 -- 支付意图表（为实现支付闭环）
 CREATE TABLE IF NOT EXISTS tinystore_order.payment_intent (
@@ -71,8 +71,8 @@ CREATE TABLE IF NOT EXISTS tinystore_order.payment_intent (
     paid_at TIMESTAMP
 );
 
-CREATE INDEX idx_payment_intent_trade_id ON tinystore_order.payment_intent(trade_id);
-CREATE INDEX idx_payment_intent_status ON tinystore_order.payment_intent(status);
+CREATE INDEX IF NOT EXISTS idx_payment_intent_trade_id ON tinystore_order.payment_intent(trade_id);
+CREATE INDEX IF NOT EXISTS idx_payment_intent_status ON tinystore_order.payment_intent(status);
 
 COMMENT ON TABLE tinystore_order.trade IS '交易主单表';
 COMMENT ON TABLE tinystore_order.shop_order IS '店铺子单表';

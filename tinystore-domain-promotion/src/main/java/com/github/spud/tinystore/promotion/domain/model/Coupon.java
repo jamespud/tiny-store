@@ -9,6 +9,7 @@ public class Coupon {
 	private UUID id;
 	private String couponNo;
 	private CouponType couponType;
+	private CouponScopeType scopeType;
 	private String shopId;
 	private BigDecimal thresholdAmount;
 	private BigDecimal discountAmount;
@@ -47,6 +48,14 @@ public class Coupon {
 
 	public void setCouponType(CouponType couponType) {
 		this.couponType = couponType;
+	}
+
+	public CouponScopeType getScopeType() {
+		return scopeType;
+	}
+
+	public void setScopeType(CouponScopeType scopeType) {
+		this.scopeType = scopeType;
 	}
 
 	public String getShopId() {

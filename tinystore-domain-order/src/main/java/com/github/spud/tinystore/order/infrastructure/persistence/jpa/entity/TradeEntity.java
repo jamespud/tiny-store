@@ -6,6 +6,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * 交易主单 JPA 实体
@@ -69,6 +71,10 @@ public class TradeEntity {
 
     @Column(name = "coupon_code", length = 128)
     private String couponCode;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "coupon_codes", columnDefinition = "jsonb")
+    private String couponCodes;
 
     @PrePersist
     public void prePersist() {

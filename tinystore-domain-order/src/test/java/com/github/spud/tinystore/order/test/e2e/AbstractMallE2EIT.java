@@ -132,9 +132,18 @@ public abstract class AbstractMallE2EIT extends AbstractOrderIT {
     }
 
     private ConfigurableApplicationContext startContext(Class<?> appClass, Map<String, Object> props) {
-        return new SpringApplicationBuilder(appClass)
+        SpringApplicationBuilder builder = new SpringApplicationBuilder(appClass)
             .properties(props)
-            .run();
+            .profiles("e2e-test");
+        
+        // 使用最高优先级：设置为默认属性（覆盖所有其他配置源）
+        return builder.run(convertToArgs(props));
+    }
+    
+    private String[] convertToArgs(Map<String, Object> props) {
+        return props.entrySet().stream()
+            .map(e -> "--" + e.getKey() + "=" + e.getValue())
+            .toArray(String[]::new);
     }
 
     private Map<String, Object> baseProps(String schema) {

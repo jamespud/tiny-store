@@ -5,7 +5,6 @@ import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
-import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -19,6 +18,8 @@ import java.util.UUID;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,6 +48,8 @@ import com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.reposi
 
 @Service
 public class CheckoutAppService {
+
+	private static final Logger log = LoggerFactory.getLogger(CheckoutAppService.class);
 
 	private final IdempotencyStorage idempotencyStorage;
 	private final ObjectMapper objectMapper;
@@ -323,11 +326,11 @@ public class CheckoutAppService {
 		checkoutQuoteRepository.save(entity);
 
 		CheckoutQuoteResponse resp = new CheckoutQuoteResponse();
-		resp.setStatus(CheckoutResultStatus.OK);
+		resp.setStatus(couponPlan.invalidReasons.isEmpty() ? CheckoutResultStatus.OK : CheckoutResultStatus.REQUOTE_REQUIRED);
 		resp.setQuoteId(quoteId.toString());
 		resp.setExpiresAtEpochMs(expiresAt.toInstant(ZoneOffset.UTC).toEpochMilli());
 		resp.setSnapshot(snapshot);
-		resp.setChangeReasons(List.of());
+		resp.setChangeReasons(couponPlan.invalidReasons);
 		return resp;
 	}
 
@@ -517,25 +520,75 @@ public class CheckoutAppService {
 		List<String> platformIds = request.getAppliedIntent() == null ? List.of() : request.getAppliedIntent().getPlatformCouponIds();
 		Map<String, List<String>> shopMap = request.getAppliedIntent() == null ? Map.of() : request.getAppliedIntent().getShopCouponIdsByShop();
 
-		List<ScopedCouponId> inputs = new ArrayList<>();
-		for (String s : platformIds) {
-			UUID id = parseUuid(s);
-			if (id != null) {
-				inputs.add(new ScopedCouponId(id, null));
+		// 现在 platformIds/shopMap 里存的是 couponNo 而非 UUID
+		List<ScopedCouponInput> inputs = new ArrayList<>();
+		List<String> invalidCoupons = new ArrayList<>();
+		
+		// 解析平台券（按 couponNo 查找）
+		for (String couponNo : platformIds) {
+			if (couponNo == null || couponNo.isBlank()) {
+				continue;
 			}
+			Optional<CouponEntity> cOpt = couponRepository.findByCouponNo(couponNo);
+			if (cOpt.isEmpty()) {
+				invalidCoupons.add("PLATFORM:" + couponNo + ":NOT_FOUND");
+				continue;
+			}
+			CouponEntity c = cOpt.get();
+			// 校验 scope_type 必须是 PLATFORM
+			if (!"PLATFORM".equals(c.getScopeType())) {
+				invalidCoupons.add("PLATFORM:" + couponNo + ":INVALID_SCOPE");
+				continue;
+			}
+			// 校验 shop_id 必须为空
+			if (c.getShopId() != null && !c.getShopId().isBlank()) {
+				invalidCoupons.add("PLATFORM:" + couponNo + ":SHOP_ID_CONFLICT");
+				continue;
+			}
+			inputs.add(new ScopedCouponInput(c, null));
 		}
+		
+		// 解析店铺券（按 couponNo 查找）
 		for (Map.Entry<String, List<String>> e : shopMap.entrySet()) {
 			String shopId = e.getKey();
-			for (String s : e.getValue()) {
-				UUID id = parseUuid(s);
-				if (id != null) {
-					inputs.add(new ScopedCouponId(id, shopId));
+			for (String couponNo : e.getValue()) {
+				if (couponNo == null || couponNo.isBlank()) {
+					continue;
 				}
+				Optional<CouponEntity> cOpt = couponRepository.findByCouponNo(couponNo);
+				if (cOpt.isEmpty()) {
+					invalidCoupons.add("SHOP:" + shopId + ":" + couponNo + ":NOT_FOUND");
+					continue;
+				}
+				CouponEntity c = cOpt.get();
+				// 校验 scope_type 必须是 STORE
+				if (!"STORE".equals(c.getScopeType())) {
+					invalidCoupons.add("SHOP:" + shopId + ":" + couponNo + ":INVALID_SCOPE");
+					continue;
+				}
+				// 校验 shop_id 必须匹配
+				if (!Objects.equals(c.getShopId(), shopId)) {
+					invalidCoupons.add("SHOP:" + shopId + ":" + couponNo + ":SHOP_ID_MISMATCH");
+					continue;
+				}
+				inputs.add(new ScopedCouponInput(c, shopId));
 			}
 		}
-
+		
+		// 提前初始化 benefits 和 plans，以便在无效券早期返回时使用
 		List<PricingSnapshot.AppliedBenefit> benefits = new ArrayList<>();
 		List<CouponGroupPlan> plans = new ArrayList<>();
+		
+		// 如果有无效券，记录到 changeReasons（强失败策略）
+		List<ChangeReason> invalidReasons = new ArrayList<>();
+		for (String inv : invalidCoupons) {
+			invalidReasons.add(ChangeReason.of("INVALID_COUPON", inv));
+		}
+		if (!invalidCoupons.isEmpty()) {
+			log.warn("Invalid coupons detected: {}", invalidCoupons);
+			// 强失败：返回空结果 + 无效券原因，调用方会看到 changeReasons 并触发 REQUOTE_REQUIRED
+			return new CouponPlanResult(List.of(), plans, invalidReasons);
+		}
 
 		Map<String, Long> shopSubtotals = new HashMap<>();
 		for (PricingSnapshot.PricedLine l : snapshot.getLines()) {
@@ -543,12 +596,8 @@ public class CheckoutAppService {
 		}
 
 		Map<String, List<CouponCandidate>> candidatesByGroup = new HashMap<>();
-		for (ScopedCouponId input : inputs) {
-			Optional<CouponEntity> cOpt = couponRepository.findById(input.couponId());
-			if (cOpt.isEmpty()) {
-				continue;
-			}
-			CouponEntity c = cOpt.get();
+		for (ScopedCouponInput input : inputs) {
+			CouponEntity c = input.coupon();
 			if (!"ACTIVE".equals(c.getStatus())) {
 				continue;
 			}
@@ -559,15 +608,11 @@ public class CheckoutAppService {
 			String groupKey;
 			long baseAmount;
 			if (input.shopId() == null) {
-				if (c.getShopId() != null && !c.getShopId().isBlank()) {
-					continue;
-				}
+				// 平台券
 				groupKey = "PLATFORM:" + mutexGroup;
 				baseAmount = snapshot.getItemsTotalCents();
 			} else {
-				if (c.getShopId() == null || !Objects.equals(c.getShopId(), input.shopId())) {
-					continue;
-				}
+				// 店铺券
 				groupKey = "SHOP:" + input.shopId() + ":" + mutexGroup;
 				baseAmount = shopSubtotals.getOrDefault(input.shopId(), 0L);
 			}
@@ -587,7 +632,7 @@ public class CheckoutAppService {
 
 			CouponGroupPlan plan = new CouponGroupPlan();
 			plan.setGroupKey(group);
-			plan.setCandidateCouponIds(candidates.stream().map(cand -> cand.coupon.getId().toString()).toList());
+			plan.setCandidateCouponIds(candidates.stream().map(cand -> cand.coupon.getCouponNo()).toList());
 			plans.add(plan);
 
 			for (CouponCandidate cand : candidates) {
@@ -616,7 +661,7 @@ public class CheckoutAppService {
 			}
 		}
 
-		return new CouponPlanResult(benefits, plans);
+		return new CouponPlanResult(benefits, plans, List.of());
 	}
 
 	private long estimateCouponDiscountCents(CouponEntity coupon, long baseAmountCents) {
@@ -763,17 +808,17 @@ public class CheckoutAppService {
 			CouponGroupPlan plan = planByGroup.get(b.getGroupKey());
 			boolean replaced = false;
 			if (plan != null) {
-				for (String candCouponIdStr : plan.getCandidateCouponIds()) {
-					if (Objects.equals(candCouponIdStr, b.getBenefitId())) {
+				for (String candCouponNo : plan.getCandidateCouponIds()) {
+					if (Objects.equals(candCouponNo, b.getBenefitId())) {
 						continue;
 					}
-					UUID candCouponId = parseUuid(candCouponIdStr);
-					if (candCouponId == null) {
+					Optional<CouponEntity> candCouponOpt = couponRepository.findByCouponNo(candCouponNo);
+					if (candCouponOpt.isEmpty()) {
 						continue;
 					}
 					Optional<UserCouponEntity> userCouponOpt = userCouponRepository
 						.findFirstByUserIdAndCouponIdAndUseStatusOrderByReceiveTimeAsc(payload.getQuoteRequest().getUserId(),
-							candCouponId, "UNUSED");
+							candCouponOpt.get().getId(), "UNUSED");
 					if (userCouponOpt.isEmpty()) {
 						continue;
 					}
@@ -789,11 +834,7 @@ public class CheckoutAppService {
 						userCouponRepository.unlockByLockId(newLockId, now);
 						continue;
 					}
-					Optional<CouponEntity> cOpt = couponRepository.findById(candCouponId);
-					if (cOpt.isEmpty()) {
-						continue;
-					}
-					CouponEntity c = cOpt.get();
+					CouponEntity c = candCouponOpt.get();
 					String shopId = parseShopIdFromGroupKey(b.getGroupKey());
 					long baseAmount = shopId == null
 						? snapshot.getItemsTotalCents()
@@ -804,12 +845,12 @@ public class CheckoutAppService {
 						replaced = false;
 						break;
 					}
-					String oldCouponId = b.getBenefitId();
-					b.setBenefitId(candCouponIdStr);
+					String oldCouponNo = b.getBenefitId();
+					b.setBenefitId(candCouponNo);
 					b.setLockId(newLockId);
 					b.setAmountCents(-discount);
 					b.setRuleTrace("coupon:" + c.getCouponNo());
-					changes.add(ChangeReason.of("COUPON_DEGRADED", oldCouponId + "->" + candCouponIdStr));
+					changes.add(ChangeReason.of("COUPON_DEGRADED", oldCouponNo + "->" + candCouponNo));
 					replaced = true;
 					break;
 				}
@@ -927,17 +968,6 @@ public class CheckoutAppService {
 		return amount.movePointRight(2).setScale(0, RoundingMode.DOWN).longValue();
 	}
 
-	private UUID parseUuid(String s) {
-		if (s == null || s.isBlank()) {
-			return null;
-		}
-		try {
-			return UUID.fromString(s);
-		} catch (Exception e) {
-			return null;
-		}
-	}
-
 	private String parseShopIdFromGroupKey(String groupKey) {
 		if (groupKey == null) {
 			return null;
@@ -952,7 +982,8 @@ public class CheckoutAppService {
 		return parts[1];
 	}
 
-	private record ScopedCouponId(UUID couponId, String shopId) {
+	// 新的 record：存储已查到的 CouponEntity + shopId scope
+	private record ScopedCouponInput(CouponEntity coupon, String shopId) {
 	}
 
 	private static class CouponCandidate {
@@ -969,7 +1000,7 @@ public class CheckoutAppService {
 		}
 	}
 
-	private record CouponPlanResult(List<PricingSnapshot.AppliedBenefit> appliedBenefits, List<CouponGroupPlan> groupPlans) {
+	private record CouponPlanResult(List<PricingSnapshot.AppliedBenefit> appliedBenefits, List<CouponGroupPlan> groupPlans, List<ChangeReason> invalidReasons) {
 	}
 
 	public static class CouponGroupPlan {

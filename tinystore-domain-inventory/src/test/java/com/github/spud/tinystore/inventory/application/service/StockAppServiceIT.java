@@ -15,6 +15,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -75,6 +76,13 @@ class StockAppServiceIT {
 
 	@Autowired
 	private JpaInventoryAdjustmentRepository adjustmentRepository;
+
+	@BeforeEach
+	void cleanup() {
+		stockRepository.deleteAll();
+		reservationRepository.deleteAll();
+		adjustmentRepository.deleteAll();
+	}
 
 	@Test
 	void preOccupy_isIdempotent() {

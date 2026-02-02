@@ -26,6 +26,9 @@ public class CouponEntity {
 	@Column(name = "coupon_type", nullable = false)
 	private String couponType;
 
+    @Column(name = "scope_type", nullable = false)
+    private String scopeType;
+
 	@Column(name = "shop_id")
 	private String shopId;
 
@@ -105,6 +108,14 @@ public class CouponEntity {
 
 	public void setCouponType(String couponType) {
 		this.couponType = couponType;
+	}
+
+	public String getScopeType() {
+		return scopeType;
+	}
+
+	public void setScopeType(String scopeType) {
+		this.scopeType = scopeType;
 	}
 
 	public String getShopId() {

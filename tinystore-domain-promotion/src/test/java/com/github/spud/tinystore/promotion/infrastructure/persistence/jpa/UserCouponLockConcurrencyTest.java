@@ -75,7 +75,8 @@ class UserCouponLockConcurrencyTest {
 		CouponEntity coupon = new CouponEntity();
 		coupon.setId(couponId);
 		coupon.setCouponNo("C" + couponId.toString().substring(0, 8));
-		coupon.setCouponType("PLATFORM");
+		coupon.setCouponType("PLATFORM_FULL_REDUCTION");
+		coupon.setScopeType("PLATFORM");
 		coupon.setShopId(null);
 		coupon.setTotalStock(100);
 		coupon.setUsedStock(0);
