@@ -191,5 +191,11 @@
 				<module>tinystore-domain-account</module>
 			</modules>
 		</profile>
+		<profile>
+			<id>it</id>
+			<properties>
+				<skipITs>false</skipITs>
+			</properties>
+		</profile>
 	</profiles>
 </project>

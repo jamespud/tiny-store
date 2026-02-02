@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.github.spud.tinystore.promotion.domain.model.BudgetType;
 import com.github.spud.tinystore.promotion.domain.model.Coupon;
+import com.github.spud.tinystore.promotion.domain.model.CouponScopeType;
 import com.github.spud.tinystore.promotion.domain.model.CouponStatus;
 import com.github.spud.tinystore.promotion.domain.model.CouponType;
 import com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.entity.CouponEntity;
@@ -77,6 +78,7 @@ public class JpaCouponRepositoryAdapter implements CouponRepository {
 		c.setId(e.getId());
 		c.setCouponNo(e.getCouponNo());
 		c.setCouponType(e.getCouponType() == null ? null : CouponType.valueOf(e.getCouponType()));
+		c.setScopeType(e.getScopeType() == null ? null : CouponScopeType.valueOf(e.getScopeType()));
 		c.setShopId(e.getShopId());
 		c.setThresholdAmount(e.getThresholdAmount());
 		c.setDiscountAmount(e.getDiscountAmount());
@@ -100,6 +102,7 @@ public class JpaCouponRepositoryAdapter implements CouponRepository {
 		e.setId(c.getId());
 		e.setCouponNo(c.getCouponNo());
 		e.setCouponType(c.getCouponType() == null ? null : c.getCouponType().name());
+		e.setScopeType(c.getScopeType() == null ? null : c.getScopeType().name());
 		e.setShopId(c.getShopId());
 		e.setThresholdAmount(c.getThresholdAmount());
 		e.setDiscountAmount(c.getDiscountAmount());

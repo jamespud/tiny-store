@@ -1,5 +1,7 @@
 package com.github.spud.tinystore.order.infrastructure.persistence.repository;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.spud.tinystore.order.domain.model.Trade;
 import com.github.spud.tinystore.order.domain.repository.TradeRepository;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.TradeEntity;
@@ -7,6 +9,8 @@ import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -17,6 +21,7 @@ import java.util.Optional;
 public class TradeRepositoryImpl implements TradeRepository {
     
     private final TradeJpaRepository jpaRepository;
+    private final ObjectMapper objectMapper;
     
     @Override
     public Trade save(Trade trade) {
@@ -51,6 +56,7 @@ public class TradeRepositoryImpl implements TradeRepository {
             .promotionInputHash(trade.getPromotionInputHash())
             .inventoryReservationId(trade.getInventoryReservationId())
             .couponCode(trade.getCouponCode())
+            .couponCodes(serializeCouponCodes(trade.getCouponCodes()))
             .createdAt(trade.getCreatedAt())
             .updatedAt(trade.getUpdatedAt())
             .closedAt(trade.getClosedAt())
@@ -71,9 +77,32 @@ public class TradeRepositoryImpl implements TradeRepository {
             .promotionInputHash(entity.getPromotionInputHash())
             .inventoryReservationId(entity.getInventoryReservationId())
             .couponCode(entity.getCouponCode())
+            .couponCodes(deserializeCouponCodes(entity.getCouponCodes()))
             .createdAt(entity.getCreatedAt())
             .updatedAt(entity.getUpdatedAt())
             .closedAt(entity.getClosedAt())
             .build();
+    }
+    
+    private String serializeCouponCodes(List<String> couponCodes) {
+        if (couponCodes == null || couponCodes.isEmpty()) {
+            return "[]";
+        }
+        try {
+            return objectMapper.writeValueAsString(couponCodes);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to serialize couponCodes", e);
+        }
+    }
+    
+    private List<String> deserializeCouponCodes(String couponCodesJson) {
+        if (couponCodesJson == null || couponCodesJson.isBlank()) {
+            return new ArrayList<>();
+        }
+        try {
+            return objectMapper.readValue(couponCodesJson, new TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
     }
 }

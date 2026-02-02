@@ -17,6 +17,8 @@ import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository
 import com.github.spud.tinystore.payment.application.PaymentApplicationService;
 import com.github.spud.tinystore.payment.infrastructure.persistence.jpa.repository.PaymentOrderJpaRepository;
 import com.github.spud.tinystore.payment.infrastructure.persistence.jpa.repository.RefundRecordJpaRepository;
+import com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.entity.CouponEntity;
+import com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.repository.JpaCouponRepository;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -224,5 +226,98 @@ class MallE2EIT extends AbstractMallE2EIT {
         line.put("priceCents", priceCents);
         line.put("weightGrams", weightGrams);
         return line;
+    }
+
+    @Test
+    @Order(4)
+    void createTradeWithMultipleCoupons_shouldStoreCouponCodes() {
+        seedPromotionCoupons();
+        cleanupOrderAndPayment();
+
+        String newTradeId = UUID.randomUUID().toString();
+        String newBuyerId = "buyer-multi-coupon-" + UUID.randomUUID();
+
+        Map<String, Object> request = new HashMap<>();
+        request.put("tradeId", newTradeId);
+        request.put("buyerId", newBuyerId);
+        request.put("buyerNick", "buyer-nick");
+        request.put("addressId", "addr-002");
+        request.put("traceId", "trace-multi-" + newTradeId);
+
+        List<String> platformCoupons = List.of("C202602", "C202603");
+        Map<String, List<String>> shopCoupons = new HashMap<>();
+        shopCoupons.put(SHOP_A, List.of("P8888"));
+        shopCoupons.put(SHOP_B, List.of("S1111", "S2222"));
+
+        request.put("platformCouponCodes", platformCoupons);
+        request.put("shopCouponCodesByShop", shopCoupons);
+
+        List<Map<String, Object>> orderLines = new ArrayList<>();
+        orderLines.add(line(SKU_A, "prod-1", "Product A", SHOP_A, "seller-A", 1, 3000L, 0L));
+        orderLines.add(line(SKU_B, "prod-2", "Product B", SHOP_B, "seller-B", 1, 2000L, 0L));
+        request.put("orderLines", orderLines);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("Idempotency-Key", "idem-multi-" + newTradeId);
+        ResponseEntity<Map> response = restTemplate.exchange(
+            orderBaseUrl + "/order/trades",
+            HttpMethod.POST,
+            new HttpEntity<>(request, headers),
+            Map.class
+        );
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+
+        TradeJpaRepository tradeRepository = getOrderBean(TradeJpaRepository.class);
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            TradeEntity trade = tradeRepository.findByTradeId(newTradeId).orElseThrow();
+            assertThat(trade.getCouponCodes()).isNotNull();
+            assertThat(trade.getCouponCodes()).contains("C202602", "C202603", "P8888", "S1111", "S2222");
+        });
+    }
+
+    private void seedPromotionCoupons() {
+        JpaCouponRepository couponRepository = getPromotionBean(JpaCouponRepository.class);
+        couponRepository.deleteAll();
+
+        CouponEntity platformCoupon1 = new CouponEntity();
+        platformCoupon1.setId(UUID.randomUUID());
+        platformCoupon1.setCouponNo("C202602");
+        platformCoupon1.setCouponType("FULL_REDUCTION");
+        platformCoupon1.setScopeType("PLATFORM");
+        platformCoupon1.setShopId(null);
+        couponRepository.save(platformCoupon1);
+
+        CouponEntity platformCoupon2 = new CouponEntity();
+        platformCoupon2.setId(UUID.randomUUID());
+        platformCoupon2.setCouponNo("C202603");
+        platformCoupon2.setCouponType("DISCOUNT");
+        platformCoupon2.setScopeType("PLATFORM");
+        platformCoupon2.setShopId(null);
+        couponRepository.save(platformCoupon2);
+
+        CouponEntity shopCouponA = new CouponEntity();
+        shopCouponA.setId(UUID.randomUUID());
+        shopCouponA.setCouponNo("P8888");
+        shopCouponA.setCouponType("FULL_REDUCTION");
+        shopCouponA.setScopeType("STORE");
+        shopCouponA.setShopId(SHOP_A);
+        couponRepository.save(shopCouponA);
+
+        CouponEntity shopCouponB1 = new CouponEntity();
+        shopCouponB1.setId(UUID.randomUUID());
+        shopCouponB1.setCouponNo("S1111");
+        shopCouponB1.setCouponType("DISCOUNT");
+        shopCouponB1.setScopeType("STORE");
+        shopCouponB1.setShopId(SHOP_B);
+        couponRepository.save(shopCouponB1);
+
+        CouponEntity shopCouponB2 = new CouponEntity();
+        shopCouponB2.setId(UUID.randomUUID());
+        shopCouponB2.setCouponNo("S2222");
+        shopCouponB2.setCouponType("FULL_REDUCTION");
+        shopCouponB2.setScopeType("STORE");
+        shopCouponB2.setShopId(SHOP_B);
+        couponRepository.save(shopCouponB2);
     }
 }

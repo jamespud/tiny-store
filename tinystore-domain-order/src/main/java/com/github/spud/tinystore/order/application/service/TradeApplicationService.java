@@ -142,7 +142,16 @@ public class TradeApplicationService {
             long discountAmountCents = promotionDiscountCents + couponDiscountCents;
             long payableAmountCents = snapshot.getPayableCents() != null ? snapshot.getPayableCents() : 0L;
             
-            // 2.5. 创建 Trade（写入 quoteId/inputHash/couponCode）
+            // 2.5. 创建 Trade（写入 quoteId/inputHash/couponCode + couponCodes）
+            // 构建 couponCodes 列表（合并平台券+店铺券）
+            List<String> allCouponCodes = new ArrayList<>();
+            if (command.getPlatformCouponCodes() != null) {
+                allCouponCodes.addAll(command.getPlatformCouponCodes());
+            }
+            if (command.getShopCouponCodesByShop() != null) {
+                command.getShopCouponCodesByShop().values().forEach(allCouponCodes::addAll);
+            }
+            
             Trade trade = Trade.builder()
                 .tradeId(command.getTradeId())
                 .buyerId(command.getBuyerId())
@@ -154,6 +163,7 @@ public class TradeApplicationService {
                 .promotionQuoteId(quoteResponse.getQuoteId())
                 .promotionInputHash(inputHash)
                 .couponCode(command.getCouponCode())
+                .couponCodes(allCouponCodes)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -743,14 +753,26 @@ public class TradeApplicationService {
                 .build())
             .collect(Collectors.toList());
 
-        // 构造 appliedIntent（目前仅处理优惠券）
+        // 构造 appliedIntent（支持多券：平台券列表 + 店铺券 Map）
         PromotionQuoteRequest.AppliedIntent appliedIntent = null;
-        if (command.getCouponCode() != null && !command.getCouponCode().isEmpty()) {
-            // TODO: 业务简化假设：将 couponCode 直接视为平台优惠券 ID
-            // 注意：真实场景需根据券类型路由到 platformCouponIds 或 shopCouponIdsByShop
+        
+        // 优先使用新字段
+        List<String> platformCodes = command.getPlatformCouponCodes();
+        Map<String, List<String>> shopCodesMap = command.getShopCouponCodesByShop();
+        
+        // 兼容旧字段：若新字段为空，尝试从 couponCode 转换
+        if ((platformCodes == null || platformCodes.isEmpty()) && 
+            (shopCodesMap == null || shopCodesMap.isEmpty()) &&
+            command.getCouponCode() != null && !command.getCouponCode().isEmpty()) {
+            platformCodes = Collections.singletonList(command.getCouponCode());
+        }
+        
+        // 若有券输入，构造 appliedIntent（现在使用 couponNo 而非 UUID）
+        if ((platformCodes != null && !platformCodes.isEmpty()) || 
+            (shopCodesMap != null && !shopCodesMap.isEmpty())) {
             appliedIntent = PromotionQuoteRequest.AppliedIntent.builder()
-                .platformCouponIds(Collections.singletonList(command.getCouponCode()))
-                .shopCouponIdsByShop(Collections.emptyMap())
+                .platformCouponIds(platformCodes != null ? platformCodes : Collections.emptyList())
+                .shopCouponIdsByShop(shopCodesMap != null ? shopCodesMap : Collections.emptyMap())
                 .build();
         }
 

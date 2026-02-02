@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.order.application.command;
 
 import java.util.List;
+import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -18,7 +19,14 @@ public class CreateTradeCommand {
     private String buyerId;
     private String buyerNick;
     private String addressId;
+    
+    // 旧字段：单券兼容
     private String couponCode;
+    
+    // 新字段：多券
+    private List<String> platformCouponCodes;
+    private Map<String, List<String>> shopCouponCodesByShop;
+    
     private List<OrderLineCommand> orderLines;
     private String traceId;
 

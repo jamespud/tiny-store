@@ -17,13 +17,13 @@ CREATE TABLE IF NOT EXISTS tinystore_order.after_sale_case (
     finished_at TIMESTAMP
 );
 
-CREATE INDEX idx_after_sale_case_trade_id ON tinystore_order.after_sale_case(trade_id);
-CREATE INDEX idx_after_sale_case_order_id ON tinystore_order.after_sale_case(order_id);
-CREATE INDEX idx_after_sale_case_buyer_id ON tinystore_order.after_sale_case(buyer_id);
-CREATE INDEX idx_after_sale_case_case_status ON tinystore_order.after_sale_case(case_status);
-CREATE INDEX idx_after_sale_case_created_at ON tinystore_order.after_sale_case(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_after_sale_case_trade_id ON tinystore_order.after_sale_case(trade_id);
+CREATE INDEX IF NOT EXISTS idx_after_sale_case_order_id ON tinystore_order.after_sale_case(order_id);
+CREATE INDEX IF NOT EXISTS idx_after_sale_case_buyer_id ON tinystore_order.after_sale_case(buyer_id);
+CREATE INDEX IF NOT EXISTS idx_after_sale_case_case_status ON tinystore_order.after_sale_case(case_status);
+CREATE INDEX IF NOT EXISTS idx_after_sale_case_created_at ON tinystore_order.after_sale_case(created_at DESC);
 
 -- 退款 ID 唯一性约束（幂等）
-CREATE UNIQUE INDEX idx_after_sale_case_refund_id ON tinystore_order.after_sale_case(refund_id) WHERE refund_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_after_sale_case_refund_id ON tinystore_order.after_sale_case(refund_id) WHERE refund_id IS NOT NULL;
 
 COMMENT ON TABLE tinystore_order.after_sale_case IS '售后单表';

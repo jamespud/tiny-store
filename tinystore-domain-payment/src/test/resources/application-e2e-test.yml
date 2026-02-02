@@ -1,0 +1,15 @@
+# E2E 测试配置 - 数据源由测试代码动态提供
+# 此配置覆盖主配置中的硬编码数据库连接
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+  
+  task:
+    scheduling:
+      enabled: false

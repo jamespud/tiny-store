@@ -43,6 +43,9 @@ public class Trade {
     private String inventoryReservationId;
     private String couponCode;
     
+    @Builder.Default
+    private List<String> couponCodes = new ArrayList<>();
+    
     /**
      * 检查交易是否已关闭（优先判定 closedAt）
      */

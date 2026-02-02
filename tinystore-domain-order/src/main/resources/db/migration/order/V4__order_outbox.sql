@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS tinystore_order.order_outbox (
     last_error TEXT
 );
 
-CREATE INDEX idx_order_outbox_status_created ON tinystore_order.order_outbox(status, created_at) WHERE status = 'PENDING';
-CREATE INDEX idx_order_outbox_event_type ON tinystore_order.order_outbox(event_type);
-CREATE INDEX idx_order_outbox_aggregate_id ON tinystore_order.order_outbox(aggregate_id);
+CREATE INDEX IF NOT EXISTS idx_order_outbox_status_created ON tinystore_order.order_outbox(status, created_at) WHERE status = 'PENDING';
+CREATE INDEX IF NOT EXISTS idx_order_outbox_event_type ON tinystore_order.order_outbox(event_type);
+CREATE INDEX IF NOT EXISTS idx_order_outbox_aggregate_id ON tinystore_order.order_outbox(aggregate_id);
 
 COMMENT ON TABLE tinystore_order.order_outbox IS 'Outbox 事件投递表';

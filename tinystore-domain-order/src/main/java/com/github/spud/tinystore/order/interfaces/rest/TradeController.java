@@ -42,6 +42,17 @@ public class TradeController {
         @RequestHeader("Idempotency-Key") String idempotencyKey) {
 
         try {
+            // 兼容性处理：优先使用新字段，若新字段为空则尝试从 couponCode 转换
+            java.util.List<String> platformCodes = request.getPlatformCouponCodes();
+            java.util.Map<String, java.util.List<String>> shopCodesMap = request.getShopCouponCodesByShop();
+            
+            if ((platformCodes == null || platformCodes.isEmpty()) && 
+                (shopCodesMap == null || shopCodesMap.isEmpty()) &&
+                request.getCouponCode() != null && !request.getCouponCode().isEmpty()) {
+                // 兼容模式：将 couponCode 视为平台券
+                platformCodes = java.util.Collections.singletonList(request.getCouponCode());
+            }
+            
             // 构建 CreateTradeCommand
             CreateTradeCommand.CreateTradeCommandBuilder commandBuilder = CreateTradeCommand.builder()
                 .tradeId(request.getTradeId())
@@ -49,6 +60,8 @@ public class TradeController {
                 .buyerNick(request.getBuyerNick())
                 .addressId(request.getAddressId())
                 .couponCode(request.getCouponCode())
+                .platformCouponCodes(platformCodes)
+                .shopCouponCodesByShop(shopCodesMap)
                 .traceId(request.getTraceId() != null ? request.getTraceId() : UUID.randomUUID().toString());
 
             if (request.getOrderLines() != null) {
