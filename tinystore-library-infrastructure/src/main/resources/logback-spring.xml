@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true" scanPeriod="30 seconds">
+  <!-- 1. 全局变量定义：日志编码、输出格式 -->
+  <property name="ENCODING" value="UTF-8"/>
+  <!-- 时间格式：2026/02/02 09:52:41.428150 -->
+  <property name="DATE_FORMAT" value="yyyy/MM/dd HH:mm:ss.SSSSSS"/>
+  <!-- 日志基础格式：时间 代码文件:行号 [级别] [log-id: xxx] -->
+  <property name="BASE_PATTERN" value="%d{${DATE_FORMAT}} %F:%L [%level] [log-id: %X{logId:-unknown}] %msg%n"/>
+
+  <!-- 2. 控制台输出：适配BASE_PATTERN -->
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+      <charset>${ENCODING}</charset>
+      <pattern>${BASE_PATTERN}</pattern>
+    </encoder>
+  </appender>
+
+  <!-- 3. 按包名配置日志级别：关键！区分SQL日志、业务日志 -->
+  <logger name="com.github.spud" level="DEBUG" additivity="false">
+    <appender-ref ref="CONSOLE"/>
+  </logger>
+  <logger name="org.springframework" level="INFO" additivity="false">
+    <appender-ref ref="CONSOLE"/>
+  </logger>
+  <logger name="org.hibernate" level="WARN" additivity="false">
+    <appender-ref ref="CONSOLE"/>
+  </logger>
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+  </root>
+</configuration>
