@@ -17,11 +17,22 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+@Testcontainers(disabledWithoutDocker = true)
 @ExtendWith(MockitoExtension.class)
 class IdempotencyServiceTest {
+
+	@Container
+	static final GenericContainer<?> redisContainer = new GenericContainer<>(DockerImageName.parse("redis:7.4.0"))
+		.withExposedPorts(6379);
 
 	@Mock
 	private ReactiveStringRedisTemplate redisTemplate;
@@ -33,6 +44,12 @@ class IdempotencyServiceTest {
 	private LocalIdempotencyService localIdempotencyService;
 
 	private IdempotencyService idempotencyService;
+
+	@DynamicPropertySource
+	static void registerProps(DynamicPropertyRegistry registry) {
+		registry.add("spring.data.redis.host", redisContainer::getHost);
+		registry.add("spring.data.redis.port", () -> redisContainer.getMappedPort(6379).toString());
+	}
 
 	@BeforeEach
 	void setUp() {
