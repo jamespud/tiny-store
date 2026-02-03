@@ -1,6 +1,11 @@
 spring:
   application:
     name: promotion-service
+  cloud:
+    config:
+      enabled: false
+      import-check:
+        enabled: false
   datasource:
     url: jdbc:postgresql://localhost:5432/tinystore?currentSchema=tinystore_promotion
     username: postgres

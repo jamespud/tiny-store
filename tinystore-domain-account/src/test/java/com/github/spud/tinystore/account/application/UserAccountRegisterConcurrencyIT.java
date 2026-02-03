@@ -1,7 +1,6 @@
 package com.github.spud.tinystore.account.application;
 
-import com.github.spud.tinystore.account.infrastructure.persistence.entity.UserCore;
-import com.github.spud.tinystore.account.infrastructure.persistence.repository.UserCoreRepository;
+import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,13 +29,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers(disabledWithoutDocker = true)
 @Sql(scripts = "/sql/user_core_only.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
 @DisplayName("用户注册并发集成测试")
+@SuppressWarnings("resource")
 class UserAccountRegisterConcurrencyIT {
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1")
             .withDatabaseName("testdb")
             .withUsername("test")
-            .withPassword("test");
+            .withPassword("test")
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     @Container
     static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7.4.0"))
@@ -44,7 +45,8 @@ class UserAccountRegisterConcurrencyIT {
 
     @Container
     static ConfluentKafkaContainer kafka = new ConfluentKafkaContainer("confluentinc/cp-kafka:8.1.1")
-        .withEnv("KAFKA_PROCESS_ROLES", "broker,controller");
+        .withEnv("KAFKA_PROCESS_ROLES", "broker,controller")
+        .withStartupTimeout(Duration.ofMinutes(3));
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
@@ -69,9 +71,6 @@ class UserAccountRegisterConcurrencyIT {
 
     @Autowired
     private UserAccountApplicationService service;
-
-    @Autowired
-    private UserCoreRepository repository;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;

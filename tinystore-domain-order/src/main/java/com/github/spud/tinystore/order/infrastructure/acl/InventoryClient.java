@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 /**
  * Inventory 域 RPC 客户端
  */
-@FeignClient(name = "tinystore-inventory-service", url = "${order.feign.inventory-url:http://tinystore-inventory-service:13000}")
+@FeignClient(name = "tinystore-inventory-service")
 public interface InventoryClient {
 
     /**

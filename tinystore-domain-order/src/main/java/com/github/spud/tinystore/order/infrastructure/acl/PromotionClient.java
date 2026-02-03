@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 /**
  * Promotion 域 RPC 客户端
  */
-@FeignClient(name = "promotion-service", url = "${order.feign.promotion-url:http://promotion-service:1200}")
+@FeignClient(name = "promotion-service")
 public interface PromotionClient {
 
     /**

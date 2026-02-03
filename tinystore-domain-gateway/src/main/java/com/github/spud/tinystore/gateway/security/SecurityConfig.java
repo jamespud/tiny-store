@@ -1,5 +1,6 @@
 package com.github.spud.tinystore.gateway.security;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -10,6 +11,7 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 
 @Configuration
 @EnableWebFluxSecurity
+@ConditionalOnProperty(prefix = "tinystore.security.resource-server", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SecurityConfig {
 
 	@Bean

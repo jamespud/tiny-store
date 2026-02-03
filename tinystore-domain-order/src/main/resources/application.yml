@@ -1,6 +1,11 @@
 spring:
   application:
     name: order-service
+  cloud:
+    config:
+      enabled: false
+      import-check:
+        enabled: false
   datasource:
     url: jdbc:postgresql://localhost:5432/tinystore?currentSchema=tinystore_order
     username: postgres
@@ -48,9 +53,6 @@ order:
     batch-size: 100
   scheduler:
     payment-timeout-interval: 60000
-  feign:
-    promotion-url: http://localhost:8092/promotions
-    inventory-url: http://localhost:8093/inventory
 
 server:
   port: 28080

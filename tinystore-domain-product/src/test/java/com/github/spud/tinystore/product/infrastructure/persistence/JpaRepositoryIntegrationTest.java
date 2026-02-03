@@ -1,8 +1,8 @@
 package com.github.spud.tinystore.product.infrastructure.persistence;
 
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -26,13 +26,15 @@ import org.testcontainers.utility.DockerImageName;
  */
 @SpringBootTest
 @Testcontainers(disabledWithoutDocker = true)
+@SuppressWarnings("resource")
 public class JpaRepositoryIntegrationTest {
     
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1")
             .withDatabaseName("testdb")
             .withUsername("test")
-            .withPassword("test");
+            .withPassword("test")
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     @Container
     static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7.4.0"))
@@ -40,7 +42,8 @@ public class JpaRepositoryIntegrationTest {
 
     @Container
     static ConfluentKafkaContainer kafka = new ConfluentKafkaContainer("confluentinc/cp-kafka:8.1.1")
-        .withEnv("KAFKA_PROCESS_ROLES", "broker,controller");
+        .withEnv("KAFKA_PROCESS_ROLES", "broker,controller")
+        .withStartupTimeout(Duration.ofMinutes(3));
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {

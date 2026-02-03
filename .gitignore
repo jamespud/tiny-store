@@ -38,3 +38,8 @@ build/
 .tasks/
 CLAUDE.md
 PLAN.md
+PLAN-TEST.md
+
+### Runtime logs ###
+docker-*.log
+*.log

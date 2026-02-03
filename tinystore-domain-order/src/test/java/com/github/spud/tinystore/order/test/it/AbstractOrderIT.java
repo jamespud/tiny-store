@@ -1,5 +1,7 @@
 package com.github.spud.tinystore.order.test.it;
 
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -9,8 +11,6 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.utility.DockerImageName;
-
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * order 模块集成测试抽象基类
@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * - @SpringBootTest 的 IT 继承 AbstractSpringBootOrderIT
  */
 @Testcontainers(disabledWithoutDocker = true)
+@SuppressWarnings("resource")
 public abstract class AbstractOrderIT {
 
     /**
@@ -37,7 +38,8 @@ public abstract class AbstractOrderIT {
     static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1")
         .withDatabaseName("tinystore_order_test")
         .withUsername("postgres")
-        .withPassword("postgres");
+        .withPassword("postgres")
+        .withStartupTimeout(Duration.ofMinutes(3));
 
     @Container
     static final GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7.4.0"))
@@ -46,7 +48,8 @@ public abstract class AbstractOrderIT {
 
     @Container
     static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer("confluentinc/cp-kafka:8.1.1")
-        .withEnv("KAFKA_PROCESS_ROLES", "broker,controller");
+        .withEnv("KAFKA_PROCESS_ROLES", "broker,controller")
+        .withStartupTimeout(Duration.ofMinutes(3));
 
     /**
      * 动态注入测试环境配置

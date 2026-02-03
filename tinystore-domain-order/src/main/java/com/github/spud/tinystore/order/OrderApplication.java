@@ -8,7 +8,10 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
  * Order Service Application
  */
 @SpringBootApplication
-@EnableFeignClients
+@EnableFeignClients(basePackages = {
+		"com.github.spud.tinystore.order.infrastructure.acl",
+		"com.github.spud.tinystore.infrastructure.rpc"
+})
 public class OrderApplication {
 
     public static void main(String[] args) {

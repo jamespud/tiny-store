@@ -1,6 +1,11 @@
 spring:
   application:
     name: product-service
+  cloud:
+    config:
+      enabled: false
+      import-check:
+        enabled: false
     
   # Database configuration (PostgreSQL)
   datasource:
@@ -87,6 +92,10 @@ management:
       prometheus:
         enabled: true
         
+# Server configuration
+server:
+  port: 8090
+
 # Logging configuration
 logging:
   level:

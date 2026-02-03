@@ -6,7 +6,7 @@ import org.springframework.cloud.openfeign.FeignClient;
  * @author Spud
  * @date 2025/10/5
  */
-@FeignClient("/product")
+@FeignClient(name = "product-service", path = "/product")
 public interface ProductClient {
 
 }

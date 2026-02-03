@@ -1,6 +1,11 @@
 spring:
   application:
     name: pay-service
+  cloud:
+    config:
+      enabled: false
+      import-check:
+        enabled: false
   datasource:
     url: jdbc:postgresql://localhost:5432/tinystore?currentSchema=tinystore_payment
     username: postgres

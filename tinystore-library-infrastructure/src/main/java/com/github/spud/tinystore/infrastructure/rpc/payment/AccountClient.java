@@ -6,7 +6,7 @@ import org.springframework.cloud.openfeign.FeignClient;
  * @author Spud
  * @date 2025/10/5
  */
-@FeignClient("/account")
+@FeignClient(name = "tinystore-domain-account", path = "/account")
 public interface AccountClient {
 
 }

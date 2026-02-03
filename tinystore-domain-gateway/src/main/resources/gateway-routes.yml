@@ -43,3 +43,56 @@ routes:
         refillRate: 100
       idempotency:
         enabled: true
+  - id: product-service
+    uri: lb://product-service
+    predicates:
+      - Path=/api/products/**
+    filters:
+      - StripPrefix=1
+    policies:
+      rateLimit:
+        type: ip
+        capacity: 100
+        refillRate: 100
+      idempotency:
+        enabled: false
+  - id: inventory-service
+    uri: lb://tinystore-inventory-service
+    predicates:
+      - Path=/api/inventory/**
+    filters:
+      - StripPrefix=1
+    policies:
+      rateLimit:
+        type: ip
+        capacity: 100
+        refillRate: 100
+      idempotency:
+        enabled: false
+  - id: account-service
+    uri: lb://tinystore-domain-account
+    predicates:
+      - Path=/api/account/**
+    filters:
+      - StripPrefix=1
+    policies:
+      rateLimit:
+        type: ip
+        capacity: 80
+        refillRate: 80
+      idempotency:
+        enabled: false
+  - id: auth-service
+    uri: lb://tinystore-auth
+    predicates:
+      - Path=/api/auth/**,/api/admin/**,/oidc/**
+    filters:
+      - StripPrefix=0
+    policies:
+      rateLimit:
+        type: ip
+        capacity: 50
+        refillRate: 50
+      idempotency:
+        enabled: false
+

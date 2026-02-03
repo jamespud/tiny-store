@@ -10,6 +10,7 @@ import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.reposi
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.repository.JpaInventoryStockRepository;
 import com.github.spud.tinystore.inventory.interfaces.dto.StockPreOccupyRequest;
 import com.github.spud.tinystore.inventory.interfaces.dto.StockRestockRequest;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -32,13 +33,15 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("test")
 @SpringBootTest(classes = InventoryApplication.class)
+@SuppressWarnings("resource")
 class StockAppServiceIT {
 
 	@Container
 	static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:18.1")
 			.withDatabaseName("tinystore")
 			.withUsername("postgres")
-			.withPassword("postgres");
+			.withPassword("postgres")
+			.withStartupTimeout(Duration.ofMinutes(3));
 
 	@Container
 	static final GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7.4.0"))
@@ -46,7 +49,8 @@ class StockAppServiceIT {
 
 	@Container
 	static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer("confluentinc/cp-kafka:8.1.1")
-		.withEnv("KAFKA_PROCESS_ROLES", "broker,controller");
+		.withEnv("KAFKA_PROCESS_ROLES", "broker,controller")
+		.withStartupTimeout(Duration.ofMinutes(3));
 
 	@DynamicPropertySource
 	static void registerProps(DynamicPropertyRegistry registry) {
