@@ -31,6 +31,18 @@
           <groupId>org.springframework.boot</groupId>
           <artifactId>spring-boot-starter-security</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.flywaydb</groupId>
+          <artifactId>flyway-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.postgresql</groupId>
+          <artifactId>postgresql</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <dependency>

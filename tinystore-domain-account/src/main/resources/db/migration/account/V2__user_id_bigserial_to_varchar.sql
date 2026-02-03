@@ -4,20 +4,16 @@
 -- 影响范围：user_core 主键及所有依赖该外键的表
 -- =============================================
 
--- 步骤1: 临时禁用外键约束检查，避免ALTER过程中的循环依赖问题
-SET session_replication_role = replica;
-
--- 步骤2: 修改主表 user_core.user_id
-ALTER TABLE user_core
-    ALTER COLUMN user_id DROP DEFAULT,
-    ALTER COLUMN user_id TYPE VARCHAR(64) USING user_id::varchar;
-
-COMMENT ON COLUMN user_core.user_id IS '用户唯一标识，支持雪花算法等分布式ID（字符串格式）';
-
--- 步骤3: 删除原 BIGSERIAL 自动创建的序列（如果存在）
+-- 步骤1: 删除原 BIGSERIAL 自动创建的序列（如果存在）
 DROP SEQUENCE IF EXISTS user_core_user_id_seq CASCADE;
 
--- 步骤4: 修改所有外键表的 user_id 列类型
+-- 步骤2: 先删除所有外键约束（临时）
+ALTER TABLE user_realname DROP CONSTRAINT IF EXISTS fk_user_realname_user_core;
+ALTER TABLE consumer_address DROP CONSTRAINT IF EXISTS fk_consumer_address_user_core;
+ALTER TABLE consumer_detail DROP CONSTRAINT IF EXISTS fk_consumer_detail_user_core;
+ALTER TABLE user_role DROP CONSTRAINT IF EXISTS fk_user_role_user_core;
+
+-- 步骤3: 先修改所有外键表的 user_id 列类型（避免类型不匹配）
 ALTER TABLE user_realname
     ALTER COLUMN user_id TYPE VARCHAR(64) USING user_id::varchar;
 
@@ -30,8 +26,18 @@ ALTER TABLE consumer_detail
 ALTER TABLE user_role
     ALTER COLUMN user_id TYPE VARCHAR(64) USING user_id::varchar;
 
--- 步骤5: 重新启用外键约束检查
-SET session_replication_role = DEFAULT;
+-- 步骤4: 修改主表 user_core.user_id
+ALTER TABLE user_core
+    ALTER COLUMN user_id DROP DEFAULT,
+    ALTER COLUMN user_id TYPE VARCHAR(64) USING user_id::varchar;
+
+COMMENT ON COLUMN user_core.user_id IS '用户唯一标识，支持雪花算法等分布式ID（字符串格式）';
+
+-- 步骤5: 重新创建外键约束
+ALTER TABLE user_realname ADD CONSTRAINT fk_user_realname_user_core FOREIGN KEY (user_id) REFERENCES user_core(user_id) ON DELETE CASCADE;
+ALTER TABLE consumer_address ADD CONSTRAINT fk_consumer_address_user_core FOREIGN KEY (user_id) REFERENCES user_core(user_id) ON DELETE CASCADE;
+ALTER TABLE consumer_detail ADD CONSTRAINT fk_consumer_detail_user_core FOREIGN KEY (user_id) REFERENCES user_core(user_id) ON DELETE CASCADE;
+ALTER TABLE user_role ADD CONSTRAINT fk_user_role_user_core FOREIGN KEY (user_id) REFERENCES user_core(user_id) ON DELETE CASCADE;
 
 -- 步骤6: 验证外键约束依然有效（Postgres会自动保持外键引用，但显式验证确保迁移安全）
 -- 外键约束本身在 ALTER COLUMN TYPE 时会自动适配新类型，无需手动重建
