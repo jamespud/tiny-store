@@ -33,7 +33,13 @@ import com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.reposi
 import com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.repository.JpaUserCouponRepository;
 
 @Testcontainers(disabledWithoutDocker = true)
-@SpringBootTest(classes = PromotionApplication.class)
+@SpringBootTest(
+	classes = PromotionApplication.class,
+	properties = {
+		"spring.cloud.nacos.discovery.enabled=false",
+		"spring.cloud.nacos.config.enabled=false"
+	}
+)
 @SuppressWarnings("resource")
 class UserCouponLockConcurrencyTest {
 
@@ -59,7 +65,6 @@ class UserCouponLockConcurrencyTest {
 		registry.add("spring.datasource.username", postgres::getUsername);
 		registry.add("spring.datasource.password", postgres::getPassword);
 
-		registry.add("spring.cloud.discovery.enabled", () -> "false");
 		registry.add("spring.flyway.enabled", () -> "true");
 		registry.add("spring.flyway.locations", () -> "classpath:db/migration/promotion");
 		registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
