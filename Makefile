@@ -42,7 +42,7 @@ debug: build ## Start debug environment (fixed ports: 5432/6379/9092/8848)
 it: build ## Run integration tests (Testcontainers only, no compose)
 	@echo "Running integration tests with Testcontainers..."
 	@echo "WARNING: Ensure no other Docker containers conflict with Testcontainers infra"
-	$(MAVEN) clean verify -Pit -DskipITs=false
+	$(MAVEN) clean verify -Pit -DskipITs=false -pl '!tests/api'
 	@echo "Integration tests completed successfully"
 
 e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)

@@ -23,6 +23,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import com.github.spud.tinystore.promotion.PromotionApplication;
@@ -47,6 +48,11 @@ class UserCouponLockConcurrencyTest {
 	static final GenericContainer<?> redisContainer = new GenericContainer<>(DockerImageName.parse("redis:7.4.0"))
 		.withExposedPorts(6379);
 
+	@Container
+	static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer("confluentinc/cp-kafka:8.1.1")
+		.withEnv("KAFKA_PROCESS_ROLES", "broker,controller")
+		.withStartupTimeout(Duration.ofMinutes(3));
+
 	@DynamicPropertySource
 	static void registerProps(DynamicPropertyRegistry registry) {
 		registry.add("spring.datasource.url", postgres::getJdbcUrl);
@@ -60,6 +66,8 @@ class UserCouponLockConcurrencyTest {
 
 		registry.add("spring.data.redis.host", redisContainer::getHost);
 		registry.add("spring.data.redis.port", () -> redisContainer.getMappedPort(6379).toString());
+
+		registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
 	}
 
 	@Autowired
