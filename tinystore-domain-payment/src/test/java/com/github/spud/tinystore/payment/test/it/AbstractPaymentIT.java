@@ -1,5 +1,6 @@
 package com.github.spud.tinystore.payment.test.it;
 
+import java.time.Duration;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -20,13 +21,15 @@ import org.testcontainers.utility.DockerImageName;
  * - 所有 @SpringBootTest 的集成测试应继承此类
  */
 @Testcontainers(disabledWithoutDocker = true)
+@SuppressWarnings("resource")
 public abstract class AbstractPaymentIT {
 
     @Container
     protected static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1")
         .withDatabaseName("tinystore_payment_test")
         .withUsername("postgres")
-        .withPassword("postgres");
+        .withPassword("postgres")
+        .withStartupTimeout(Duration.ofMinutes(3));
 
     @Container
     protected static final GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7.4.0"))
@@ -35,7 +38,8 @@ public abstract class AbstractPaymentIT {
     @Container
     protected static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer(
         DockerImageName.parse("confluentinc/cp-kafka:8.1.1")
-    ).withEnv("KAFKA_PROCESS_ROLES", "broker,controller");
+    ).withEnv("KAFKA_PROCESS_ROLES", "broker,controller")
+     .withStartupTimeout(Duration.ofMinutes(3));
 
 
     /**

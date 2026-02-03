@@ -47,11 +47,11 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_NUM_PARTITIONS: 3
     healthcheck:
-      test: [ "CMD", "kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092" ]
+      test: [ "CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092" ]
       interval: 10s
       timeout: 10s
       retries: 15
-      start_period: 30s
+      start_period: 10s
     networks: [ tinystore-net ]
 
 

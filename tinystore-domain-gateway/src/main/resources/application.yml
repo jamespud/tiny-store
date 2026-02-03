@@ -6,9 +6,9 @@ spring:
     name: tinystore-gateway
   cloud:
     config:
-      uri: ${CONFIG_SERVER_URI:}
-      fail-fast: false
-      enabled: true
+      enabled: false
+      import-check:
+        enabled: false
     gateway:
       metrics:
         enabled: true

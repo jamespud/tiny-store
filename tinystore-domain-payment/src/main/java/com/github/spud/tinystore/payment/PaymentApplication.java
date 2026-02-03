@@ -2,6 +2,7 @@ package com.github.spud.tinystore.payment;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.openfeign.EnableFeignClients;
 
 /**
  * @author Spud
@@ -11,6 +12,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 		"com.github.spud.tinystore.payment",
 		"com.github.spud.tinystore.infrastructure"
 })
+@EnableFeignClients(basePackages = "com.github.spud.tinystore.infrastructure.rpc")
 public class PaymentApplication {
 
 	public static void main(String[] args) {

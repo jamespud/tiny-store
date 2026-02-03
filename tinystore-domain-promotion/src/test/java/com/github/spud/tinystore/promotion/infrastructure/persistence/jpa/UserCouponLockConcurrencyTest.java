@@ -2,6 +2,7 @@ package com.github.spud.tinystore.promotion.infrastructure.persistence.jpa;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,13 +33,15 @@ import com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.reposi
 
 @Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest(classes = PromotionApplication.class)
+@SuppressWarnings("resource")
 class UserCouponLockConcurrencyTest {
 
 	@Container
 	static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1")
 		.withDatabaseName("tinystore")
 		.withUsername("postgres")
-		.withPassword("postgres");
+		.withPassword("postgres")
+		.withStartupTimeout(Duration.ofMinutes(3));
 
 	@Container
 	static final GenericContainer<?> redisContainer = new GenericContainer<>(DockerImageName.parse("redis:7.4.0"))
