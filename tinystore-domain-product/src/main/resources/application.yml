@@ -55,7 +55,7 @@ tinystore:
   # Security
   security:
     resource-server:
-      enabled: true
+      enabled: ${TINYSTORE_SECURITY_RESOURCESERVER_ENABLED:false}
       
   # Feature toggles
   feature:

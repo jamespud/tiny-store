@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.account.application;
 
 import java.time.Duration;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -75,6 +76,12 @@ class UserAccountRegisterConcurrencyIT {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @BeforeEach
+    void setUp() {
+        // 清理测试数据
+        jdbcTemplate.execute("DELETE FROM user_core WHERE account LIKE '138%'");
+    }
+
     @Test
     @DisplayName("并发注册相同手机号 - 只能成功一次")
     void concurrentRegisterSamePhone_OnlyOneSucceeds() throws InterruptedException {
@@ -103,6 +110,7 @@ class UserAccountRegisterConcurrencyIT {
                     failureCount.incrementAndGet();
                     synchronized (exceptions) {
                         exceptions.add(e);
+                        e.printStackTrace(); // 打印异常堆栈用于调试
                     }
                 } finally {
                     endLatch.countDown();

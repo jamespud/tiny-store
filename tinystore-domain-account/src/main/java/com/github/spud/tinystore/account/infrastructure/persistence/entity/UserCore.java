@@ -10,6 +10,8 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.Data;
 import org.hibernate.annotations.Comment;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Data
 @Entity
@@ -63,6 +65,7 @@ public class UserCore {
 	private Long credentialVersion;
 
 	@Column(columnDefinition = "JSONB")
+	@JdbcTypeCode(SqlTypes.JSON)
 	@Comment("扩展字段（设备/端信息等）")
 	private String extJson; // 用String接收JSONB，如需解析可配合@Convert
 

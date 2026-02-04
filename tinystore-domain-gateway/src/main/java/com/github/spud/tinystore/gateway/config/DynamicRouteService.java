@@ -66,7 +66,7 @@ public class DynamicRouteService implements InitializingBean {
 		refreshRoutes();
 	}
 
-	@Scheduled(initialDelay = 0, fixedDelayString = "#{@gatewayDynamicProperties.refreshInterval.toMillis()}")
+	@Scheduled(initialDelay = 0, fixedDelayString = "${gateway.dynamic.refresh-interval}")
 	public void scheduledRefresh() {
 		refreshRoutes();
 	}
