@@ -16,7 +16,7 @@ help: ## Show this help message
 
 build: ## Build all services with Maven
 	@echo "Building all services..."
-	$(MAVEN) clean install -Dmaven.test.skip=true
+	$(MAVEN) clean install -U -Dmaven.test.skip=true
 	@echo "Build completed successfully"
 
 debug: build ## Start debug environment (fixed ports: 5432/6379/9092/8848)
@@ -40,6 +40,23 @@ debug: build ## Start debug environment (fixed ports: 5432/6379/9092/8848)
 	@echo "  - Kafka:      localhost:9092"
 
 it: build ## Run integration tests (Testcontainers only, no compose)
+	@echo "Checking Docker Java API configuration for Testcontainers..."
+	@if [ ! -f "$$HOME/.docker-java.properties" ]; then \
+		echo "ERROR: $$HOME/.docker-java.properties not found"; \
+		echo "Creating it with api.version=1.44..."; \
+		echo "api.version=1.44" > "$$HOME/.docker-java.properties"; \
+		echo "Created $$HOME/.docker-java.properties successfully"; \
+	elif ! grep -q "api.version=1.44" "$$HOME/.docker-java.properties"; then \
+		echo "WARNING: $$HOME/.docker-java.properties exists but missing 'api.version=1.44'"; \
+		echo "Current content:"; \
+		cat "$$HOME/.docker-java.properties"; \
+		echo ""; \
+		echo "Appending api.version=1.44..."; \
+		echo "api.version=1.44" >> "$$HOME/.docker-java.properties"; \
+		echo "Updated successfully"; \
+	else \
+		echo "✓ Docker Java API configuration verified (api.version=1.44)"; \
+	fi
 	@echo "Running integration tests with Testcontainers..."
 	@echo "WARNING: Ensure no other Docker containers conflict with Testcontainers infra"
 	$(MAVEN) clean verify -Pit -DskipITs=false -pl '!tests/api'
@@ -54,8 +71,20 @@ e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
 	}; \
 	trap cleanup EXIT; \
 	docker compose -f $(COMPOSE_TEST) up -d; \
-	echo "Waiting for services to be healthy..."; \
-	sleep 30; \
+	echo "Waiting for gateway to be healthy (max 120s)..."; \
+	for i in $$(seq 1 24); do \
+		if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then \
+			echo "Gateway is healthy after $$((i*5))s"; \
+			break; \
+		fi; \
+		if [ $$i -eq 24 ]; then \
+			echo "ERROR: Gateway failed to become healthy within 120s"; \
+			echo "=== Gateway logs ==="; \
+			docker compose -f $(COMPOSE_TEST) logs --tail=50 gateway; \
+			exit 1; \
+		fi; \
+		sleep 5; \
+	done; \
 	echo "Running API tests (only black-box tests against gateway)..."; \
 	cd tests/api && ../../$(MAVEN) verify || exit 1; \
 	echo "E2E/API tests passed successfully"

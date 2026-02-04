@@ -93,7 +93,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
-      TINYSTORE_SECURITY_RESOURCE_SERVER_ENABLED: false
+      TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
       JWKS_URI: http://auth:9000/.well-known/jwks.json
     depends_on:
       nacos:
@@ -102,6 +102,12 @@ services:
         condition: service_healthy
     networks:
       - tinystore-test
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   auth:
     build:
@@ -116,7 +122,7 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
-      TINYSTORE_SECURITY_RESOURCE_SERVER_ENABLED: false
+      TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
     depends_on:
       postgres:
         condition: service_healthy
@@ -141,7 +147,7 @@ services:
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
-      TINYSTORE_SECURITY_RESOURCE_SERVER_ENABLED: false
+      TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
     depends_on:
       postgres:
         condition: service_healthy
@@ -169,7 +175,7 @@ services:
       REDIS_PORT: 6379
       JWT_ISSUER: http://auth:9000
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
-      TINYSTORE_SECURITY_RESOURCE_SERVER_ENABLED: false
+      TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
     depends_on:
       postgres:
         condition: service_healthy
@@ -195,7 +201,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://auth:9000
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
-      TINYSTORE_SECURITY_RESOURCE_SERVER_ENABLED: false
+      TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
     depends_on:
       postgres:
         condition: service_healthy
@@ -223,7 +229,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://auth:9000
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
-      TINYSTORE_SECURITY_RESOURCE_SERVER_ENABLED: false
+      TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
     depends_on:
       postgres:
         condition: service_healthy
@@ -251,7 +257,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://auth:9000
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
-      TINYSTORE_SECURITY_RESOURCE_SERVER_ENABLED: false
+      TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
     depends_on:
       postgres:
         condition: service_healthy
@@ -278,7 +284,7 @@ services:
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
-      TINYSTORE_SECURITY_RESOURCE_SERVER_ENABLED: false
+      TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
     depends_on:
       postgres:
         condition: service_healthy

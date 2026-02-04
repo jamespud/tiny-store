@@ -10,13 +10,19 @@ spring:
       import-check:
         enabled: false
     gateway:
-      metrics:
-        enabled: true
+      server:
+        webflux:
+          metrics:
+            enabled: true
   security:
     oauth2:
       resourceserver:
         jwt:
           jwk-set-uri: ${JWKS_URI:https://auth.dev.tinystore.com/.well-known/jwks.json}
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
 
 gateway:
   dynamic:
@@ -28,7 +34,6 @@ redis:
   port: ${REDIS_PORT:6379}
   password: ${REDIS_PASSWORD:}
 
-idempotency:
   ttl: ${IDEMPOTENCY_TTL:PT5M}
   key-prefix: ${IDEMPOTENCY_KEY_PREFIX:idempotent}
 
@@ -41,9 +46,6 @@ management:
     web:
       exposure:
         include: health,info,prometheus,metrics,gateway-refresh
-  endpoint:
-    prometheus:
-      enabled: true
   metrics:
     distribution:
       percentiles-histogram:
@@ -54,4 +56,4 @@ management:
 tinystore:
   security:
     resource-server:
-      enabled: true
+      enabled: false

@@ -2,12 +2,20 @@ package com.github.spud.tinystore.order;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
+import org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 
 /**
  * Order Service Application
  */
-@SpringBootApplication
+@SpringBootApplication(exclude = {
+		SecurityAutoConfiguration.class,
+		UserDetailsServiceAutoConfiguration.class,
+		OAuth2ResourceServerAutoConfiguration.class,
+		org.springframework.boot.actuate.autoconfigure.security.servlet.ManagementWebSecurityAutoConfiguration.class
+})
 @EnableFeignClients(basePackages = {
 		"com.github.spud.tinystore.order.infrastructure.acl",
 		"com.github.spud.tinystore.infrastructure.rpc"
