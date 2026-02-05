@@ -73,7 +73,7 @@ public abstract class AbstractOrderIT {
         // JPA/Hibernate
         registry.add("spring.jpa.properties.hibernate.dialect", () -> "org.hibernate.dialect.PostgreSQLDialect");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
-        registry.add("spring.jpa.properties.hibernate.default_schema", () -> "order_it");
+        registry.add("spring.jpa.properties.hibernate.default_schema", () -> "tinystore_order");
         registry.add("spring.jpa.properties.hibernate.hbm2ddl.create_namespaces", () -> "true");
         
         // Flyway（集成测试禁用，避免跨模块迁移冲突）
