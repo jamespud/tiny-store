@@ -1,4 +1,30 @@
 routes:
+  # Health check routes (high priority, static URI to management ports)
+  - id: order-health
+    uri: http://order:38080
+    predicates:
+      - Path=/api/order/trades/health-check
+    filters:
+      - SetPath=/actuator/health
+  - id: promotion-health
+    uri: http://promotion:11200
+    predicates:
+      - Path=/api/promotion/health-check
+    filters:
+      - SetPath=/actuator/health
+  - id: inventory-health
+    uri: http://inventory:23000
+    predicates:
+      - Path=/api/inventory/stock/health-check
+    filters:
+      - SetPath=/actuator/health
+  - id: product-health
+    uri: http://product:18090
+    predicates:
+      - Path=/api/products/health-check
+    filters:
+      - SetPath=/actuator/health
+  # Business routes
   - id: order-service
     uri: lb://order-service
     predicates:

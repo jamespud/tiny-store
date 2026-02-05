@@ -49,6 +49,12 @@ public class ShopContextFilter implements Filter {
 
 		HttpServletRequest httpRequest = (HttpServletRequest) request;
 		HttpServletResponse httpResponse = (HttpServletResponse) response;
+		
+		// Skip shop context validation for actuator endpoints (management port)
+		if (httpRequest.getRequestURI().startsWith("/actuator/")) {
+			chain.doFilter(request, response);
+			return;
+		}
 		ShopContext shopContext = shopContextProvider.getIfAvailable();
 		if (shopContext == null) {
 			chain.doFilter(request, response);

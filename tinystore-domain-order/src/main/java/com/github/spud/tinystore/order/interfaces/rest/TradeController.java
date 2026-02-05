@@ -38,7 +38,7 @@ public class TradeController {
      */
     @PostMapping
     public ResponseEntity<OrderHttpResponse<CreateTradeData>> createTrade(
-        @RequestBody CreateTradeRequest request,
+        @jakarta.validation.Valid @RequestBody CreateTradeRequest request,
         @RequestHeader("Idempotency-Key") String idempotencyKey) {
 
         try {
