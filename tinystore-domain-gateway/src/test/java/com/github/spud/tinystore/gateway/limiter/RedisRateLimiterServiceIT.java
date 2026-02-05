@@ -31,7 +31,7 @@ import reactor.test.StepVerifier;
 
 @Testcontainers(disabledWithoutDocker = true)
 @ExtendWith(MockitoExtension.class)
-class RedisRateLimiterServiceTest {
+class RedisRateLimiterServiceIT {
 
 	@Mock
 	private ReactiveStringRedisTemplate redisTemplate;

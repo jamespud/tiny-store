@@ -13,7 +13,7 @@ import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
 /**
- * JpaRepositoryIntegrationTest - Integration tests for JPA repositories
+ * JpaRepositoryIT - Integration tests for JPA repositories
  * 
  * Tests:
  * 1. Flyway migrations execute successfully
@@ -27,7 +27,7 @@ import org.testcontainers.utility.DockerImageName;
 @SpringBootTest
 @Testcontainers(disabledWithoutDocker = true)
 @SuppressWarnings("resource")
-public class JpaRepositoryIntegrationTest {
+public class JpaRepositoryIT {
     
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1")

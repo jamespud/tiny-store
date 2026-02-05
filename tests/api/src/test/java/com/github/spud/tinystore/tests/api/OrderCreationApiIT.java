@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Order creation E2E API test
  * Tests the critical path: order creation through gateway
  */
-class OrderCreationApiTest {
+class OrderCreationApiIT {
 
     private TestRestTemplate restTemplate;
     private String gatewayBaseUrl;

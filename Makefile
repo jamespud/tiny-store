@@ -39,6 +39,11 @@ debug: build ## Start debug environment (fixed ports: 5432/6379/9092/8848)
 	@echo "  - Redis:      localhost:6379"
 	@echo "  - Kafka:      localhost:9092"
 
+unit: ## Run pure unit tests (fast, no Docker, mocked deps)
+	@echo "Running unit tests (excluding E2E)..."
+	$(MAVEN) -pl '!tests/api' test
+	@echo "Unit tests completed successfully"
+
 it: build ## Run integration tests (Testcontainers only, no compose)
 	@echo "Checking Docker Java API configuration for Testcontainers..."
 	@if [ ! -f "$$HOME/.docker-java.properties" ]; then \

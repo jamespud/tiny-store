@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @SpringBootTest
 @ActiveProfiles("test")
-class PaymentApplicationServiceIntegrationTest extends AbstractPaymentIT {
+class PaymentApplicationServiceIT extends AbstractPaymentIT {
 
     @Autowired
     private PaymentApplicationService paymentApplicationService;
