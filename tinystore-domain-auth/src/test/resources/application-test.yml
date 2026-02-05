@@ -14,7 +14,21 @@ spring:
       discovery:
         enabled: false
   
+  # 禁用 Kafka（IT测试不需要消息队列）
+  kafka:
+    bootstrap-servers:
+  
   # 空配置导入（防止 Spring Cloud 检查失败，但不实际导入任何内容）
   config:
     import: ""
+
+# TinyStore Auth 配置
+tinystore:
+  auth:
+    keystore:
+      location: classpath:keystore/tinystore-auth.jks
+      password: changeit
+    key:
+      alias: auth
+      password: changeit
 

@@ -64,7 +64,7 @@ it: build ## Run integration tests (Testcontainers only, no compose)
 	fi
 	@echo "Running integration tests with Testcontainers..."
 	@echo "WARNING: Ensure no other Docker containers conflict with Testcontainers infra"
-	$(MAVEN) clean verify -Pit -DskipITs=false -pl '!tests/api'
+	$(MAVEN) clean verify -Pit -DskipITs=false -DskipTests -pl '!tests/api'
 	@echo "Integration tests completed successfully"
 
 e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
@@ -130,11 +130,15 @@ e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
 	cd tests/api && ../../$(MAVEN) verify || exit 1; \
 	echo "E2E/API tests passed successfully"
 
-test: ## Run full test suite (IT → E2E, sequentially)
-	@echo "Running full test suite (Phase 1: IT, Phase 2: E2E)..."
+test: ## Run full test suite (Unit → IT → E2E, sequentially)
+	@echo "Running full test suite (Phase 1: Unit, Phase 2: IT, Phase 3: E2E)..."
+	@$(MAKE) unit
+	@echo ""
+	@echo "Phase 1 (Unit) completed. Starting Phase 2 (IT)..."
+	@echo ""
 	@$(MAKE) it
 	@echo ""
-	@echo "Phase 1 (IT) completed. Starting Phase 2 (E2E)..."
+	@echo "Phase 2 (IT) completed. Starting Phase 3 (E2E)..."
 	@echo ""
 	@$(MAKE) e2e
 	@echo ""
