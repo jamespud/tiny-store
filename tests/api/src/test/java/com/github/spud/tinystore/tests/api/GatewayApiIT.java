@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Gateway health and routing API tests
  * Tests gateway availability and service discovery routing
  */
-class GatewayApiTest {
+class GatewayApiIT {
 
     private TestRestTemplate restTemplate;
     private String gatewayBaseUrl;

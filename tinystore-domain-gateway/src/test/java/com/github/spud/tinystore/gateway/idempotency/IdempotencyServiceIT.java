@@ -28,7 +28,7 @@ import reactor.test.StepVerifier;
 
 @Testcontainers(disabledWithoutDocker = true)
 @ExtendWith(MockitoExtension.class)
-class IdempotencyServiceTest {
+class IdempotencyServiceIT {
 
 	@Container
 	static final GenericContainer<?> redisContainer = new GenericContainer<>(DockerImageName.parse("redis:7.4.0"))

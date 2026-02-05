@@ -41,7 +41,7 @@ import com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.reposi
 	}
 )
 @SuppressWarnings("resource")
-class UserCouponLockConcurrencyTest {
+class UserCouponLockConcurrencyIT {
 
 	@Container
 	static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1")
