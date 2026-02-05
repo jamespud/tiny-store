@@ -65,15 +65,17 @@ it: build ## Run integration tests (Testcontainers only, no compose)
 e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
 	@echo "Starting test environment for E2E/API tests..."
 	@set -e; \
+	root_dir=$$(pwd); \
 	cleanup() { \
 		echo "Cleaning up test environment..."; \
+		cd "$$root_dir"; \
 		docker compose -f $(COMPOSE_TEST) down -v; \
 	}; \
 	trap cleanup EXIT; \
 	docker compose -f $(COMPOSE_TEST) up -d; \
 	echo "Waiting for gateway to be healthy (max 120s)..."; \
 	for i in $$(seq 1 24); do \
-		if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then \
+		if curl -sf --max-time 3 http://localhost:8080/actuator/health > /dev/null 2>&1; then \
 			echo "Gateway is healthy after $$((i*5))s"; \
 			break; \
 		fi; \
@@ -81,6 +83,40 @@ e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
 			echo "ERROR: Gateway failed to become healthy within 120s"; \
 			echo "=== Gateway logs ==="; \
 			docker compose -f $(COMPOSE_TEST) logs --tail=50 gateway; \
+			exit 1; \
+		fi; \
+		sleep 5; \
+	done; \
+	echo "Waiting for downstream routes to be ready (max 120s)..."; \
+	routes_ready=0; \
+	for i in $$(seq 1 24); do \
+		all_ready=1; \
+		for path in "/api/order/trades/health-check" "/api/promotion/health-check" "/api/inventory/stock/health-check" "/api/products/health-check"; do \
+			response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1); \
+			code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1); \
+			if [ "$$code" != "200" ] || ! echo "$$response" | grep -q 'UP'; then \
+				all_ready=0; \
+				break; \
+			fi; \
+		done; \
+		if [ $$all_ready -eq 1 ]; then \
+			echo "Downstream routes are ready after $$((i*5))s"; \
+			routes_ready=1; \
+			break; \
+		fi; \
+		if [ $$i -eq 24 ]; then \
+			echo "ERROR: Downstream routes failed to become ready within 120s"; \
+			echo "=== Route status ==="; \
+			for path in "/api/order/trades/health-check" "/api/promotion/health-check" "/api/inventory/stock/health-check" "/api/products/health-check"; do \
+				response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1); \
+				code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1); \
+				body_prefix=$$(echo "$$response" | LC_ALL=C cut -c 1-50); \
+				echo "GET $$path -> $$code | $$body_prefix"; \
+			done; \
+			echo "=== Gateway logs (last 100 lines) ==="; \
+			docker compose -f $(COMPOSE_TEST) logs --tail=100 gateway; \
+			echo "=== Product logs (last 100 lines) ==="; \
+			docker compose -f $(COMPOSE_TEST) logs --tail=100 product; \
 			exit 1; \
 		fi; \
 		sleep 5; \
