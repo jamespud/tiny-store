@@ -40,50 +40,53 @@ class GatewayApiTest {
     void gateway_shouldRouteToOrderService() {
         // Given: security is disabled in test environment
         
-        // When: accessing order service through gateway
+        // When: accessing order service health through gateway
         ResponseEntity<String> response = restTemplate.getForEntity(
             gatewayBaseUrl + "/api/order/trades/health-check", 
             String.class
         );
 
-        // Then: request reaches order service (even if endpoint doesn't exist, routing works)
-        // Note: we expect either 200 (if endpoint exists) or 404 (routing works but endpoint missing)
-        assertThat(response.getStatusCode()).isIn(HttpStatus.OK, HttpStatus.NOT_FOUND);
+        // Then: health check must return 200 (routes to management port)
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).contains("UP");
     }
 
     @Test
     void gateway_shouldRouteToPromotionService() {
-        // When: accessing promotion service through gateway
+        // When: accessing promotion service health through gateway
         ResponseEntity<String> response = restTemplate.getForEntity(
             gatewayBaseUrl + "/api/promotion/health-check", 
             String.class
         );
 
-        // Then: request reaches promotion service
-        assertThat(response.getStatusCode()).isIn(HttpStatus.OK, HttpStatus.NOT_FOUND);
+        // Then: health check must return 200 (routes to management port)
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).contains("UP");
     }
 
     @Test
     void gateway_shouldRouteToInventoryService() {
-        // When: accessing inventory service through gateway
+        // When: accessing inventory service health through gateway
         ResponseEntity<String> response = restTemplate.getForEntity(
             gatewayBaseUrl + "/api/inventory/stock/health-check", 
             String.class
         );
 
-        // Then: request reaches inventory service
-        assertThat(response.getStatusCode()).isIn(HttpStatus.OK, HttpStatus.NOT_FOUND);
+        // Then: health check must return 200 (routes to management port)
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).contains("UP");
     }
 
     @Test
     void gateway_shouldRouteToProductService() {
-        // When: accessing product service through gateway
+        // When: accessing product service health through gateway
         ResponseEntity<String> response = restTemplate.getForEntity(
             gatewayBaseUrl + "/api/products/health-check", 
             String.class
         );
 
-        // Then: request reaches product service
-        assertThat(response.getStatusCode()).isIn(HttpStatus.OK, HttpStatus.NOT_FOUND);
+        // Then: health check must return 200 (routes to management port)
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).contains("UP");
     }
 }

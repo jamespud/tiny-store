@@ -167,6 +167,8 @@ services:
     container_name: tinystore-inventory-test
     ports:
       - "13000:13000"
+    expose:
+      - "23000"
     environment:
       SPRING_PROFILES_ACTIVE: default
       DB_HOST: postgres
@@ -176,6 +178,10 @@ services:
       JWT_ISSUER: http://auth:9000
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
+      MANAGEMENT_SERVER_PORT: 23000
+      MANAGEMENT_SERVER_ADDRESS: 0.0.0.0
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ""
     depends_on:
       postgres:
         condition: service_healthy
@@ -193,6 +199,8 @@ services:
     container_name: tinystore-order-test
     ports:
       - "28080:28080"
+    expose:
+      - "38080"
     environment:
       SPRING_PROFILES_ACTIVE: default
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tinystore?currentSchema=tinystore_order
@@ -202,6 +210,9 @@ services:
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://auth:9000
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
+      MANAGEMENT_SERVER_PORT: 38080
+      MANAGEMENT_SERVER_ADDRESS: 0.0.0.0
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
     depends_on:
       postgres:
         condition: service_healthy
@@ -249,15 +260,20 @@ services:
     container_name: tinystore-product-test
     ports:
       - "8090:8090"
+    expose:
+      - "18090"
     environment:
       SPRING_PROFILES_ACTIVE: default
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tinystore?currentSchema=tinystore_product
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://auth:9000
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ""
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
+      MANAGEMENT_SERVER_PORT: 18090
+      MANAGEMENT_SERVER_ADDRESS: 0.0.0.0
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
     depends_on:
       postgres:
         condition: service_healthy
@@ -277,6 +293,8 @@ services:
     container_name: tinystore-promotion-test
     ports:
       - "1200:1200"
+    expose:
+      - "11200"
     environment:
       SPRING_PROFILES_ACTIVE: default
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tinystore?currentSchema=tinystore_promotion
@@ -285,6 +303,9 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
+      MANAGEMENT_SERVER_PORT: 11200
+      MANAGEMENT_SERVER_ADDRESS: 0.0.0.0
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
     depends_on:
       postgres:
         condition: service_healthy
