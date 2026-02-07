@@ -42,7 +42,7 @@ class GatewayApiIT {
         
         // When: accessing order service health through gateway
         ResponseEntity<String> response = restTemplate.getForEntity(
-            gatewayBaseUrl + "/api/order/trades/health-check", 
+            gatewayBaseUrl + "/internal/health/order", 
             String.class
         );
 
@@ -55,7 +55,7 @@ class GatewayApiIT {
     void gateway_shouldRouteToPromotionService() {
         // When: accessing promotion service health through gateway
         ResponseEntity<String> response = restTemplate.getForEntity(
-            gatewayBaseUrl + "/api/promotion/health-check", 
+            gatewayBaseUrl + "/internal/health/promotion", 
             String.class
         );
 
@@ -68,7 +68,7 @@ class GatewayApiIT {
     void gateway_shouldRouteToInventoryService() {
         // When: accessing inventory service health through gateway
         ResponseEntity<String> response = restTemplate.getForEntity(
-            gatewayBaseUrl + "/api/inventory/stock/health-check", 
+            gatewayBaseUrl + "/internal/health/inventory", 
             String.class
         );
 
@@ -81,7 +81,46 @@ class GatewayApiIT {
     void gateway_shouldRouteToProductService() {
         // When: accessing product service health through gateway
         ResponseEntity<String> response = restTemplate.getForEntity(
-            gatewayBaseUrl + "/api/products/health-check", 
+            gatewayBaseUrl + "/internal/health/product", 
+            String.class
+        );
+
+        // Then: health check must return 200 (routes to management port)
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).contains("UP");
+    }
+
+    @Test
+    void gateway_shouldRouteToAuthService() {
+        // When: accessing auth service health through gateway
+        ResponseEntity<String> response = restTemplate.getForEntity(
+            gatewayBaseUrl + "/internal/health/auth", 
+            String.class
+        );
+
+        // Then: health check must return 200 (routes to management port)
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).contains("UP");
+    }
+
+    @Test
+    void gateway_shouldRouteToAccountService() {
+        // When: accessing account service health through gateway
+        ResponseEntity<String> response = restTemplate.getForEntity(
+            gatewayBaseUrl + "/internal/health/account", 
+            String.class
+        );
+
+        // Then: health check must return 200 (routes to management port)
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).contains("UP");
+    }
+
+    @Test
+    void gateway_shouldRouteToPayService() {
+        // When: accessing pay service health through gateway
+        ResponseEntity<String> response = restTemplate.getForEntity(
+            gatewayBaseUrl + "/internal/health/pay", 
             String.class
         );
 

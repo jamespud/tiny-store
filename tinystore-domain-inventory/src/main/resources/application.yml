@@ -44,3 +44,12 @@ tinystore:
       enabled: ${TINYSTORE_SECURITY_RESOURCESERVER_ENABLED:false}
 server:
   port: 13000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

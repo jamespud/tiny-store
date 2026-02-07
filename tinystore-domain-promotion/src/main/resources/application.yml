@@ -7,7 +7,7 @@ spring:
       import-check:
         enabled: false
   datasource:
-    url: jdbc:postgresql://localhost:5432/tinystore?currentSchema=tinystore_promotion
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/tinystore?currentSchema=tinystore_promotion
     username: postgres
     password: postgres
     driver-class-name: org.postgresql.Driver
@@ -21,7 +21,7 @@ spring:
   flyway:
     locations: classpath:db/migration/promotion
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
   data:
     redis:
       host: localhost
@@ -40,3 +40,12 @@ promotion:
     hot-coupons: []
 server:
   port: 1200
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

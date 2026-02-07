@@ -27,15 +27,15 @@ spring:
           content-type: application/json
     nacos:
       config:
-        server-addr: 127.0.0.1:8848
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
         access-key:
         import-check:
           enabled: false
       discovery:
-        server-addr: 127.0.0.1:8848
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
         access-key:
   datasource:
-    url: jdbc:postgresql://localhost:5432/tinystore?currentSchema=tinystore_account
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/tinystore?currentSchema=tinystore_account
     username: postgres
     password: postgres
     driver-class-name: org.postgresql.Driver
@@ -69,7 +69,7 @@ spring:
     activate:
       on-profile: test
   datasource:
-    url: jdbc:postgresql://localhost:5432/tinystore_test?currentSchema=tinystore_account
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/tinystore_test?currentSchema=tinystore_account
 
 ---
 spring:
