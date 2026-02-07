@@ -7,7 +7,7 @@ spring:
       import-check:
         enabled: false
   datasource:
-    url: jdbc:postgresql://localhost:5432/tinystore?currentSchema=tinystore_payment
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/tinystore?currentSchema=tinystore_payment
     username: postgres
     password: postgres
     driver-class-name: org.postgresql.Driver
@@ -24,7 +24,7 @@ spring:
     locations: classpath:db/migration/payment
     baseline-on-migrate: true
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
     consumer:
       group-id: pay-service
       auto-offset-reset: earliest
@@ -33,13 +33,13 @@ spring:
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   security:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:9000
+          issuer-uri: ${JWT_ISSUER:http://localhost:9000}
 
 tinystore:
   security:
@@ -53,3 +53,12 @@ payment:
 
 server:
   port: 8083
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

@@ -42,15 +42,15 @@ spring:
               republish-to-dlq: true
     nacos:
       config:
-        server-addr: 127.0.0.1:8848
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
         access-key:
         import-check:
           enabled: false
       discovery:
-        server-addr: 127.0.0.1:8848
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
         access-key:
   datasource:
-    url: jdbc:postgresql://localhost:5432/tinystore?currentSchema=tinystore_auth
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/tinystore?currentSchema=tinystore_auth
     username: postgres
     password: postgres
     driver-class-name: org.postgresql.Driver
@@ -64,8 +64,8 @@ spring:
     show-sql: false
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   cache:
     type: redis
   authorization-server:

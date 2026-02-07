@@ -22,7 +22,7 @@ spring:
       
   # Embedded Kafka (if using spring-kafka-test)
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
 
 # Feature toggles for local development
 tinystore:

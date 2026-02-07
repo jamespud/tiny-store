@@ -19,7 +19,7 @@
 -- ------------------------------
 CREATE TABLE user_core
 (
-    user_id            BIGSERIAL PRIMARY KEY,
+    user_id            varchar(64) PRIMARY KEY,
     account            VARCHAR(64)  NOT NULL,
     password           VARCHAR(128) NOT NULL,
     nickname           VARCHAR(32)  NOT NULL,
@@ -69,7 +69,7 @@ COMMENT ON INDEX idx_user_core_account_status IS '账号状态索引，用于账
 CREATE TABLE user_realname
 (
     realname_id       BIGSERIAL PRIMARY KEY,
-    user_id           BIGINT       NOT NULL,
+    user_id           varchar(64)  NOT NULL,
     real_name         VARCHAR(32)  NOT NULL,
     id_card           VARCHAR(64)  NOT NULL,
     id_card_front_url VARCHAR(255) NOT NULL,
@@ -113,7 +113,7 @@ COMMENT ON INDEX idx_user_realname_auth_status IS '审核状态索引，用于�
 CREATE TABLE consumer_address
 (
     addr_id        BIGSERIAL PRIMARY KEY,
-    user_id        BIGINT       NOT NULL,
+    user_id        VARCHAR(64)  NOT NULL,
     receiver_name  VARCHAR(32)  NOT NULL,
     receiver_phone VARCHAR(20)  NOT NULL,
     province       VARCHAR(32)  NOT NULL,
@@ -160,7 +160,7 @@ COMMENT ON INDEX uk_consumer_address_user_default IS '部分唯一索引：保�
 CREATE TABLE consumer_detail
 (
     consumer_id        BIGSERIAL PRIMARY KEY,
-    user_id            BIGINT         NOT NULL,
+    user_id            VARCHAR(64)  NOT NULL,
     member_level       SMALLINT       NOT NULL DEFAULT 0,
     total_consume      NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     points_balance     INTEGER        NOT NULL DEFAULT 0,
@@ -372,7 +372,7 @@ ON CONFLICT (perm_code) DO NOTHING;
 CREATE TABLE user_role
 (
     ur_id          BIGSERIAL PRIMARY KEY,
-    user_id        BIGINT      NOT NULL,
+    user_id        VARCHAR(64)      NOT NULL,
     role_id        SMALLINT    NOT NULL,
     merchant_id    BIGINT,
     create_user_id BIGINT      NOT NULL,

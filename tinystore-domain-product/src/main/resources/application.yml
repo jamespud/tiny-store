@@ -9,7 +9,7 @@ spring:
     
   # Database configuration (PostgreSQL)
   datasource:
-    url: jdbc:postgresql://localhost:5432/tinystore?currentSchema=tinystore_product
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/tinystore?currentSchema=tinystore_product
     username: postgres
     password: postgres
     driver-class-name: org.postgresql.Driver

@@ -96,7 +96,7 @@ e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
 	routes_ready=0; \
 	for i in $$(seq 1 24); do \
 		all_ready=1; \
-		for path in "/api/order/trades/health-check" "/api/promotion/health-check" "/api/inventory/stock/health-check" "/api/products/health-check"; do \
+		for path in "/internal/health/order" "/internal/health/promotion" "/internal/health/inventory" "/internal/health/product" "/internal/health/auth" "/internal/health/account" "/internal/health/pay"; do \
 			response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1); \
 			code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1); \
 			if [ "$$code" != "200" ] || ! echo "$$response" | grep -q 'UP'; then \
@@ -112,7 +112,7 @@ e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
 		if [ $$i -eq 24 ]; then \
 			echo "ERROR: Downstream routes failed to become ready within 120s"; \
 			echo "=== Route status ==="; \
-			for path in "/api/order/trades/health-check" "/api/promotion/health-check" "/api/inventory/stock/health-check" "/api/products/health-check"; do \
+			for path in "/internal/health/order" "/internal/health/promotion" "/internal/health/inventory" "/internal/health/product" "/internal/health/auth" "/internal/health/account" "/internal/health/pay"; do \
 				response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1); \
 				code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1); \
 				body_prefix=$$(echo "$$response" | LC_ALL=C cut -c 1-50); \
@@ -127,8 +127,65 @@ e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
 		sleep 5; \
 	done; \
 	echo "Running API tests (only black-box tests against gateway)..."; \
-	cd tests/api && ../../$(MAVEN) verify || exit 1; \
+	cd tests/api && ../../$(MAVEN) verify -Pit -DskipITs=false || exit 1; \
 	echo "E2E/API tests passed successfully"
+
+e2e-smoke: build ## Run E2E smoke tests (gateway + all service health routes only, no business tests)
+	@echo "Starting test environment for E2E smoke check..."
+	@set -e; \
+	root_dir=$$(pwd); \
+	cleanup() { \
+		echo "Cleaning up test environment..."; \
+		cd "$$root_dir"; \
+		docker compose -f $(COMPOSE_TEST) down -v; \
+	}; \
+	trap cleanup EXIT; \
+	docker compose -f $(COMPOSE_TEST) up -d; \
+	echo "Waiting for gateway to be healthy (max 120s)..."; \
+	for i in $$(seq 1 24); do \
+		if curl -sf --max-time 3 http://localhost:8080/actuator/health > /dev/null 2>&1; then \
+			echo "Gateway is healthy after $$((i*5))s"; \
+			break; \
+		fi; \
+		if [ $$i -eq 24 ]; then \
+			echo "ERROR: Gateway failed to become healthy within 120s"; \
+			echo "=== Gateway logs ==="; \
+			docker compose -f $(COMPOSE_TEST) logs --tail=50 gateway; \
+			exit 1; \
+		fi; \
+		sleep 5; \
+	done; \
+	echo "Waiting for all service health-check routes to be ready (max 120s)..."; \
+	all_routes_ready=0; \
+	for i in $$(seq 1 24); do \
+		all_ready=1; \
+		for path in "/internal/health/order" "/internal/health/promotion" "/internal/health/inventory" "/internal/health/product" "/internal/health/auth" "/internal/health/account" "/internal/health/pay"; do \
+			response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1); \
+			code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1); \
+			if [ "$$code" != "200" ] || ! echo "$$response" | grep -q 'UP'; then \
+				all_ready=0; \
+				break; \
+			fi; \
+		done; \
+		if [ $$all_ready -eq 1 ]; then \
+			echo "All health-check routes are ready after $$((i*5))s"; \
+			all_routes_ready=1; \
+			break; \
+		fi; \
+		if [ $$i -eq 24 ]; then \
+			echo "ERROR: Service health-check routes failed within 120s"; \
+			echo "=== Route status ==="; \
+			for path in "/internal/health/order" "/internal/health/promotion" "/internal/health/inventory" "/internal/health/product" "/internal/health/auth" "/internal/health/account" "/internal/health/pay"; do \
+				response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1); \
+				code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1); \
+				body_prefix=$$(echo "$$response" | LC_ALL=C cut -c 1-50); \
+				echo "GET $$path -> $$code | $$body_prefix"; \
+			done; \
+			exit 1; \
+		fi; \
+		sleep 5; \
+	done; \
+	echo "E2E smoke check passed: gateway + all service routes are healthy"
 
 test: ## Run full test suite (Unit → IT → E2E, sequentially)
 	@echo "Running full test suite (Phase 1: Unit, Phase 2: IT, Phase 3: E2E)..."
