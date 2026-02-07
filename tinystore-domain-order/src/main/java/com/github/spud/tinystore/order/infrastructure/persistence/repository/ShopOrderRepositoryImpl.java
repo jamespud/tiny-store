@@ -16,7 +16,6 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -40,22 +39,26 @@ public class ShopOrderRepositoryImpl implements ShopOrderRepository {
 
     @Override
     public ShopOrder save(ShopOrder shopOrder) {
+        boolean isNew = shopOrderJpaRepository.findByOrderId(shopOrder.getOrderId()).isEmpty();
+
         ShopOrderEntity entity = toEntity(shopOrder);
         entity = shopOrderJpaRepository.save(entity);
 
-        // 保存订单行
-        for (OrderLine line : shopOrder.getOrderLines()) {
-            OrderLineEntity lineEntity = OrderLineEntity.builder()
-                .orderId(entity.getOrderId())
-                .skuId(line.getSkuId())
-                .productId(line.getProductId())
-                .productName(line.getProductName())
-                .quantity(line.getQuantity())
-                .priceCents(line.getPriceCents())
-                .lineAmountCents(line.getLineAmountCents())
-                .createdAt(LocalDateTime.now())
-                .build();
-            orderLineJpaRepository.save(lineEntity);
+        if (isNew) {
+            // 保存订单行（仅在创建时写入，避免更新时重复插入）
+            for (OrderLine line : shopOrder.getOrderLines()) {
+                OrderLineEntity lineEntity = OrderLineEntity.builder()
+                    .orderId(entity.getOrderId())
+                    .skuId(line.getSkuId())
+                    .productId(line.getProductId())
+                    .productName(line.getProductName())
+                    .quantity(line.getQuantity())
+                    .priceCents(line.getPriceCents())
+                    .lineAmountCents(line.getLineAmountCents())
+                    .createdAt(LocalDateTime.now())
+                    .build();
+                orderLineJpaRepository.save(lineEntity);
+            }
         }
 
         return toDomain(entity, shopOrder.getOrderLines());
@@ -100,6 +103,7 @@ public class ShopOrderRepositoryImpl implements ShopOrderRepository {
         }
         
         return ShopOrderEntity.builder()
+            .id(shopOrder.getId())
             .orderId(shopOrder.getOrderId())
             .tradeId(shopOrder.getTradeId())
             .shopId(shopOrder.getShopId())
@@ -127,6 +131,7 @@ public class ShopOrderRepositoryImpl implements ShopOrderRepository {
         }
         
         return ShopOrder.builder()
+            .id(entity.getId())
             .orderId(entity.getOrderId())
             .tradeId(entity.getTradeId())
             .shopId(entity.getShopId())

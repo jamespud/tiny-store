@@ -45,7 +45,7 @@ public class SkuService {
 	 * Update SKU attributes
 	 */
 	@Transactional
-	@CacheEvict(value = "skus", key = "#skuId.value")
+	@CacheEvict(value = "skus", key = "#skuId.id")
 	public Sku updateSku(SkuId skuId, Sku updatedSku) {
 		String shopId = shopContext.getShopId();
 		log.info("Updating SKU: {} for shop: {}", skuId, shopId);
@@ -67,7 +67,7 @@ public class SkuService {
 	/**
 	 * Get SKU by ID (with caching)
 	 */
-	@Cacheable(value = "skus", key = "#skuId.value")
+	@Cacheable(value = "skus", key = "#skuId.id")
 	public Optional<Sku> getSku(SkuId skuId) {
 		String shopId = shopContext.getShopId();
 		log.debug("Getting SKU: {} for shop: {}", skuId, shopId);
@@ -78,7 +78,7 @@ public class SkuService {
 	/**
 	 * Find all SKUs for a product
 	 */
-	@Cacheable(value = "product-skus", key = "#productId.value")
+	@Cacheable(value = "product-skus", key = "#productId.id")
 	public List<Sku> getSkusByProduct(ProductId productId) {
 		String shopId = shopContext.getShopId();
 		log.debug("Getting SKUs for product: {} shop: {}", productId, shopId);

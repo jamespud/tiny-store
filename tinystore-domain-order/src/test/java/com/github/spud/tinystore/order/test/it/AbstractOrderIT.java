@@ -24,7 +24,6 @@ import org.testcontainers.utility.DockerImageName;
  * - @DataJpaTest 的 IT（如 TradeJpaRepositoryIT）直接继承此类
  * - @SpringBootTest 的 IT 继承 AbstractSpringBootOrderIT
  */
-@Testcontainers(disabledWithoutDocker = true)
 @SuppressWarnings("resource")
 public abstract class AbstractOrderIT {
 
@@ -34,22 +33,25 @@ public abstract class AbstractOrderIT {
      */
     protected static final AtomicBoolean SCHEDULING_ENABLED = new AtomicBoolean(false);
 
-    @Container
     static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1")
         .withDatabaseName("tinystore_order_test")
         .withUsername("postgres")
         .withPassword("postgres")
         .withStartupTimeout(Duration.ofMinutes(3));
 
-    @Container
     static final GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7.4.0"))
         .withExposedPorts(6379)
         .waitingFor(Wait.forListeningPort());
 
-    @Container
     static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer("confluentinc/cp-kafka:8.1.1")
         .withEnv("KAFKA_PROCESS_ROLES", "broker,controller")
         .withStartupTimeout(Duration.ofMinutes(3));
+
+    static {
+        postgres.start();
+        redis.start();
+        kafka.start();
+    }
 
     /**
      * 动态注入测试环境配置
@@ -72,11 +74,11 @@ public abstract class AbstractOrderIT {
         
         // JPA/Hibernate
         registry.add("spring.jpa.properties.hibernate.dialect", () -> "org.hibernate.dialect.PostgreSQLDialect");
-        registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
+        registry.add("spring.jpa.hibernate.ddl-auto", () -> "create");
         registry.add("spring.jpa.properties.hibernate.default_schema", () -> "tinystore_order");
         registry.add("spring.jpa.properties.hibernate.hbm2ddl.create_namespaces", () -> "true");
         
-        // Flyway（集成测试禁用，避免跨模块迁移冲突）
+        // Flyway（集成测试禁用，使用Hibernate DDL管理schema）
         registry.add("spring.flyway.enabled", () -> "false");
         
         // Redis

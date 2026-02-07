@@ -42,6 +42,8 @@ tinystore:
   security:
     resource-server:
       enabled: ${TINYSTORE_SECURITY_RESOURCESERVER_ENABLED:false}
+    permit-all:
+      enabled: ${TINYSTORE_SECURITY_PERMIT_ALL_ENABLED:false}
 server:
   port: 13000
 

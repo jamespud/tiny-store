@@ -33,6 +33,11 @@ import org.springframework.http.ResponseEntity;
  * - Gateway accessible at ${gateway.base.url} (default http://localhost:8080)
  * - Security disabled in test profile
  * - Fixed seeds (SKU_A/SKU_B in SHOP_A/SHOP_B) are available and validated
+ * 
+ * Endpoint Coverage Tags:
+ * - Each @Tag("ep:...") marks which service endpoint is exercised
+ * - Format: ep:<service>:<METHOD>:<canonicalPath>
+ * - These tags are validated via EndpointCoverageContractTest
  */
 class MallE2EIT {
 
@@ -52,6 +57,18 @@ class MallE2EIT {
     }
 
     @Test
+    @org.junit.jupiter.api.Tag("ep:product:GET:/api/skus/{skuId}")
+    @org.junit.jupiter.api.Tag("ep:inventory:POST:/api/inventory/stock/pre-occupy")
+    @org.junit.jupiter.api.Tag("ep:inventory:POST:/api/inventory/stock/release")
+    @org.junit.jupiter.api.Tag("ep:promotion:POST:/api/promotion/checkout/quote")
+    @org.junit.jupiter.api.Tag("ep:promotion:POST:/api/promotion/checkout/release")
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades")
+    @org.junit.jupiter.api.Tag("ep:order:GET:/api/order/trades/{tradeId}")
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades/{tradeId}/pay/callback")
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/merchant/orders/{orderId}/accept")
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/merchant/orders/{orderId}/ship")
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/merchant/packages/{packageId}/delivered")
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades/{tradeId}/confirm-receipt")
     void strictClosureE2E_createTradeToConfirmReceipt_shouldCompleteFullLifecycle() {
         // === Seed Contract Validation (fail-fast if environment not ready) ===
         validateSeedContract();

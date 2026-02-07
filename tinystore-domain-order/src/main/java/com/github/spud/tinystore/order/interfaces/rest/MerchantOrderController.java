@@ -72,7 +72,7 @@ public class MerchantOrderController {
     @PostMapping("/orders/{orderId}/ship")
     public ResponseEntity<OrderHttpResponse<ShipOrderData>> shipOrder(
         @PathVariable String orderId,
-        @RequestBody ShipOrderRequest request,
+        @jakarta.validation.Valid @RequestBody ShipOrderRequest request,
         @RequestHeader("Idempotency-Key") String idempotencyKey) {
 
         try {

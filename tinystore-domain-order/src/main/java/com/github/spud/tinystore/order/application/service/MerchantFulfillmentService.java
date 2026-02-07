@@ -91,7 +91,9 @@ public class MerchantFulfillmentService {
                 .orElse(FulfillmentPackage.builder()
                     .packageId(packageId)
                     .tradeId(shopOrder.getTradeId())
+                    .packageStatus(com.github.spud.tinystore.order.domain.enums.PackageStatus.CREATED)
                     .createdAt(LocalDateTime.now())
+                    .updatedAt(LocalDateTime.now())
                     .build());
 
             // 发货（调用聚合根方法）
@@ -111,6 +113,12 @@ public class MerchantFulfillmentService {
             shopOrderRepository.save(shopOrder);
 
             // 写入 Outbox 事件
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("packageId", packageId);
+            payload.put("orderId", orderId);
+            payload.put("waybillNo", waybillNo != null ? waybillNo : "");
+            payload.put("logistics", logistics != null ? logistics : "");
+            
             OrderDomainEvent shippedEvent = OrderDomainEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .eventType(OrderEventType.PACKAGE_SHIPPED)
@@ -118,12 +126,7 @@ public class MerchantFulfillmentService {
                 .aggregateId(packageId)
                 .occurredAt(LocalDateTime.now())
                 .traceId(traceId)
-                .payloadJson(objectMapper.writeValueAsString(Map.of(
-                    "packageId", packageId,
-                    "orderId", orderId,
-                    "waybillNo", waybillNo,
-                    "logistics", logistics
-                )))
+                .payloadJson(objectMapper.writeValueAsString(payload))
                 .build();
             outboxEventService.saveEvent(shippedEvent);
 
@@ -163,6 +166,10 @@ public class MerchantFulfillmentService {
                     fulfillmentPackageRepository.save(pkg);
 
                     // 写入 Package 已签收事件
+                    java.util.Map<String, Object> pkgPayload = new java.util.HashMap<>();
+                    pkgPayload.put("packageId", pkg.getPackageId());
+                    pkgPayload.put("deliveredAt", pkg.getDeliveredAt() != null ? pkg.getDeliveredAt().toString() : "");
+                    
                     OrderDomainEvent deliveredEvent = OrderDomainEvent.builder()
                         .eventId(UUID.randomUUID().toString())
                         .eventType(OrderEventType.PACKAGE_DELIVERED)
@@ -170,16 +177,17 @@ public class MerchantFulfillmentService {
                         .aggregateId(pkg.getPackageId())
                         .occurredAt(LocalDateTime.now())
                         .traceId(traceId)
-                        .payloadJson(objectMapper.writeValueAsString(Map.of(
-                            "packageId", pkg.getPackageId(),
-                            "deliveredAt", pkg.getDeliveredAt().toString()
-                        )))
+                        .payloadJson(objectMapper.writeValueAsString(pkgPayload))
                         .build();
                     outboxEventService.saveEvent(deliveredEvent);
                 }
             }
 
             // 写入 Order 成功事件
+            java.util.Map<String, Object> orderPayload = new java.util.HashMap<>();
+            orderPayload.put("orderId", orderId);
+            orderPayload.put("status", "SUCCESS");
+            
             OrderDomainEvent successEvent = OrderDomainEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .eventType(OrderEventType.ORDER_PAID) // 或 SUCCESS，取决于业务需求
@@ -187,10 +195,7 @@ public class MerchantFulfillmentService {
                 .aggregateId(orderId)
                 .occurredAt(LocalDateTime.now())
                 .traceId(traceId)
-                .payloadJson(objectMapper.writeValueAsString(Map.of(
-                    "orderId", orderId,
-                    "status", "SUCCESS"
-                )))
+                .payloadJson(objectMapper.writeValueAsString(orderPayload))
                 .build();
             outboxEventService.saveEvent(successEvent);
 
@@ -241,6 +246,10 @@ public class MerchantFulfillmentService {
             }
 
             // 写入 Outbox 事件
+            java.util.Map<String, Object> deliveredPayload = new java.util.HashMap<>();
+            deliveredPayload.put("packageId", packageId);
+            deliveredPayload.put("deliveredAt", pkg.getDeliveredAt() != null ? pkg.getDeliveredAt().toString() : "");
+            
             OrderDomainEvent deliveredEvent = OrderDomainEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .eventType(OrderEventType.PACKAGE_DELIVERED)
@@ -248,10 +257,7 @@ public class MerchantFulfillmentService {
                 .aggregateId(packageId)
                 .occurredAt(LocalDateTime.now())
                 .traceId(traceId)
-                .payloadJson(objectMapper.writeValueAsString(Map.of(
-                    "packageId", packageId,
-                    "deliveredAt", pkg.getDeliveredAt().toString()
-                )))
+                .payloadJson(objectMapper.writeValueAsString(deliveredPayload))
                 .build();
             outboxEventService.saveEvent(deliveredEvent);
 

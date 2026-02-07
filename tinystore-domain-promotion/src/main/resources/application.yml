@@ -27,6 +27,11 @@ spring:
       host: localhost
       port: 6379
 
+tinystore:
+  security:
+    permit-all:
+      enabled: ${TINYSTORE_SECURITY_PERMIT_ALL_ENABLED:false}
+
 promotion:
   coupon:
     lock-timeout-minutes: 30

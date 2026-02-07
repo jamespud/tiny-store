@@ -567,6 +567,7 @@ public class TradeApplicationService {
             for (ShopOrder shopOrder : shopOrders) {
                 // 更新为待发货（ShopOrder 需要添加此方法或直接重建）
                 ShopOrder updated = ShopOrder.builder()
+                    .id(shopOrder.getId())
                     .orderId(shopOrder.getOrderId())
                     .tradeId(shopOrder.getTradeId())
                     .shopId(shopOrder.getShopId())
@@ -574,8 +575,12 @@ public class TradeApplicationService {
                     .orderStatus(OrderStatus.PENDING_SHIP)
                     .inventoryStatus(shopOrder.getInventoryStatus())
                     .promotionStatus(shopOrder.getPromotionStatus())
+                    .inventoryPreOccupyIds(shopOrder.getInventoryPreOccupyIds())
+                    .totalAmountCents(shopOrder.getTotalAmountCents())
                     .orderLines(shopOrder.getOrderLines())
                     .createdAt(shopOrder.getCreatedAt())
+                    .updatedAt(shopOrder.getUpdatedAt())
+                    .acceptedAt(shopOrder.getAcceptedAt())
                     .build();
                 shopOrderRepository.save(updated);
             }

@@ -7,6 +7,7 @@ import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.route.Route;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.core.Ordered;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -50,6 +51,11 @@ public class IdempotencyFilter implements GlobalFilter, Ordered {
 		GatewayRoutesDefinition.RoutePolicies policies = policyRegistry.findPolicies(routeId).orElse(null);
 		GatewayRoutesDefinition.IdempotencyPolicy policy = policies != null ? policies.getIdempotency() : null;
 		if (policy == null || !policy.isEnabled()) {
+			return chain.filter(exchange);
+		}
+
+		HttpMethod method = exchange.getRequest().getMethod();
+		if (method == HttpMethod.GET || method == HttpMethod.HEAD || method == HttpMethod.OPTIONS) {
 			return chain.filter(exchange);
 		}
 

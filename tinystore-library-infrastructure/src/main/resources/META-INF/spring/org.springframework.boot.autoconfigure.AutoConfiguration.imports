@@ -1,1 +1,2 @@
 com.github.spud.tinystore.infrastructure.security.ResourceServerAutoConfiguration
+com.github.spud.tinystore.infrastructure.security.PermitAllAutoConfiguration
