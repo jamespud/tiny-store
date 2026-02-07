@@ -49,13 +49,16 @@ public class ShopRepositoryConfig {
 	 * ShopContext - Holds shop ID for current request
 	 */
 	public static class ShopContext {
+		private static final ShopContextProvider FALLBACK_PROVIDER = new ShopContextProvider();
 
 		private String shopId;
 
 		public String getShopId() {
-			if (shopId == null) {
-				throw new IllegalStateException("ShopId not set in current context");
+			if (shopId != null) {
+				return shopId;
 			}
+
+			shopId = FALLBACK_PROVIDER.resolveShopId();
 			return shopId;
 		}
 

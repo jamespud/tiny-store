@@ -112,6 +112,7 @@ class SkuControllerTest {
     }
     
     @Test
+    @org.junit.jupiter.api.Tag("ep:product:GET:/api/skus/{skuId}")
     @DisplayName("GET /api/skus/{id} - Get SKU successfully returns 200 OK")
     void getSku_Success_Returns200() throws Exception {
         // Given
@@ -132,6 +133,7 @@ class SkuControllerTest {
     }
     
     @Test
+    @org.junit.jupiter.api.Tag("ep:product:GET:/api/skus/{skuId}")
     @DisplayName("GET /api/skus/{id} - SKU not found returns 404")
     void getSku_NotFound_Returns404() throws Exception {
         // Given

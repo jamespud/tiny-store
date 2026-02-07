@@ -5,7 +5,6 @@ import com.github.spud.tinystore.product.infrastructure.event.LoggingEventPublis
 import com.github.spud.tinystore.product.infrastructure.outbox.OutboxServiceBridge;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,7 +25,6 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
  */
 @Configuration
 @EnableJpaRepositories(basePackages = "com.github.spud.tinystore.product.infrastructure.persistence.jpa.repository")
-@EnableCaching
 public class ProductConfig {
 
 	@Value("${tinystore.feature.outbox.enabled:false}")

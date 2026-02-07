@@ -160,6 +160,7 @@ services:
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
       TINYSTORE_SECURITY_PERMIT_ALL_ENABLED: true
+      TINYSTORE_PRODUCT_CACHE_ENABLED: false
     depends_on:
       postgres:
         condition: service_healthy
@@ -229,6 +230,7 @@ services:
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
       TINYSTORE_SECURITY_PERMIT_ALL_ENABLED: true
+      TINYSTORE_PRODUCT_CACHE_ENABLED: false
     depends_on:
       postgres:
         condition: service_healthy
@@ -303,6 +305,7 @@ services:
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
       TINYSTORE_SECURITY_PERMIT_ALL_ENABLED: true
+      TINYSTORE_PRODUCT_CACHE_ENABLED: false
     depends_on:
       postgres:
         condition: service_healthy

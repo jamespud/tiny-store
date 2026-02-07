@@ -4,6 +4,7 @@ import com.github.spud.tinystore.product.domain.event.ProductCreatedEvent;
 import com.github.spud.tinystore.product.domain.event.ProductPublishedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Component;
  * TODO: Implement event listeners once event infrastructure is complete
  */
 @Component
+@ConditionalOnProperty(prefix = "tinystore.product.cache", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class ProductEventCacheInvalidationListener {
 
 	private static final Logger logger = LoggerFactory.getLogger(

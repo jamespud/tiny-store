@@ -77,7 +77,7 @@ e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
 		docker compose -f $(COMPOSE_TEST) down -v; \
 	}; \
 	trap cleanup EXIT; \
-	docker compose -f $(COMPOSE_TEST) up -d; \
+	docker compose -f $(COMPOSE_TEST) up -d --build; \
 	echo "Waiting for gateway to be healthy (max 120s)..."; \
 	for i in $$(seq 1 24); do \
 		if curl -sf --max-time 3 http://localhost:8080/actuator/health > /dev/null 2>&1; then \
@@ -97,8 +97,8 @@ e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
 	for i in $$(seq 1 24); do \
 		all_ready=1; \
 		for path in "/internal/health/order" "/internal/health/promotion" "/internal/health/inventory" "/internal/health/product" "/internal/health/auth" "/internal/health/account" "/internal/health/pay"; do \
-			response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1); \
-			code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1); \
+			response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1 || true); \
+			code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1 || echo 000); \
 			if [ "$$code" != "200" ] || ! echo "$$response" | grep -q 'UP'; then \
 				all_ready=0; \
 				break; \
@@ -113,8 +113,8 @@ e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
 			echo "ERROR: Downstream routes failed to become ready within 120s"; \
 			echo "=== Route status ==="; \
 			for path in "/internal/health/order" "/internal/health/promotion" "/internal/health/inventory" "/internal/health/product" "/internal/health/auth" "/internal/health/account" "/internal/health/pay"; do \
-				response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1); \
-				code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1); \
+				response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1 || true); \
+				code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1 || echo 000); \
 				body_prefix=$$(echo "$$response" | LC_ALL=C cut -c 1-50); \
 				echo "GET $$path -> $$code | $$body_prefix"; \
 			done; \
