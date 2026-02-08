@@ -5,6 +5,8 @@ import com.github.spud.tinystore.product.infrastructure.persistence.jpa.entity.P
 import com.github.spud.tinystore.product.infrastructure.persistence.jpa.entity.SkuEntity;
 import com.github.spud.tinystore.product.infrastructure.persistence.jpa.repository.JpaProductRepository;
 import com.github.spud.tinystore.product.infrastructure.persistence.jpa.repository.JpaSkuRepository;
+import com.github.spud.tinystore.product.test.config.TestShopContextConfig;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -29,6 +32,8 @@ import org.testcontainers.utility.DockerImageName;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
+import org.springframework.test.context.ActiveProfiles;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -44,9 +49,14 @@ import static org.assertj.core.api.Assertions.assertThat;
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {
         "spring.cloud.nacos.discovery.enabled=false",
-        "spring.cloud.nacos.config.enabled=false"
+        "spring.cloud.nacos.config.enabled=false",
+        "tinystore.security.permit-all.enabled=true",
+        "tinystore.security.resource-server.enabled=false",
+        "tinystore.product.shop-context-filter.enabled=false"
     }
 )
+@Import(TestShopContextConfig.class)
+@ActiveProfiles("test")
 @DisplayName("SKU Query Endpoint IT")
 @SuppressWarnings("resource")
 class SkuQueryEndpointIT {
@@ -99,6 +109,12 @@ class SkuQueryEndpointIT {
         productRepository.deleteAll();
     }
 
+    @AfterEach
+    void tearDown() {
+        skuRepository.deleteAll();
+        productRepository.deleteAll();
+    }
+
     @Test
     @org.junit.jupiter.api.Tag("ep:product:GET:/api/skus/{skuId}")
     @DisplayName("GET /api/skus/{skuId} - SKU exists, returns 200 OK")
@@ -112,7 +128,7 @@ class SkuQueryEndpointIT {
         product.setShopId(shopId);
         product.setProductId(productId);
         product.setName("Test Product");
-        product.setStatus("ACTIVE");
+        product.setStatus("AVAILABLE");
         productRepository.save(product);
 
         SkuEntity sku = new SkuEntity();
@@ -125,7 +141,7 @@ class SkuQueryEndpointIT {
         sku.setUnitPriceCents(1000L);
         sku.setPromotePriceCents(900L);
         sku.setWeightGrams(100L);
-        sku.setStatus("ACTIVE");
+        sku.setStatus("AVAILABLE");
         skuRepository.save(sku);
 
         // When: GET /api/skus/{skuId}

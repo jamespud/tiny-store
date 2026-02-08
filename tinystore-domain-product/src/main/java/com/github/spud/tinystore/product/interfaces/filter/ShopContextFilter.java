@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -30,6 +31,7 @@ import org.springframework.util.StringUtils;
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
 @RequiredArgsConstructor
+@ConditionalOnProperty(prefix = "tinystore.product.shop-context-filter", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class ShopContextFilter implements Filter {
 
 	private static final String SHOP_HEADER = "X-Shop-Id";

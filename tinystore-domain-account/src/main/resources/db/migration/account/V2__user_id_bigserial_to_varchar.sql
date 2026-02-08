@@ -53,10 +53,10 @@ ALTER TABLE user_role
     ALTER COLUMN user_id TYPE VARCHAR(64) USING user_id::varchar;
 
 -- 步骤5: 重新创建外键约束（使用固定约束名，确保幂等性）
-ALTER TABLE user_realname ADD CONSTRAINT fk_user_realname_user_core FOREIGN KEY (user_id) REFERENCES user_core(user_id) ON DELETE CASCADE;
-ALTER TABLE consumer_address ADD CONSTRAINT fk_consumer_address_user_core FOREIGN KEY (user_id) REFERENCES user_core(user_id) ON DELETE CASCADE;
-ALTER TABLE consumer_detail ADD CONSTRAINT fk_consumer_detail_user_core FOREIGN KEY (user_id) REFERENCES user_core(user_id) ON DELETE CASCADE;
-ALTER TABLE user_role ADD CONSTRAINT fk_user_role_user_core FOREIGN KEY (user_id) REFERENCES user_core(user_id) ON DELETE CASCADE;
+-- ALTER TABLE user_realname ADD CONSTRAINT fk_user_realname_user_core FOREIGN KEY (user_id) REFERENCES user_core(user_id) ON DELETE CASCADE;
+-- ALTER TABLE consumer_address ADD CONSTRAINT fk_consumer_address_user_core FOREIGN KEY (user_id) REFERENCES user_core(user_id) ON DELETE CASCADE;
+-- ALTER TABLE consumer_detail ADD CONSTRAINT fk_consumer_detail_user_core FOREIGN KEY (user_id) REFERENCES user_core(user_id) ON DELETE CASCADE;
+-- ALTER TABLE user_role ADD CONSTRAINT fk_user_role_user_core FOREIGN KEY (user_id) REFERENCES user_core(user_id) ON DELETE CASCADE;
 
 -- 注释更新
 COMMENT ON COLUMN user_realname.user_id IS '关联用户核心表ID（VARCHAR格式）';

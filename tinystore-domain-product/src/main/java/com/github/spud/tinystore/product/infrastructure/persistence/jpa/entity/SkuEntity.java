@@ -13,6 +13,8 @@ import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.Data;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * SkuEntity - JPA entity for SKU persistence
@@ -50,6 +52,7 @@ public class SkuEntity {
 	@Column(name = "sku_name")
 	private String skuName;
 
+	@JdbcTypeCode(SqlTypes.JSON)
 	@Column(name = "spec_json", columnDefinition = "jsonb")
 	private String specJson;
 

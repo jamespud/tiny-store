@@ -67,7 +67,7 @@ public class SkuService {
 	/**
 	 * Get SKU by ID (with caching)
 	 */
-	@Cacheable(value = "skus", key = "#skuId.id")
+	@Cacheable(value = "skus", key = "#skuId.id", condition = "#result != null")
 	public Optional<Sku> getSku(SkuId skuId) {
 		String shopId = shopContext.getShopId();
 		log.debug("Getting SKU: {} for shop: {}", skuId, shopId);

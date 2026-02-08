@@ -9,6 +9,8 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.Data;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * OutboxEntity - JPA entity for outbox pattern
@@ -38,6 +40,7 @@ public class OutboxEntity {
 	@Column(name = "event_type", nullable = false)
 	private String eventType;
 
+	@JdbcTypeCode(SqlTypes.JSON)
 	@Column(name = "payload", nullable = false, columnDefinition = "jsonb")
 	private String payload;
 

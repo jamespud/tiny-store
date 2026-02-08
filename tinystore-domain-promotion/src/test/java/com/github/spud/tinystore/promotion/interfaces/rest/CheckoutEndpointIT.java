@@ -118,7 +118,9 @@ class CheckoutEndpointIT {
         // Then: success with discount
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody()).containsKey("discountAmount");
+        assertThat(response.getBody()).containsKey("snapshot");
+        assertThat(response.getBody().get("snapshot")).isInstanceOf(Map.class);
+        assertThat((Map)response.getBody().get("snapshot")).containsKey("couponDiscountTotalCents");
     }
 
     @Test

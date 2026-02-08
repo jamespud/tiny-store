@@ -1,5 +1,7 @@
 package com.github.spud.tinystore.product.domain.model.value;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Objects;
@@ -13,6 +15,7 @@ public final class Money implements Comparable<Money> {
 		this.amount = amount.setScale(2, RoundingMode.HALF_UP);
 	}
 
+	@JsonCreator
 	public static Money of(@NonNull BigDecimal amount) {
 		return new Money(amount);
 	}
@@ -21,6 +24,7 @@ public final class Money implements Comparable<Money> {
 		return new Money(BigDecimal.ZERO);
 	}
 
+	@JsonValue
 	public BigDecimal amount() {
 		return amount;
 	}

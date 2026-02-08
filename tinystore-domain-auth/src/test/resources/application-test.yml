@@ -27,8 +27,8 @@ tinystore:
   auth:
     keystore:
       location: classpath:keystore/tinystore-auth.jks
-      password: changeit
+      password: tinystore
     key:
-      alias: auth
-      password: changeit
+      alias: jwt
+      password: tinystore
 
