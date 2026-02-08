@@ -240,3 +240,119 @@ status: ## Show status of all services
 	@echo ""
 	@echo "Test environment:"
 	@docker compose -f $(COMPOSE_TEST) ps || echo "Not running"
+
+consistency: build ## Run concurrency consistency tests (200 concurrent requests, DB assertions)
+	@echo "Starting test environment for consistency tests..."
+	@set -e; \
+	root_dir=$$(pwd); \
+	cleanup() { \
+		echo "Cleaning up test environment..."; \
+		cd "$$root_dir"; \
+		docker compose -f $(COMPOSE_TEST) down -v; \
+	}; \
+	trap cleanup EXIT; \
+	docker compose -f $(COMPOSE_TEST) up -d --build; \
+	echo "Waiting for gateway to be healthy (max 120s)..."; \
+	for i in $$(seq 1 24); do \
+		if curl -sf --max-time 3 http://localhost:8080/actuator/health > /dev/null 2>&1; then \
+			echo "Gateway is healthy after $$((i*5))s"; \
+			break; \
+		fi; \
+		if [ $$i -eq 24 ]; then \
+			echo "ERROR: Gateway failed to become healthy within 120s"; \
+			echo "=== Gateway logs ==="; \
+			docker compose -f $(COMPOSE_TEST) logs --tail=50 gateway; \
+			exit 1; \
+		fi; \
+		sleep 5; \
+	done; \
+	echo "Waiting for downstream routes to be ready (max 120s)..."; \
+	routes_ready=0; \
+	for i in $$(seq 1 24); do \
+		all_ready=1; \
+		for path in "/internal/health/order" "/internal/health/inventory"; do \
+			response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1 || true); \
+			code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1 || echo 000); \
+			if [ "$$code" != "200" ] || ! echo "$$response" | grep -q 'UP'; then \
+				all_ready=0; \
+				break; \
+			fi; \
+		done; \
+		if [ $$all_ready -eq 1 ]; then \
+			echo "Downstream routes (order, inventory) are ready after $$((i*5))s"; \
+			routes_ready=1; \
+			break; \
+		fi; \
+		if [ $$i -eq 24 ]; then \
+			echo "ERROR: Downstream routes failed to become ready within 120s"; \
+			echo "=== Gateway logs ==="; \
+			docker compose -f $(COMPOSE_TEST) logs --tail=100 gateway; \
+			exit 1; \
+		fi; \
+		sleep 5; \
+	done; \
+	echo "Running consistency tests (200 concurrent, DB strong assertions)..."; \
+	$(MAVEN) -pl tests/performance test -Pperf || exit 1; \
+	echo "Consistency tests passed successfully"
+
+load: build ## Run k6 load tests (stress test with p95/p99 latency metrics)
+	@echo "Starting test environment for load tests..."
+	@echo "WARNING: k6 must be installed (https://k6.io/docs/get-started/installation/)"
+	@if ! command -v k6 > /dev/null 2>&1; then \
+		echo "ERROR: k6 not found. Install it first:"; \
+		echo "  macOS:   brew install k6"; \
+		echo "  Linux:   sudo apt install k6 (or download from https://k6.io)"; \
+		echo "  Windows: choco install k6"; \
+		exit 1; \
+	fi
+	@set -e; \
+	root_dir=$$(pwd); \
+	cleanup() { \
+		echo "Cleaning up test environment..."; \
+		cd "$$root_dir"; \
+		docker compose -f $(COMPOSE_TEST) down -v; \
+	}; \
+	trap cleanup EXIT; \
+	docker compose -f $(COMPOSE_TEST) up -d --build; \
+	echo "Waiting for gateway to be healthy (max 120s)..."; \
+	for i in $$(seq 1 24); do \
+		if curl -sf --max-time 3 http://localhost:8080/actuator/health > /dev/null 2>&1; then \
+			echo "Gateway is healthy after $$((i*5))s"; \
+			break; \
+		fi; \
+		if [ $$i -eq 24 ]; then \
+			echo "ERROR: Gateway failed to become healthy within 120s"; \
+			echo "=== Gateway logs ==="; \
+			docker compose -f $(COMPOSE_TEST) logs --tail=50 gateway; \
+			exit 1; \
+		fi; \
+		sleep 5; \
+	done; \
+	echo "Waiting for downstream routes to be ready (max 120s)..."; \
+	routes_ready=0; \
+	for i in $$(seq 1 24); do \
+		all_ready=1; \
+		for path in "/internal/health/order" "/internal/health/inventory"; do \
+			response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1 || true); \
+			code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1 || echo 000); \
+			if [ "$$code" != "200" ] || ! echo "$$response" | grep -q 'UP'; then \
+				all_ready=0; \
+				break; \
+			fi; \
+		done; \
+		if [ $$all_ready -eq 1 ]; then \
+			echo "Downstream routes (order, inventory) are ready after $$((i*5))s"; \
+			routes_ready=1; \
+			break; \
+		fi; \
+		if [ $$i -eq 24 ]; then \
+			echo "ERROR: Downstream routes failed to become ready within 120s"; \
+			echo "=== Gateway logs ==="; \
+			docker compose -f $(COMPOSE_TEST) logs --tail=100 gateway; \
+			exit 1; \
+		fi; \
+		sleep 5; \
+	done; \
+	echo "Running k6 load tests..."; \
+	cd perf/k6 && k6 run order_create.js || exit 1; \
+	echo "Load tests completed successfully"

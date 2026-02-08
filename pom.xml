@@ -19,6 +19,7 @@
     <module>tinystore-domain-account</module>
     <module>tinystore-domain-promotion</module>
     <module>tests/api</module>
+    <module>tests/performance</module>
   </modules>
 
   <properties>

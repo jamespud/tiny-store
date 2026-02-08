@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.github.spud.tinystore</groupId>
+    <artifactId>tiny-store</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>tinystore-tests-performance</artifactId>
+  <name>tinystore-tests-performance</name>
+  <description>Performance and concurrency consistency tests</description>
+
+  <properties>
+    <skipPerfTests>true</skipPerfTests>
+  </properties>
+
+  <dependencies>
+    <!-- JUnit Jupiter -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- AssertJ -->
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- Jackson for JSON parsing -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- PostgreSQL JDBC driver -->
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- SLF4J API -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- Logback for test logging -->
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <skipTests>${skipPerfTests}</skipTests>
+          <systemPropertyVariables>
+            <gateway.base.url>${gateway.base.url}</gateway.base.url>
+            <perf.concurrency>${perf.concurrency}</perf.concurrency>
+            <pg.url>${pg.url}</pg.url>
+            <pg.user>${pg.user}</pg.user>
+            <pg.password>${pg.password}</pg.password>
+            <perf.timeoutSeconds>${perf.timeoutSeconds}</perf.timeoutSeconds>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <profile>
+      <id>perf</id>
+      <properties>
+        <skipPerfTests>false</skipPerfTests>
+        <gateway.base.url>http://localhost:8080</gateway.base.url>
+        <perf.concurrency>200</perf.concurrency>
+        <pg.url>jdbc:postgresql://localhost:5433/tinystore</pg.url>
+        <pg.user>postgres</pg.user>
+        <pg.password>postgres</pg.password>
+        <perf.timeoutSeconds>120</perf.timeoutSeconds>
+      </properties>
+    </profile>
+  </profiles>
+</project>
