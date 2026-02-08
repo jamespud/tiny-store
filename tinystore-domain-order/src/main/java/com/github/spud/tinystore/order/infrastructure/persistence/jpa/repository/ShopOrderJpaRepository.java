@@ -17,7 +17,8 @@ public interface ShopOrderJpaRepository extends JpaRepository<ShopOrderEntity, L
 
     Optional<ShopOrderEntity> findByOrderId(String orderId);
 
-    List<ShopOrderEntity> findByTradeId(String tradeId);
+    @Query("SELECT o FROM ShopOrderEntity o WHERE o.tradeId = :tradeId ORDER BY o.id ASC")
+    List<ShopOrderEntity> findByTradeId(@Param("tradeId") String tradeId);
 
     List<ShopOrderEntity> findBySellerId(String sellerId);
 

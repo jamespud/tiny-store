@@ -58,6 +58,9 @@ public class ShopOrderEntity {
     @Column(name = "closed_at")
     private LocalDateTime closedAt;
 
+    @Column(name = "accepted_at")
+    private LocalDateTime acceptedAt;
+
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {

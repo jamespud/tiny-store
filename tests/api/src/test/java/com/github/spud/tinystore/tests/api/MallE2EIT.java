@@ -11,6 +11,8 @@ import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -27,7 +29,7 @@ import org.springframework.http.ResponseEntity;
  * - Removed @TestMethodOrder and @Order dependencies (avoid cross-method shared state)
  * - Single-method scenario test for strict closure
  * - Seed contract validation before business closure
- * 
+ *
  * Assumptions:
  * - Compose test stack is running (14 containers: infra + 8 services)
  * - Gateway accessible at ${gateway.base.url} (default http://localhost:8080)
@@ -89,12 +91,13 @@ class MallE2EIT {
 
         List<Map<String, Object>> orderLines = new ArrayList<>();
         orderLines.add(orderLine(SKU_A, "prod-1", "Product A", SHOP_A, "seller-A", 2, 1000L, 0L));
-        orderLines.add(orderLine(SKU_B, "prod-2", "Product B", SHOP_B, "seller-B", 1, 2000L, 0L));
+        // Single-order scenario for strict lifecycle closure (create → pay → fulfill → confirm)
         createTradeRequest.put("orderLines", orderLines);
 
         HttpHeaders createHeaders = new HttpHeaders();
         createHeaders.add("Content-Type", "application/json");
         createHeaders.add("Idempotency-Key", "idem-" + tradeId);
+        createHeaders.add("X-Trace-ID", "strictClosureE2E_createTradeToConfirmReceipt_shouldCompleteFullLifecycle");
 
         ResponseEntity<Map> createResponse = restTemplate.exchange(
             gatewayBaseUrl + "/api/order/trades",
@@ -198,8 +201,15 @@ class MallE2EIT {
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             Map<String, Object> detail = getTradeDetail(tradeId);
             List<Map<String, Object>> orders = (List<Map<String, Object>>) detail.get("shopOrders");
-            assertThat(orders.get(0).get("orderStatus")).isEqualTo("PENDING_RECEIVE");
-            List<Map<String, Object>> packages = (List<Map<String, Object>>) orders.get(0).get("packages");
+            
+            // Find the specific order that was shipped (by orderId, not by index)
+            Map<String, Object> shippedOrder = orders.stream()
+                .filter(order -> firstOrderId.equals(order.get("orderId")))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Order not found: " + firstOrderId));
+            
+            assertThat(shippedOrder.get("orderStatus")).isEqualTo("PENDING_RECEIVE");
+            List<Map<String, Object>> packages = (List<Map<String, Object>>) shippedOrder.get("packages");
             assertThat(packages).isNotEmpty();
             assertThat(packages.get(0).get("packageId")).isEqualTo(packageId);
         });

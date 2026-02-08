@@ -39,13 +39,18 @@ public class ShopOrderRepositoryImpl implements ShopOrderRepository {
 
     @Override
     public ShopOrder save(ShopOrder shopOrder) {
-        boolean isNew = shopOrderJpaRepository.findByOrderId(shopOrder.getOrderId()).isEmpty();
-
-        ShopOrderEntity entity = toEntity(shopOrder);
-        entity = shopOrderJpaRepository.save(entity);
+        // 查找现有实体
+        ShopOrderEntity entity = shopOrderJpaRepository.findByOrderId(shopOrder.getOrderId())
+            .orElse(null);
+        
+        boolean isNew = (entity == null);
 
         if (isNew) {
-            // 保存订单行（仅在创建时写入，避免更新时重复插入）
+            // 创建新实体
+            entity = toEntity(shopOrder);
+            entity = shopOrderJpaRepository.save(entity);
+
+            // 保存订单行（仅在创建时写入）
             for (OrderLine line : shopOrder.getOrderLines()) {
                 OrderLineEntity lineEntity = OrderLineEntity.builder()
                     .orderId(entity.getOrderId())
@@ -59,6 +64,27 @@ public class ShopOrderRepositoryImpl implements ShopOrderRepository {
                     .build();
                 orderLineJpaRepository.save(lineEntity);
             }
+        } else {
+            // 更新现有managed实体的字段（直接修改，JPA会自动脏检查）
+            entity.setOrderStatus(shopOrder.getOrderStatus() != null ? shopOrder.getOrderStatus().getCode() : null);
+            entity.setInventoryStatus(shopOrder.getInventoryStatus());
+            entity.setPromotionStatus(shopOrder.getPromotionStatus());
+            entity.setAcceptedAt(shopOrder.getAcceptedAt());
+            entity.setUpdatedAt(LocalDateTime.now());
+            
+            // 更新库存预占ID
+            try {
+                if (shopOrder.getInventoryPreOccupyIds() != null && !shopOrder.getInventoryPreOccupyIds().isEmpty()) {
+                    entity.setInventoryPreOccupyIdsJson(objectMapper.writeValueAsString(shopOrder.getInventoryPreOccupyIds()));
+                } else {
+                    entity.setInventoryPreOccupyIdsJson(null);
+                }
+            } catch (Exception e) {
+                log.error("Failed to serialize inventoryPreOccupyIds for orderId={}", shopOrder.getOrderId(), e);
+            }
+            
+            // 显式调用save以确保更新（实际上JPA会在事务提交时自动flush）
+            entity = shopOrderJpaRepository.save(entity);
         }
 
         return toDomain(entity, shopOrder.getOrderLines());
@@ -114,6 +140,7 @@ public class ShopOrderRepositoryImpl implements ShopOrderRepository {
             .inventoryPreOccupyIdsJson(preOccupyIdsJson)
             .createdAt(shopOrder.getCreatedAt())
             .updatedAt(LocalDateTime.now())
+            .acceptedAt(shopOrder.getAcceptedAt())
             .build();
     }
 
@@ -143,6 +170,7 @@ public class ShopOrderRepositoryImpl implements ShopOrderRepository {
             .orderLines(orderLines)
             .createdAt(entity.getCreatedAt())
             .updatedAt(entity.getUpdatedAt())
+            .acceptedAt(entity.getAcceptedAt())
             .build();
     }
 

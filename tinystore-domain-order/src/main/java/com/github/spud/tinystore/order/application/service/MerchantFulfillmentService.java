@@ -109,8 +109,14 @@ public class MerchantFulfillmentService {
             packageOrderRefJpaRepository.save(ref);
 
             // 更新 ShopOrder 状态（调用聚合根方法）
+            log.info("Before markAsPendingReceive: orderId={}, status={}", 
+                orderId, shopOrder.getOrderStatus());
             shopOrder.markAsPendingReceive();
-            shopOrderRepository.save(shopOrder);
+            log.info("After markAsPendingReceive: orderId={}, status={}", 
+                orderId, shopOrder.getOrderStatus());
+            ShopOrder saved = shopOrderRepository.save(shopOrder);
+            log.info("After save: orderId={}, status={}", 
+                orderId, saved.getOrderStatus());
 
             // 写入 Outbox 事件
             java.util.Map<String, Object> payload = new java.util.HashMap<>();
