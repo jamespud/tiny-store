@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.UUID;
 
 import org.slf4j.MDC;
+import com.github.spud.tinystore.interfaces.aspect.LogConstant;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -26,6 +27,7 @@ public class PromotionLoggingFilter extends OncePerRequestFilter {
 			traceId = UUID.randomUUID().toString();
 		}
 		MDC.put("traceId", traceId);
+		MDC.put(LogConstant.MDC_LOG_ID, traceId);
 		putIfPresent("userId", firstNonBlank(request.getHeader("X-User-Id"), request.getHeader("User-Id")));
 		putIfPresent("tradeId", firstNonBlank(request.getHeader("X-Trade-Id"), firstNonBlank(request.getHeader("X-Order-No"), request.getHeader("Order-No"))));
 		putIfPresent("quoteId", firstNonBlank(request.getHeader("X-Quote-Id"), request.getHeader("Quote-Id")));

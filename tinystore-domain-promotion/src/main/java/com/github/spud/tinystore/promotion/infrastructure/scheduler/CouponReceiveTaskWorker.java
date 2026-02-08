@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.slf4j.MDC;
+import com.github.spud.tinystore.interfaces.aspect.LogConstant;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +40,7 @@ public class CouponReceiveTaskWorker {
 	public void process() {
 		String traceId = UUID.randomUUID().toString();
 		MDC.put("traceId", traceId);
+		MDC.put(LogConstant.MDC_LOG_ID, traceId);
 		try {
 			List<CouponReceiveTaskEntity> tasks = taskRepository.findTop100ByStatusOrderByCreatedAtAsc("NEW");
 			LocalDateTime now = LocalDateTime.now();

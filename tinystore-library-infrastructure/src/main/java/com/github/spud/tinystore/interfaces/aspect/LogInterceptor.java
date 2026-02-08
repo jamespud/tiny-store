@@ -1,5 +1,7 @@
 package com.github.spud.tinystore.interfaces.aspect;
 
+import static com.github.spud.tinystore.interfaces.aspect.LogConstant.HEADER_TRACE_ID;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Locale;
@@ -22,7 +24,9 @@ public class LogInterceptor implements HandlerInterceptor {
   @Override
   public boolean preHandle(HttpServletRequest request, HttpServletResponse response,
     Object handler) {
-    String logId = UUID.randomUUID().toString();
+    // 1. 生成并设置logId到MDC
+    String logId = StringUtils.hasText(request.getHeader(HEADER_TRACE_ID)) ?
+      request.getHeader(HEADER_TRACE_ID) : UUID.randomUUID().toString();
     MDC.put(LogConstant.MDC_LOG_ID, logId);
     // 2. 初始化开始时间和异常标记
     REQUEST_START_NANO.set(System.nanoTime());
