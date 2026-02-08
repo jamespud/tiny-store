@@ -1,4 +1,4 @@
-package com.github.spud.tinystore.interfaces.config;
+package com.github.spud.tinystore.infrastructure.config;
 
 import com.github.spud.tinystore.interfaces.aspect.LogInterceptor;
 import org.springframework.context.annotation.Configuration;
