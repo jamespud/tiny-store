@@ -28,8 +28,8 @@ const p99Latency = new Trend('order_create_p99_ms');
 
 // Environment configuration
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
-const VUS = __ENV.VUS || 50;
-const DURATION = __ENV.DURATION || '30s';
+const VUS = __ENV.VUS || 100;
+const DURATION = __ENV.DURATION || '60s';
 
 export const options = {
     vus: VUS,
@@ -111,7 +111,7 @@ export default function () {
     }
 
     // Think time (simulated user delay)
-    sleep(0.5);
+    // sleep(0.5);
 }
 
 export function handleSummary(data) {

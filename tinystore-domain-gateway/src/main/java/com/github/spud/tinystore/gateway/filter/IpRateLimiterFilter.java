@@ -29,13 +29,16 @@ public class IpRateLimiterFilter implements GlobalFilter, Ordered {
 
 	private static final String RATE_LIMIT_HEADER = "Retry-After";
 
+	private final boolean rateLimitEnabled;
 	private final RedisRateLimiterService redisRateLimiterService;
 	private final GatewayPolicyRegistry policyRegistry;
 	private final MeterRegistry meterRegistry;
 
-	public IpRateLimiterFilter(RedisRateLimiterService redisRateLimiterService,
+	public IpRateLimiterFilter(@org.springframework.beans.factory.annotation.Value("${gateway.rate-limit.enabled:true}") boolean rateLimitEnabled,
+		RedisRateLimiterService redisRateLimiterService,
 		GatewayPolicyRegistry policyRegistry,
 		MeterRegistry meterRegistry) {
+		this.rateLimitEnabled = rateLimitEnabled;
 		this.redisRateLimiterService = redisRateLimiterService;
 		this.policyRegistry = policyRegistry;
 		this.meterRegistry = meterRegistry;
@@ -43,6 +46,10 @@ public class IpRateLimiterFilter implements GlobalFilter, Ordered {
 
 	@Override
 	public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+		if (!rateLimitEnabled) {
+			return chain.filter(exchange);
+		}
+
 		Route route = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
 		String routeId = route != null ? route.getId() : null;
 		if (!StringUtils.hasText(routeId)) {

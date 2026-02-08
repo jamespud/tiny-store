@@ -95,6 +95,7 @@ services:
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
       JWKS_URI: http://auth:9000/.well-known/jwks.json
+      GATEWAY_RATE_LIMIT_ENABLED: false
     depends_on:
       nacos:
         condition: service_healthy

@@ -113,7 +113,7 @@ perf/k6/
 - 输出：链路成功率、端到端 p95/p99
 
 **关于库存容量**：
-- 初始库存：**10000个单位**（SKU_A/SKU_B）
+- 初始库存：**1000000个单位**（SKU_A/SKU_B）
 - 足以支持大规模并发测试
 - 一致性测试（JUnit）使用 200 并发，仅消耗200库存
 - k6 默认参数（50 VUs × 30s）预计消耗 1000-1500 库存
@@ -133,17 +133,23 @@ perf/k6/
 
 ### k6 环境变量
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `BASE_URL` | `http://localhost:8080` | Gateway 地址 |
-| `VUS` | `50` (order_create)<br>`20` (chain) | 虚拟用户数 |
-| `DURATION` | `30s` | 测试持续时间 |
+| 变量 | 默认值                                  | 说明 |
+|------|--------------------------------------|------|
+| `BASE_URL` | `http://localhost:8080`              | Gateway 地址 |
+| `VUS` | `100` (order_create)<br>`20` (chain) | 虚拟用户数 |
+| `DURATION` | `60s`                                | 测试持续时间 |
 
 **并发度参考标准**：
 - **低并发测试**：10-20 VUs，约 10-50 RPS
 - **中等并发**：50-100 VUs，约 100-500 RPS
 - **高并发**：200-500 VUs，约 1000-3000 RPS
 - **极限压测**：1000+ VUs，5000+ RPS
+
+**关于网关限流**：
+- 默认情况下，网关 `IpRateLimiterFilter` 会按 IP 维度限流（配置见 `gateway-routes.yml` 中的 `policies.rateLimit`）
+- 在 `docker-compose-test.yml` 环境中，限流已被禁用（`GATEWAY_RATE_LIMIT_ENABLED=false`），以便测试系统极限吞吐
+- 若需恢复限流保护，修改 compose 文件中该环境变量为 `true` 或移除该行
+- 禁用限流后，429 错误应消失；若仍出现 5xx，瓶颈来自下游服务或数据库
 
 示例：
 ```bash
