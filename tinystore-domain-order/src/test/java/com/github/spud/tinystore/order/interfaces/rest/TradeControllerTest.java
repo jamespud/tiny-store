@@ -125,4 +125,34 @@ class TradeControllerTest {
                 .content("{\"reason\":\"User cancel\"}"))
             .andExpect(status().isOk());
     }
+
+    @Test
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades/{tradeId}/pay/callback")
+    @DisplayName("POST /api/order/trades/{tradeId}/pay/callback - valid callback returns 200")
+    void paymentCallback_validRequest_returns200() throws Exception {
+        // Given: service processes payment callback successfully
+        doNothing().when(tradeApplicationService).onPaymentSucceeded(anyString(), any());
+
+        // When & Then: POST payment callback
+        mockMvc.perform(post("/order/trades/trade-pay-123/pay/callback")
+                .header("Idempotency-Key", "idem-payment-callback")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"paymentIntentId\":\"pay-intent-123\",\"amountCents\":9900,\"traceId\":\"trace-123\"}"))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades/{tradeId}/confirm-receipt")
+    @DisplayName("POST /api/order/trades/{tradeId}/confirm-receipt - valid request returns 200")
+    void confirmReceipt_validRequest_returns200() throws Exception {
+        // Given: service confirms receipt successfully
+        doNothing().when(tradeApplicationService).confirmTradeReceipt(anyString(), anyString());
+
+        // When & Then: POST confirm receipt
+        mockMvc.perform(post("/order/trades/trade-confirm-123/confirm-receipt")
+                .header("Idempotency-Key", "idem-confirm-receipt")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isOk());
+    }
 }
