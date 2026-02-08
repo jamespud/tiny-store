@@ -1,5 +1,7 @@
 package com.github.spud.tinystore.product.domain.model.aggregate;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.github.spud.tinystore.product.domain.model.value.Money;
 import com.github.spud.tinystore.product.domain.model.valueobject.SkuAttributePack;
 import com.github.spud.tinystore.product.domain.model.valueobject.SkuStatus;
@@ -9,6 +11,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.Data;
 
+@JsonIgnoreProperties
 @Data
 public class Sku {
 

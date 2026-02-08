@@ -20,6 +20,11 @@ spring:
 
 # Feature toggles for testing
 tinystore:
+  security:
+    permit-all:
+      enabled: true  # Bypass authentication in tests
+    resource-server:
+      enabled: false  # Disable OAuth2 resource server in tests
   feature:
     outbox:
       enabled: true  # Test outbox functionality
