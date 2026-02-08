@@ -28,6 +28,8 @@ gateway:
   dynamic:
     refresh-interval: ${GATEWAY_REFRESH_INTERVAL:PT10S}
     routes-location: ${GATEWAY_ROUTES_LOCATION:classpath:gateway-routes.yml}
+  rate-limit:
+    enabled: ${GATEWAY_RATE_LIMIT_ENABLED:true}
 
 redis:
   host: ${REDIS_HOST:redis}

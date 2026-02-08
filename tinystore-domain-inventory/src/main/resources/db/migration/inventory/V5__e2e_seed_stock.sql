@@ -10,6 +10,6 @@ INSERT INTO tinystore_inventory.inventory_stock (
   version
 )
 VALUES
-  ('SHOP_A', 'SKU_A', 10000, 0, 0),
-  ('SHOP_B', 'SKU_B', 10000, 0, 0)
+  ('SHOP_A', 'SKU_A', 1000000, 0, 0),
+  ('SHOP_B', 'SKU_B', 1000000, 0, 0)
 ON CONFLICT (shop_id, sku_id) DO NOTHING;
