@@ -1,5 +1,6 @@
 package com.github.spud.tinystore.order.infrastructure.scheduler;
 
+import com.github.spud.tinystore.infrastructure.rpc.payment.PaymentClient;
 import com.github.spud.tinystore.order.application.command.CancelTradeCommand;
 import com.github.spud.tinystore.order.application.service.TradeApplicationService;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.TradeEntity;
@@ -15,7 +16,6 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
-import java.util.Optional;
 
 /**
  * 订单超时调度器（支付超时关闭、自动收货等）
@@ -44,7 +44,7 @@ public class OrderTimeoutScheduler {
     private PaymentIntentJpaRepository paymentIntentJpaRepository;
 
     @Autowired
-    private com.github.spud.tinystore.infrastructure.rpc.payment.PaymentClient paymentClient;
+    private PaymentClient paymentClient;
 
     /**
      * 定时检查支付超时订单并关闭
