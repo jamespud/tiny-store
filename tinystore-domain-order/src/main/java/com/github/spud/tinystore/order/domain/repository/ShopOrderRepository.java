@@ -15,4 +15,6 @@ public interface ShopOrderRepository {
     Optional<ShopOrder> findByOrderId(String orderId);
     
     List<ShopOrder> findByTradeId(String tradeId);
+    
+    Boolean saveAll(List<ShopOrder> orders);
 }

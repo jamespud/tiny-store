@@ -2,6 +2,8 @@ package com.github.spud.tinystore.order.application.command;
 
 import java.util.List;
 import java.util.Map;
+
+import com.github.spud.tinystore.order.domain.model.OrderLine;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -39,5 +41,16 @@ public class CreateTradeCommand {
         private Integer quantity;
         private Long priceCents;
         private Long weightGrams;
+        
+        public OrderLine toOrderLine() {
+            return OrderLine.builder()
+                    .skuId(this.skuId)
+                    .productId(this.productId)
+                    .productName(this.productName)
+                    .quantity(this.quantity)
+                    .priceCents(this.priceCents)
+                    .lineAmountCents(this.priceCents * this.quantity)
+                    .build();
+        }
     }
 }
