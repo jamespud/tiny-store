@@ -21,10 +21,6 @@ public class CreateTradeRequest {
     private String buyerNick;
     private String addressId;
     
-    // 旧字段：单券兼容，将被视为 platformCouponCodes 的第一张
-    private String couponCode;
-    
-    // 新字段：多券支持
     private List<String> platformCouponCodes;
     private Map<String, List<String>> shopCouponCodesByShop;
     

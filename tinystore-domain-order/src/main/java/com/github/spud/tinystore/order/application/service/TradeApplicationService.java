@@ -162,7 +162,6 @@ public class TradeApplicationService {
                 .payableAmountCents(payableAmountCents)
                 .promotionQuoteId(quoteResponse.getQuoteId())
                 .promotionInputHash(inputHash)
-                .couponCode(command.getCouponCode())
                 .couponCodes(allCouponCodes)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
@@ -430,7 +429,6 @@ public class TradeApplicationService {
                 .promotionQuoteId(trade.getPromotionQuoteId())
                 .promotionInputHash(trade.getPromotionInputHash())
                 .inventoryReservationId(trade.getInventoryReservationId())
-                .couponCode(trade.getCouponCode())
                 .createdAt(trade.getCreatedAt())
                 .updatedAt(LocalDateTime.now())
                 .closedAt(LocalDateTime.now())
@@ -761,16 +759,8 @@ public class TradeApplicationService {
         // 构造 appliedIntent（支持多券：平台券列表 + 店铺券 Map）
         PromotionQuoteRequest.AppliedIntent appliedIntent = null;
         
-        // 优先使用新字段
         List<String> platformCodes = command.getPlatformCouponCodes();
         Map<String, List<String>> shopCodesMap = command.getShopCouponCodesByShop();
-        
-        // 兼容旧字段：若新字段为空，尝试从 couponCode 转换
-        if ((platformCodes == null || platformCodes.isEmpty()) && 
-            (shopCodesMap == null || shopCodesMap.isEmpty()) &&
-            command.getCouponCode() != null && !command.getCouponCode().isEmpty()) {
-            platformCodes = Collections.singletonList(command.getCouponCode());
-        }
         
         // 若有券输入，构造 appliedIntent（现在使用 couponNo 而非 UUID）
         if ((platformCodes != null && !platformCodes.isEmpty()) || 

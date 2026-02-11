@@ -41,7 +41,6 @@ public class Trade {
     private String promotionQuoteId;
     private String promotionInputHash;
     private String inventoryReservationId;
-    private String couponCode;
     
     @Builder.Default
     private List<String> couponCodes = new ArrayList<>();
