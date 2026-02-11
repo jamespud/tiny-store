@@ -109,4 +109,12 @@ public class Trade {
     public boolean canCancel() {
         return this.payStatus == PayStatus.UNPAID;
     }
+    
+    public void closeTrade() {
+        if (isClosed() || !canCancel()) {
+            throw new IllegalStateException("Trade is already closed: " + tradeId);
+        }
+        this.closedAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
 }

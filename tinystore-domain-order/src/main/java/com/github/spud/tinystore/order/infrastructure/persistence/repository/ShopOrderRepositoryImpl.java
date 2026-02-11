@@ -116,6 +116,12 @@ public class ShopOrderRepositoryImpl implements ShopOrderRepository {
             .collect(Collectors.toList());
     }
 
+    @Override
+    public Boolean saveAll(List<ShopOrder> orders) {
+        orders.forEach(this::save);
+        return true;
+    }
+
     // =========== Entity <-> Domain Model 转换 ===========
 
     private ShopOrderEntity toEntity(ShopOrder shopOrder) {

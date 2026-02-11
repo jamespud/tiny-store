@@ -77,7 +77,7 @@ public class OrderTimeoutScheduler {
                                 paymentIntentId, trade.getTradeId());
                         }
                     } catch (Exception payCloseEx) {
-                        log.warn("Failed to close payment order in pay-service (will continue order cancellation): tradeId={}", 
+                        log.warn("Failed to closeTrade payment order in pay-service (will continue order cancellation): tradeId={}", 
                             trade.getTradeId(), payCloseEx);
                     }
 
@@ -96,7 +96,7 @@ public class OrderTimeoutScheduler {
                     log.info("Closed expired trade: tradeId={}", trade.getTradeId());
 
                 } catch (Exception e) {
-                    log.error("Failed to close expired trade: tradeId={}", trade.getTradeId(), e);
+                    log.error("Failed to closeTrade expired trade: tradeId={}", trade.getTradeId(), e);
                 }
             }
 
