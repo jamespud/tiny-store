@@ -139,8 +139,8 @@ public class InventoryDeductDomainService {
      * </ol>
      */
     public DeductResult release(InventoryReleaseCommand command) {
-        // 1. 幂等
-        if (idempotencyRepository.exists(command.getIdempotencyKey())) {
+        // 1. 幂等（仅检查 release 专用键，防止被 deduct 幂等短路）
+        if (idempotencyRepository.isReleased(command.getIdempotencyKey())) {
             log.info("Release idempotent hit: idempotencyKey={}", command.getIdempotencyKey());
             return DeductResult.builder().success(true).message("ok").build();
         }
