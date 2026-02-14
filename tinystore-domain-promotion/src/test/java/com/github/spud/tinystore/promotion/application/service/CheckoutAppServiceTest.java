@@ -64,8 +64,7 @@ class CheckoutAppServiceTest {
 			fullReductionCampaignRepository,
 			seckillPriceRuleRepository,
 			shippingRuleRepository,
-			10,
-			30
+			10
 		);
 
 		CheckoutQuoteRequest req = new CheckoutQuoteRequest();
@@ -105,8 +104,7 @@ class CheckoutAppServiceTest {
 			fullReductionCampaignRepository,
 			seckillPriceRuleRepository,
 			shippingRuleRepository,
-			10,
-			30
+			10
 		);
 
 		CheckoutQuoteRequest req1 = new CheckoutQuoteRequest();
@@ -215,8 +213,7 @@ class CheckoutAppServiceTest {
 			fullReductionCampaignRepository,
 			seckillPriceRuleRepository,
 			shippingRuleRepository,
-			10,
-			30
+			10
 		);
 
 		CheckoutCommitRequest commitReq = new CheckoutCommitRequest();

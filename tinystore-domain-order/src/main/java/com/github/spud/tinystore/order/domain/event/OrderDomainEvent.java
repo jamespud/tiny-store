@@ -21,11 +21,5 @@ public class OrderDomainEvent {
     private LocalDateTime occurredAt;
     private String traceId;
     private String payloadJson;
-
-    public static class Constants {
-        public static final String AGGREGATE_TYPE_TRADE = "TRADE";
-        public static final String AGGREGATE_TYPE_ORDER = "ORDER";
-        public static final String AGGREGATE_TYPE_PACKAGE = "PACKAGE";
-        public static final String AGGREGATE_TYPE_AFTER_SALE = "AFTER_SALE";
-    }
+    
 }

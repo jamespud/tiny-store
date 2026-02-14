@@ -1,19 +1,25 @@
 package com.github.spud.tinystore.order.domain.service;
 
+import cn.hutool.core.lang.Snowflake;
+import cn.hutool.core.util.IdUtil;
+
 public class TradeIdGenerator {
 
-	public static String generate() {
-		// 示例实现：使用当前时间戳和随机数生成唯一交易ID
-		long timestamp = System.currentTimeMillis();
-		int randomNum = (int) (Math.random() * 100000);
-		return "T" + timestamp + String.format("%05d", randomNum);
-	}
-	
-	public static String generateForShop(String shopId) {
-		// 示例实现：在交易ID中包含店铺ID前缀
-		long timestamp = System.currentTimeMillis();
-		int randomNum = (int) (Math.random() * 100000);
-		return "T" + shopId + timestamp + String.format("%05d", randomNum);
-	}
+    private static Integer GROUP_ID = Integer.parseInt(System.getProperty("GROUP_ID", "1"));
+    private static Integer CENTER_ID = Integer.parseInt(System.getProperty("CENTER_ID", "1"));
+
+    private static Snowflake snowflake = IdUtil.getSnowflake(GROUP_ID, CENTER_ID);
+
+    public static String generateTradeId() {
+        return snowflake.nextIdStr();
+    }
+
+    public static String generateOrderId() {
+        return snowflake.nextIdStr();
+    }
+    
+    public static String generatePaymentIntentId() {
+        return snowflake.nextIdStr();
+    }
 
 }

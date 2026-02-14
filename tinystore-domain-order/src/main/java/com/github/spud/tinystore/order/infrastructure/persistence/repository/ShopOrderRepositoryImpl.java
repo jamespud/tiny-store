@@ -1,8 +1,10 @@
 package com.github.spud.tinystore.order.infrastructure.persistence.repository;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.spud.tinystore.order.domain.enums.OrderStatus;
+import com.github.spud.tinystore.order.domain.model.InventoryOccupyPair;
 import com.github.spud.tinystore.order.domain.model.OrderLine;
 import com.github.spud.tinystore.order.domain.model.ShopOrder;
 import com.github.spud.tinystore.order.domain.repository.ShopOrderRepository;
@@ -72,15 +74,17 @@ public class ShopOrderRepositoryImpl implements ShopOrderRepository {
             entity.setAcceptedAt(shopOrder.getAcceptedAt());
             entity.setUpdatedAt(LocalDateTime.now());
             
-            // 更新库存预占ID
+            // 更新库存占用凭证（V2 occupyPairs 优先，兼容旧 preOccupyIds）
             try {
-                if (shopOrder.getInventoryPreOccupyIds() != null && !shopOrder.getInventoryPreOccupyIds().isEmpty()) {
+                if (shopOrder.getInventoryOccupyPairs() != null && !shopOrder.getInventoryOccupyPairs().isEmpty()) {
+                    entity.setInventoryPreOccupyIdsJson(objectMapper.writeValueAsString(shopOrder.getInventoryOccupyPairs()));
+                } else if (shopOrder.getInventoryPreOccupyIds() != null && !shopOrder.getInventoryPreOccupyIds().isEmpty()) {
                     entity.setInventoryPreOccupyIdsJson(objectMapper.writeValueAsString(shopOrder.getInventoryPreOccupyIds()));
                 } else {
                     entity.setInventoryPreOccupyIdsJson(null);
                 }
             } catch (Exception e) {
-                log.error("Failed to serialize inventoryPreOccupyIds for orderId={}", shopOrder.getOrderId(), e);
+                log.error("Failed to serialize inventory occupy info for orderId={}", shopOrder.getOrderId(), e);
             }
             
             // 显式调用save以确保更新（实际上JPA会在事务提交时自动flush）
@@ -127,11 +131,13 @@ public class ShopOrderRepositoryImpl implements ShopOrderRepository {
     private ShopOrderEntity toEntity(ShopOrder shopOrder) {
         String preOccupyIdsJson = null;
         try {
-            if (shopOrder.getInventoryPreOccupyIds() != null && !shopOrder.getInventoryPreOccupyIds().isEmpty()) {
+            if (shopOrder.getInventoryOccupyPairs() != null && !shopOrder.getInventoryOccupyPairs().isEmpty()) {
+                preOccupyIdsJson = objectMapper.writeValueAsString(shopOrder.getInventoryOccupyPairs());
+            } else if (shopOrder.getInventoryPreOccupyIds() != null && !shopOrder.getInventoryPreOccupyIds().isEmpty()) {
                 preOccupyIdsJson = objectMapper.writeValueAsString(shopOrder.getInventoryPreOccupyIds());
             }
         } catch (Exception e) {
-            log.error("Failed to serialize inventoryPreOccupyIds for orderId={}", shopOrder.getOrderId(), e);
+            log.error("Failed to serialize inventory occupy info for orderId={}", shopOrder.getOrderId(), e);
         }
         
         return ShopOrderEntity.builder()
@@ -152,15 +158,26 @@ public class ShopOrderRepositoryImpl implements ShopOrderRepository {
 
     private ShopOrder toDomain(ShopOrderEntity entity, List<OrderLine> orderLines) {
         List<String> preOccupyIds = new ArrayList<>();
+        List<InventoryOccupyPair> occupyPairs = new ArrayList<>();
         try {
-            if (entity.getInventoryPreOccupyIdsJson() != null && !entity.getInventoryPreOccupyIdsJson().isEmpty()) {
-                preOccupyIds = objectMapper.readValue(
-                    entity.getInventoryPreOccupyIdsJson(),
-                    new TypeReference<List<String>>() {}
-                );
+            String json = entity.getInventoryPreOccupyIdsJson();
+            if (json != null && !json.isEmpty()) {
+                JsonNode root = objectMapper.readTree(json);
+                if (root.isArray() && root.size() > 0) {
+                    JsonNode first = root.get(0);
+                    if (first.isObject()) {
+                        // V2 格式：[{"shopId":..., "skuId":..., "occupyId":...}, ...]
+                        occupyPairs = objectMapper.readValue(json,
+                            new TypeReference<List<InventoryOccupyPair>>() {});
+                    } else {
+                        // 旧格式：["occupyId1", "occupyId2", ...]
+                        preOccupyIds = objectMapper.readValue(json,
+                            new TypeReference<List<String>>() {});
+                    }
+                }
             }
         } catch (Exception e) {
-            log.error("Failed to deserialize inventoryPreOccupyIds for orderId={}", entity.getOrderId(), e);
+            log.error("Failed to deserialize inventory occupy info for orderId={}", entity.getOrderId(), e);
         }
         
         return ShopOrder.builder()
@@ -173,6 +190,7 @@ public class ShopOrderRepositoryImpl implements ShopOrderRepository {
             .inventoryStatus(entity.getInventoryStatus())
             .promotionStatus(entity.getPromotionStatus())
             .inventoryPreOccupyIds(preOccupyIds)
+            .inventoryOccupyPairs(occupyPairs)
             .orderLines(orderLines)
             .createdAt(entity.getCreatedAt())
             .updatedAt(entity.getUpdatedAt())

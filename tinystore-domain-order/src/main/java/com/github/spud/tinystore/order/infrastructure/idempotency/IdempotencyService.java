@@ -67,7 +67,7 @@ public class IdempotencyService {
      * @param scope 作用域
      * @param idempotencyKey 幂等键
      */
-    public void removeCache(String scope, String idempotencyKey) {
+    public void releaseLock(String scope, String idempotencyKey) {
         String redisKey = buildRedisKey(scope, idempotencyKey);
         String responseKey = buildResponseRedisKey(scope, idempotencyKey);
         redisTemplate.delete(redisKey);
