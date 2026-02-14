@@ -22,9 +22,14 @@ public interface IdempotencyRepository {
     void saveDeductResult(String idempotencyKey, DeductResult result);
 
     /**
-     * 幂等键是否已存在（通用，可用于 release 幂等）
+     * 幂等键是否已存在（通用，检查 deduct 或 release）
      */
     boolean exists(String idempotencyKey);
+
+    /**
+     * 检查 release 是否已完成（仅检查 release 幂等键）
+     */
+    boolean isReleased(String idempotencyKey);
 
     /**
      * 标记 release 已完成

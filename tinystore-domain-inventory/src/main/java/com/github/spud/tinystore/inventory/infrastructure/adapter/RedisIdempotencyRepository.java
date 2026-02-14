@@ -58,6 +58,12 @@ public class RedisIdempotencyRepository implements IdempotencyRepository {
     }
 
     @Override
+    public boolean isReleased(String idempotencyKey) {
+        // 仅检查 release 幂等键（避免被 deduct 幂等短路）
+        return Boolean.TRUE.equals(redisTemplate.hasKey(RELEASE_PREFIX + idempotencyKey));
+    }
+
+    @Override
     public void markReleased(String idempotencyKey) {
         String key = RELEASE_PREFIX + idempotencyKey;
         redisTemplate.opsForValue().set(key, "1", TTL_HOURS, TimeUnit.HOURS);
