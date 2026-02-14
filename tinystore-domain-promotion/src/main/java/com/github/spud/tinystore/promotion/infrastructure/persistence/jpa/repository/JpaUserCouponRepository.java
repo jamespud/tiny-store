@@ -5,7 +5,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -49,4 +51,13 @@ public interface JpaUserCouponRepository extends JpaRepository<UserCouponEntity,
 
 	Optional<UserCouponEntity> findFirstByUserIdAndCouponIdAndUseStatusOrderByReceiveTimeAsc(String userId, UUID couponId,
 		String useStatus);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT uc FROM UserCouponEntity uc WHERE uc.userId = :userId AND uc.couponId = :couponId AND uc.useStatus = :unused")
+    Optional<UserCouponEntity> findFirstByUserIdAndCouponIdAndUseStatusForUpdate(String userId, UUID id, String unused);
+
+    @Modifying
+    @Query("UPDATE UserCouponEntity uc SET uc.useStatus = :used, uc.usedTradeId = :tradeId, uc.usedTime = :now1, uc.updatedAt = :now " +
+           "WHERE uc.id = :id AND uc.useStatus = :unused")
+    int markAsUsed(UUID id, String unused, String used, String tradeId, LocalDateTime now, LocalDateTime now1);
 }

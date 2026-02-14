@@ -11,6 +11,7 @@ import com.github.spud.tinystore.order.domain.enums.PromotionStatus;
 import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
 import com.github.spud.tinystore.order.domain.event.OrderEventType;
 import com.github.spud.tinystore.order.domain.exception.DomainConflictException;
+import com.github.spud.tinystore.order.domain.model.InventoryOccupyPair;
 import com.github.spud.tinystore.order.domain.model.OrderLine;
 import com.github.spud.tinystore.order.domain.model.ShopOrder;
 import com.github.spud.tinystore.order.domain.model.Trade;
@@ -64,6 +65,9 @@ public class TradeApplicationService {
 
     @Autowired
     private ObjectMapper objectMapper;
+    
+    @Autowired
+    private TradeApplicationService tradeApplicationService;
 
     /**
      * 创建交易 Saga（半编排式）
@@ -95,7 +99,7 @@ public class TradeApplicationService {
                         "Trade creation already in progress with this idempotency key");
             }
 
-            String tradeId = TradeIdGenerator.generate(); // 生成唯一 Trade ID
+            String tradeId = TradeIdGenerator.generateTradeId();
 
             // 2. 调用 promotion quote（优惠报价）
             PromotionQuoteRequest quoteRequest = buildPromotionQuoteRequest(command);
@@ -165,7 +169,7 @@ public class TradeApplicationService {
                 String shopId = entry.getKey();
                 List<CreateTradeCommand.OrderLineCommand> lines = entry.getValue();
 
-                String orderId = TradeIdGenerator.generateForShop(shopId);
+                String orderId = TradeIdGenerator.generateOrderId();
                 String sellerId = lines.get(0).getSellerId(); // 同一 shopId 的 sellerId 相同
 
                 // 创建订单行（领域值对象）
@@ -184,64 +188,83 @@ public class TradeApplicationService {
                         .inventoryStatus(InventoryStatus.LOCKED.getCode())
                         .promotionStatus(PromotionStatus.RESERVED.getCode())
                         .orderLines(orderLines)
-                        .inventoryPreOccupyIds(new ArrayList<>()) // 初始化为空列表
                         .createdAt(LocalDateTime.now())
                         .build();
                 shopOrders.add(shopOrder);
-                log.info("ShopOrder created (without preOccupyIds): orderId={}, shopId={}, sellerId={}", orderId, shopId, sellerId);
+                log.info("ShopOrder created: orderId={}, shopId={}, sellerId={}", orderId, shopId, sellerId);
             }
 
-            // 4. 调用 inventory pre-occupy（按 shop 分组调用）
-            long preOccupyExpiresAtEpochMs = System.currentTimeMillis() + 900_000; // 15分钟
-
+            // 4. 调用 inventory deduct（V2：按 shop 分组调用，Redis 原子扣减）
             List<ShopOrder> updatedOrders = new ArrayList<>();
             for (ShopOrder shopOrder : shopOrders) {
                 String shopId = shopOrder.getShopId();
                 List<CreateTradeCommand.OrderLineCommand> lines = groupedByShop.get(shopId);
 
-                // 构建该 shop 的 pre-occupy 请求
-                List<InventoryPreOccupyRequest.LineItem> lineItems = lines.stream()
-                        .map(line -> InventoryPreOccupyRequest.LineItem.builder()
+                // 构建该 shop 的 deduct 请求
+                List<InventoryDeductRequest.Item> deductItems = lines.stream()
+                        .map(line -> InventoryDeductRequest.Item.builder()
+                                .shopId(shopId)
                                 .skuId(line.getSkuId())
                                 .quantity(line.getQuantity())
                                 .build())
                         .collect(Collectors.toList());
 
-                InventoryPreOccupyRequest preOccupyRequest = InventoryPreOccupyRequest.builder()
-                        .shopId(shopId)
-                        .tradeId(tradeId)
-                        .expiresAtEpochMs(preOccupyExpiresAtEpochMs)
-                        .lines(lineItems)
+                InventoryDeductRequest deductRequest = InventoryDeductRequest.builder()
+                        .orderId(shopOrder.getOrderId())
+                        .items(deductItems)
                         .build();
 
                 // 为每个 shop 派生独立幂等键
-                String shopIdempotencyKey = idempotencyKey + ":inv:pre:" + shopId;
-                InventoryPreOccupyResponse preOccupyResponse;
+                String shopIdempotencyKey = idempotencyKey + ":inv:deduct:" + shopId;
+                InventoryDeductResponse deductResponse;
                 try {
-                    preOccupyResponse = inventoryClient.preOccupy(shopIdempotencyKey, preOccupyRequest);
-                    if (preOccupyResponse == null || !preOccupyResponse.getSuccess()) {
-                        throw new DomainConflictException("INVENTORY_PREOCCUPY_FAILED",
-                                "Inventory pre-occupy failed for shop: " + shopId);
+                    deductResponse = inventoryClient.deduct(shopIdempotencyKey, deductRequest);
+                    if (deductResponse == null || !Boolean.TRUE.equals(deductResponse.getSuccess())) {
+                        String msg = deductResponse != null ? deductResponse.getMessage() : "null response";
+                        throw new DomainConflictException("INVENTORY_DEDUCT_FAILED",
+                                "Inventory deduct failed for shop: " + shopId + ", msg: " + msg);
                     }
-                    log.info("Inventory pre-occupy succeeded for shop {}: preOccupyIds={}",
-                            shopId, preOccupyResponse.getPreOccupyIds());
+                    log.info("Inventory deduct succeeded for shop {}: occupyPairs={}",
+                            shopId, deductResponse.getOccupyPairs());
                 } catch (Exception e) {
-                    log.error("Inventory pre-occupy failed for shop: {}", shopId, e);
+                    log.error("Inventory deduct failed for shop: {}", shopId, e);
+                    // 补偿：释放已成功扣减的其他 shop
+                    for (ShopOrder prev : updatedOrders) {
+                        try {
+                            List<InventoryReleaseRequestV2.OccupyPairDto> relPairs = prev.getInventoryOccupyPairs().stream()
+                                    .map(p -> InventoryReleaseRequestV2.OccupyPairDto.builder()
+                                            .shopId(p.getShopId()).skuId(p.getSkuId()).occupyId(p.getOccupyId()).build())
+                                    .collect(Collectors.toList());
+                            inventoryClient.releaseV2(idempotencyKey + ":inv:comp:" + prev.getShopId(),
+                                    InventoryReleaseRequestV2.builder()
+                                            .orderId(prev.getOrderId())
+                                            .reason("INVENTORY_DEDUCT_COMPENSATION")
+                                            .occupyPairs(relPairs)
+                                            .build());
+                        } catch (Exception compE) {
+                            log.error("Compensation release failed for shop: {}", prev.getShopId(), compE);
+                        }
+                    }
                     // 调用 promotion release 补偿
                     try {
                         promotionClient.release(idempotencyKey, PromotionReleaseRequest.builder()
                                 .quoteId(quoteResponse.getQuoteId())
                                 .tradeId(tradeId)
-                                .reason("INVENTORY_PREOCCUPY_FAILED")
+                                .reason("INVENTORY_DEDUCT_FAILED")
                                 .build());
                     } catch (Exception releaseE) {
                         log.error("Promotion release failed during compensation", releaseE);
                     }
-                    throw new DomainConflictException("INVENTORY_PREOCCUPY_FAILED",
-                            "Inventory pre-occupy failed for shop: " + shopId + ", error: " + e.getMessage());
+                    throw new DomainConflictException("INVENTORY_DEDUCT_FAILED",
+                            "Inventory deduct failed for shop: " + shopId + ", error: " + e.getMessage());
                 }
 
-                // 保存 preOccupyIds 到 ShopOrder（使用 Builder 重建实例，保留所有原字段）
+                // 转换 occupyPairs 为领域值对象
+                List<InventoryOccupyPair> occupyPairs = deductResponse.getOccupyPairs().stream()
+                        .map(dto -> new InventoryOccupyPair(dto.getShopId(), dto.getSkuId(), dto.getOccupyId()))
+                        .collect(Collectors.toList());
+
+                // 保存 occupyPairs 到 ShopOrder（使用 Builder 重建实例，保留所有原字段）
                 ShopOrder updatedShopOrder = ShopOrder.builder()
                         .id(shopOrder.getId())
                         .orderId(shopOrder.getOrderId())
@@ -253,14 +276,14 @@ public class TradeApplicationService {
                         .promotionStatus(shopOrder.getPromotionStatus())
                         .totalAmountCents(shopOrder.getTotalAmountCents())
                         .orderLines(shopOrder.getOrderLines())
-                        .inventoryPreOccupyIds(preOccupyResponse.getPreOccupyIds())
+                        .inventoryOccupyPairs(occupyPairs)
                         .createdAt(shopOrder.getCreatedAt())
                         .updatedAt(shopOrder.getUpdatedAt())
                         .acceptedAt(shopOrder.getAcceptedAt())
                         .build();
                 updatedOrders.add(updatedShopOrder);
-                log.info("ShopOrder updated with preOccupyIds: orderId={}, preOccupyIds={}",
-                        shopOrder.getOrderId(), preOccupyResponse.getPreOccupyIds());
+                log.info("ShopOrder updated with occupyPairs: orderId={}, occupyPairs={}",
+                        shopOrder.getOrderId(), occupyPairs);
             }
 
             // 5. promotion commit（现在 trade 已落库且所有 shop 库存已预占，可以 commit 了）
@@ -296,12 +319,12 @@ public class TradeApplicationService {
             trade = tradeRepository.save(trade);
             Boolean saved = shopOrderRepository.saveAll(updatedOrders);
             if (!saved) {
-                //TODO: 这里的 saveAll 返回值设计有点问题，实际使用中可能需要改为抛异常或者返回失败的订单列表
+                //TODO: 这里需要补偿：调用 inventory release 和 promotion release
             }
             log.info("Trade created with promotionQuoteId: {}, inputHash: {}", quoteResponse.getQuoteId(), inputHash);
 
             // 6. 生成 PaymentIntent
-            String paymentId = UUID.randomUUID().toString();
+            String paymentId = TradeIdGenerator.generatePaymentIntentId();
 
             // 计算支付超时时间（默认15分钟）
             LocalDateTime expireAt = LocalDateTime.now().plusSeconds(900);
@@ -459,26 +482,39 @@ public class TradeApplicationService {
             }
 
             // 同步补偿：释放库存和优惠
-            // 按 ShopOrder 遍历释放库存
+            // 按 ShopOrder 遍历释放库存（V2 occupyPairs 优先，兼容旧 preOccupyIds）
             for (ShopOrder shopOrder : shopOrders) {
                 try {
-                    // 检查 inventoryPreOccupyIds 是否存在
-                    if (shopOrder.getInventoryPreOccupyIds() == null || shopOrder.getInventoryPreOccupyIds().isEmpty()) {
-                        log.warn("Missing inventoryPreOccupyIds for shopOrder: {}, skipping inventory release", shopOrder.getOrderId());
-                        continue;
+                    if (shopOrder.getInventoryOccupyPairs() != null && !shopOrder.getInventoryOccupyPairs().isEmpty()) {
+                        // V2：使用 releaseV2 按 SKU 释放
+                        List<InventoryReleaseRequestV2.OccupyPairDto> relPairs = shopOrder.getInventoryOccupyPairs().stream()
+                                .map(p -> InventoryReleaseRequestV2.OccupyPairDto.builder()
+                                        .shopId(p.getShopId()).skuId(p.getSkuId()).occupyId(p.getOccupyId()).build())
+                                .collect(Collectors.toList());
+                        InventoryReleaseRequestV2 releaseRequestV2 = InventoryReleaseRequestV2.builder()
+                                .orderId(shopOrder.getOrderId())
+                                .reason(command.getReason())
+                                .occupyPairs(relPairs)
+                                .build();
+                        String shopIdempotencyKey = idempotencyKey + ":inv:rel:" + shopOrder.getShopId();
+                        inventoryClient.releaseV2(shopIdempotencyKey, releaseRequestV2);
+                        log.info("Inventory V2 released for cancelled shopOrder: orderId={}, shopId={}, occupyPairs={}",
+                                shopOrder.getOrderId(), shopOrder.getShopId(), shopOrder.getInventoryOccupyPairs());
+                    } else if (shopOrder.getInventoryPreOccupyIds() != null && !shopOrder.getInventoryPreOccupyIds().isEmpty()) {
+                        // Legacy：使用旧 release 接口
+                        InventoryReleaseRequest inventoryReleaseRequest = InventoryReleaseRequest.builder()
+                                .shopId(shopOrder.getShopId())
+                                .tradeId(trade.getTradeId())
+                                .reason(command.getReason())
+                                .preOccupyIds(shopOrder.getInventoryPreOccupyIds())
+                                .build();
+                        String shopIdempotencyKey = idempotencyKey + ":inv:rel:" + shopOrder.getShopId();
+                        inventoryClient.release(shopIdempotencyKey, inventoryReleaseRequest);
+                        log.info("Inventory legacy released for cancelled shopOrder: orderId={}, shopId={}, preOccupyIds={}",
+                                shopOrder.getOrderId(), shopOrder.getShopId(), shopOrder.getInventoryPreOccupyIds());
+                    } else {
+                        log.warn("Missing inventory occupy info for shopOrder: {}, skipping inventory release", shopOrder.getOrderId());
                     }
-
-                    InventoryReleaseRequest inventoryReleaseRequest = InventoryReleaseRequest.builder()
-                            .shopId(shopOrder.getShopId())
-                            .tradeId(trade.getTradeId())
-                            .reason(command.getReason())
-                            .preOccupyIds(shopOrder.getInventoryPreOccupyIds())
-                            .build();
-
-                    String shopIdempotencyKey = idempotencyKey + ":inv:rel:" + shopOrder.getShopId();
-                    inventoryClient.release(shopIdempotencyKey, inventoryReleaseRequest);
-                    log.info("Inventory released for cancelled shopOrder: orderId={}, shopId={}, preOccupyIds={}",
-                            shopOrder.getOrderId(), shopOrder.getShopId(), shopOrder.getInventoryPreOccupyIds());
                 } catch (Exception e) {
                     log.error("Failed to release inventory for shopOrder: {}", shopOrder.getOrderId(), e);
                     // 继续处理其他 shop
@@ -560,6 +596,7 @@ public class TradeApplicationService {
                         .inventoryStatus(shopOrder.getInventoryStatus())
                         .promotionStatus(shopOrder.getPromotionStatus())
                         .inventoryPreOccupyIds(shopOrder.getInventoryPreOccupyIds())
+                        .inventoryOccupyPairs(shopOrder.getInventoryOccupyPairs())
                         .totalAmountCents(shopOrder.getTotalAmountCents())
                         .orderLines(shopOrder.getOrderLines())
                         .createdAt(shopOrder.getCreatedAt())
@@ -574,11 +611,18 @@ public class TradeApplicationService {
             paymentIntent.setPaidAt(LocalDateTime.now());
             paymentIntentJpaRepository.save(paymentIntent);
 
-            // 同步确认：按 ShopOrder 遍历 inventory commit
+            // 同步确认：按 ShopOrder 遍历 inventory commit（V2 链路无需 commit，仅旧链路需要）
             long paidAtEpochMs = System.currentTimeMillis();
             for (ShopOrder shopOrder : shopOrders) {
                 try {
-                    // 检查 inventoryPreOccupyIds 是否存在
+                    // V2 新链路：直接扣减，无需 2-phase commit
+                    if (shopOrder.getInventoryOccupyPairs() != null && !shopOrder.getInventoryOccupyPairs().isEmpty()) {
+                        log.info("V2 inventory deduct path, skip commit for shopOrder: orderId={}, shopId={}",
+                                shopOrder.getOrderId(), shopOrder.getShopId());
+                        continue;
+                    }
+
+                    // Legacy：旧链路需要 commit
                     if (shopOrder.getInventoryPreOccupyIds() == null || shopOrder.getInventoryPreOccupyIds().isEmpty()) {
                         log.warn("Missing inventoryPreOccupyIds for shopOrder: {}, skipping inventory commit", shopOrder.getOrderId());
                         continue;
