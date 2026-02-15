@@ -21,6 +21,7 @@ public class RedisIdempotencyRepository implements IdempotencyRepository {
 
     private static final String DEDUCT_PREFIX = "idem:deduct:";
     private static final String RELEASE_PREFIX = "idem:release:";
+    private static final String DEDUCT_ORDER_PREFIX = "idem:deduct:order:";
     private static final long TTL_HOURS = 24;
 
     private final StringRedisTemplate redisTemplate;
@@ -67,5 +68,19 @@ public class RedisIdempotencyRepository implements IdempotencyRepository {
     public void markReleased(String idempotencyKey) {
         String key = RELEASE_PREFIX + idempotencyKey;
         redisTemplate.opsForValue().set(key, "1", TTL_HOURS, TimeUnit.HOURS);
+    }
+
+    @Override
+    public Optional<String> getDeductOrderId(String idempotencyKey) {
+        String key = DEDUCT_ORDER_PREFIX + idempotencyKey;
+        String orderId = redisTemplate.opsForValue().get(key);
+        return Optional.ofNullable(orderId);
+    }
+
+    @Override
+    public boolean bindDeductOrderIdIfAbsent(String idempotencyKey, String orderId) {
+        String key = DEDUCT_ORDER_PREFIX + idempotencyKey;
+        Boolean success = redisTemplate.opsForValue().setIfAbsent(key, orderId, TTL_HOURS, TimeUnit.HOURS);
+        return Boolean.TRUE.equals(success);
     }
 }
