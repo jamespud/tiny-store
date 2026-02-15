@@ -52,7 +52,9 @@ class InventoryDeductDomainServiceTest {
     @Test
     @DisplayName("deduct_success_shouldReturnOccupyPairs_andSaveRecord_andCacheIdem")
     void deduct_success_shouldReturnOccupyPairsAndSaveRecordAndCacheIdem() {
-        // Given: no cached idempotency
+        // Given: no cached idempotency, orderId binding succeeds
+        when(idempotencyRepository.getDeductOrderId(anyString())).thenReturn(Optional.empty());
+        when(idempotencyRepository.bindDeductOrderIdIfAbsent(anyString(), anyString())).thenReturn(true);
         when(idempotencyRepository.getDeductResult(anyString())).thenReturn(Optional.empty());
         
         // Given
@@ -101,7 +103,9 @@ class InventoryDeductDomainServiceTest {
     @Test
     @DisplayName("deduct_whenSecondSkuLack_shouldRollbackFirst_andReturnFail")
     void deduct_whenSecondSkuLack_shouldRollbackFirstAndReturnFail() {
-        // Given
+        // Given: orderId binding succeeds
+        when(idempotencyRepository.getDeductOrderId(anyString())).thenReturn(Optional.empty());
+        when(idempotencyRepository.bindDeductOrderIdIfAbsent(anyString(), anyString())).thenReturn(true);
         when(idempotencyRepository.getDeductResult(anyString())).thenReturn(Optional.empty());
 
         String orderId = "ORDER-002";
@@ -146,7 +150,9 @@ class InventoryDeductDomainServiceTest {
     @Test
     @DisplayName("deduct_whenDbRecordFails_shouldRollbackAll_andReturnDbRecordFailed")
     void deduct_whenDbRecordFails_shouldRollbackAllAndReturnDbRecordFailed() {
-        // Given
+        // Given: orderId binding succeeds
+        when(idempotencyRepository.getDeductOrderId(anyString())).thenReturn(Optional.empty());
+        when(idempotencyRepository.bindDeductOrderIdIfAbsent(anyString(), anyString())).thenReturn(true);
         when(idempotencyRepository.getDeductResult(anyString())).thenReturn(Optional.empty());
 
         String orderId = "ORDER-003";
@@ -272,5 +278,87 @@ class InventoryDeductDomainServiceTest {
         assertThat(result.isSuccess()).isTrue();
         verify(deductGateway).rollback("SHOP5", "SKU-R", "ORDER-005_4000_3");
         verify(idempotencyRepository).markReleased(sharedIdemKey);
+    }
+
+    @Test
+    @DisplayName("deduct_whenDuplicateSkuInItems_shouldReturnDuplicateSkuId_noSideEffect")
+    void deduct_whenDuplicateSkuInItems_shouldReturnDuplicateSkuIdNoSideEffect() {
+        // Given: same (shopId, skuId) appears twice in items
+        String idemKey = "idem-dup-sku";
+        InventoryDeductCommand command = InventoryDeductCommand.builder()
+                .orderId("ORDER-DUP")
+                .idempotencyKey(idemKey)
+                .items(List.of(
+                        InventoryDeductCommand.Item.builder()
+                                .shopId("SHOP-A")
+                                .skuId("SKU-001")
+                                .quantity(5)
+                                .build(),
+                        InventoryDeductCommand.Item.builder()
+                                .shopId("SHOP-A")
+                                .skuId("SKU-001") // Duplicate
+                                .quantity(3)
+                                .build()
+                ))
+                .build();
+
+        // When: deduct called
+        DeductResult result = domainService.deduct(command);
+
+        // Then: returns failure with DUPLICATE_SKU_ID
+        assertThat(result.isSuccess()).isFalse();
+        assertThat(result.getMessage()).isEqualTo("DUPLICATE_SKU_ID");
+        assertThat(result.getLackSkuIds()).contains("SKU-001");
+        assertThat(result.getOccupyPairs()).isEmpty();
+
+        // Verify: NO Redis preDeduct called (validation failed before deduct)
+        verifyNoInteractions(deductGateway);
+
+        // Verify: NO DB record saved
+        verifyNoInteractions(recordRepository);
+
+        // Verify: idempotency binding/check may happen but no result cached
+        verify(idempotencyRepository, never()).saveDeductResult(anyString(), any());
+    }
+
+    @Test
+    @DisplayName("deduct_whenSameIdemKeyDifferentOrderId_shouldReturnIdempotencyConflict")
+    void deduct_whenSameIdemKeyDifferentOrderId_shouldReturnIdempotencyConflict() {
+        // Given: idempotency key already bound to different orderId
+        String idemKey = "shared-key-conflict";
+        String boundOrderId = "ORDER-AAA";
+        String currentOrderId = "ORDER-BBB";
+
+        when(idempotencyRepository.getDeductOrderId(idemKey)).thenReturn(Optional.of(boundOrderId));
+
+        InventoryDeductCommand command = InventoryDeductCommand.builder()
+                .orderId(currentOrderId) // Different from bound
+                .idempotencyKey(idemKey)
+                .items(List.of(
+                        InventoryDeductCommand.Item.builder()
+                                .shopId("SHOP-C")
+                                .skuId("SKU-999")
+                                .quantity(10)
+                                .build()
+                ))
+                .build();
+
+        // When
+        DeductResult result = domainService.deduct(command);
+
+        // Then: returns conflict
+        assertThat(result.isSuccess()).isFalse();
+        assertThat(result.getMessage()).isEqualTo("IDEMPOTENCY_CONFLICT");
+        assertThat(result.getOccupyPairs()).isEmpty();
+        assertThat(result.getLackSkuIds()).isEmpty();
+
+        // Verify: NO deduct gateway called
+        verifyNoInteractions(deductGateway);
+
+        // Verify: NO DB record saved
+        verifyNoInteractions(recordRepository);
+
+        // Verify: deduct result replay NOT attempted (conflict detected before replay)
+        verify(idempotencyRepository, never()).getDeductResult(anyString());
     }
 }

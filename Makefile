@@ -6,7 +6,8 @@
 # Variables
 COMPOSE_DEBUG := docker/docker-compose-debug.yml
 COMPOSE_TEST := docker/docker-compose-test.yml
-MAVEN := ./mvnw
+MAVEN := "./mvnw"
+MAVEN_CLEAN_OPTS := -Dmaven.clean.failOnError=false
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -16,7 +17,7 @@ help: ## Show this help message
 
 build: ## Build all services with Maven
 	@echo "Building all services..."
-	$(MAVEN) clean install -U -Dmaven.test.skip=true
+	$(MAVEN) clean install -U -Dmaven.test.skip=true $(MAVEN_CLEAN_OPTS)
 	@echo "Build completed successfully"
 
 debug: build ## Start debug environment (fixed ports: 5432/6379/9092/8848)
@@ -64,7 +65,7 @@ it: build ## Run integration tests (Testcontainers only, no compose)
 	fi
 	@echo "Running integration tests with Testcontainers..."
 	@echo "WARNING: Ensure no other Docker containers conflict with Testcontainers infra"
-	$(MAVEN) clean verify -Pit -DskipITs=false -DskipTests -pl '!tests/api'
+	$(MAVEN) clean verify -Pit -DskipITs=false -DskipTests -pl '!tests/api' $(MAVEN_CLEAN_OPTS)
 	@echo "Integration tests completed successfully"
 
 e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)

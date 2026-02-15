@@ -65,9 +65,6 @@ public class TradeApplicationService {
 
     @Autowired
     private ObjectMapper objectMapper;
-    
-    @Autowired
-    private TradeApplicationService tradeApplicationService;
 
     /**
      * 创建交易 Saga（半编排式）

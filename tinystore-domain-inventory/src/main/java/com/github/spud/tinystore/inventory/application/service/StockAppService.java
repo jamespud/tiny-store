@@ -134,7 +134,7 @@ public class StockAppService {
     }
     
     @Scheduled(fixedRate = 300000) // 每5分钟执行一次
-    private void releaseStockTask() {
+    void releaseStockTask() {
         // TODO: 获取所有需要清理的SKU列表
         List<String> skudIds = List.of();
         long timeoutTimestamp = System.currentTimeMillis() - 30 * 60 * 1000;

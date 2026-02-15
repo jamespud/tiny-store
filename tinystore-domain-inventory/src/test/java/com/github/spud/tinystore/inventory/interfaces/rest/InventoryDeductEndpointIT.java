@@ -4,6 +4,7 @@ import com.github.spud.tinystore.inventory.InventoryApplication;
 import com.github.spud.tinystore.inventory.domain.port.InventoryDeductRecordRepository;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.entity.InventoryStockEntity;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.repository.JpaInventoryStockRepository;
+import com.github.spud.tinystore.inventory.infrastructure.scheduler.InventoryUncommitV2CleanupTask;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -102,6 +103,9 @@ class InventoryDeductEndpointIT {
 
     @Autowired
     private StringRedisTemplate redisTemplate;
+
+    @Autowired
+    private InventoryUncommitV2CleanupTask cleanupTask;
 
     @MockitoBean
     private InventoryDeductRecordRepository mockRecordRepository;
@@ -356,4 +360,212 @@ class InventoryDeductEndpointIT {
         String deducted = redisTemplate.opsForValue().get(deductedKey);
         assertThat(deducted).isIn("0", null);
     }
+
+    @Test
+    @org.junit.jupiter.api.Tag("ep:inventory:POST:/api/inventory/deduct")
+    @DisplayName("E-03: Duplicate SKU in request → HTTP 200 + success=false + DUPLICATE_SKU_ID")
+    void e03_duplicateSkuInRequest_returns200WithFailurePayload() {
+        // Given: stock exists for SKU
+        String shopId = "SHOP-E03";
+        String skuId = "SKU-DUP";
+        
+        stockRepository.save(new InventoryStockEntity()
+            .setShopId(shopId)
+            .setSkuId(skuId)
+            .setTotalQuantity(100)
+            .setReservedQuantity(0));
+
+        // When: deduct request with duplicate (shopId, skuId)
+        String idemKey = "idem-e03-" + UUID.randomUUID();
+        String orderId = "ORDER-E03-" + UUID.randomUUID();
+        
+        Map<String, Object> request = Map.of(
+            "orderId", orderId,
+            "items", List.of(
+                Map.of("shopId", shopId, "skuId", skuId, "quantity", 5),
+                Map.of("shopId", shopId, "skuId", skuId, "quantity", 3) // Duplicate!
+            )
+        );
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.add("Idempotency-Key", idemKey);
+
+        ResponseEntity<Map> response = restTemplate.postForEntity(
+            "http://localhost:" + port + "/api/inventory/deduct",
+            new HttpEntity<>(request, headers),
+            Map.class
+        );
+
+        // Then: HTTP 200 OK
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        // Then: payload indicates failure
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().get("success")).isEqualTo(false);
+        assertThat(response.getBody().get("message")).isEqualTo("DUPLICATE_SKU_ID");
+        assertThat(response.getBody().get("occupyPairs")).asList().isEmpty();
+
+        // Then: no Redis side effects (no uncommit member, deducted=0)
+        String uncommitKey = String.format("inventory:uncommit:%s:%s", shopId, skuId);
+        Long uncommitSize = redisTemplate.opsForZSet().size(uncommitKey);
+        assertThat(uncommitSize).isIn(0L, null);
+
+        String deductedKey = String.format("inventory:deducted:%s:%s", shopId, skuId);
+        String deducted = redisTemplate.opsForValue().get(deductedKey);
+        assertThat(deducted).isIn("0", null);
+    }
+
+    @Test
+    @org.junit.jupiter.api.Tag("ep:inventory:POST:/api/inventory/deduct")
+    @DisplayName("E-07: Same Idempotency-Key, different orderId → HTTP 200 + IDEMPOTENCY_CONFLICT")
+    void e07_sameIdemKeyDifferentOrderId_returnsConflict() {
+        // Given: stock exists
+        String shopId = "SHOP-E07";
+        String skuId = "SKU-E07";
+        
+        stockRepository.save(new InventoryStockEntity()
+            .setShopId(shopId)
+            .setSkuId(skuId)
+            .setTotalQuantity(100)
+            .setReservedQuantity(0));
+
+        // When: first deduct with idempotency key K, orderId A
+        String sharedIdemKey = "idem-e07-shared-" + UUID.randomUUID();
+        String orderIdA = "ORDER-E07-A-" + UUID.randomUUID();
+        
+        Map<String, Object> requestA = Map.of(
+            "orderId", orderIdA,
+            "items", List.of(Map.of("shopId", shopId, "skuId", skuId, "quantity", 10))
+        );
+
+        HttpHeaders headersA = new HttpHeaders();
+        headersA.setContentType(MediaType.APPLICATION_JSON);
+        headersA.add("Idempotency-Key", sharedIdemKey);
+
+        ResponseEntity<Map> responseA = restTemplate.postForEntity(
+            "http://localhost:" + port + "/api/inventory/deduct",
+            new HttpEntity<>(requestA, headersA),
+            Map.class
+        );
+
+        // Then: first deduct succeeds
+        assertThat(responseA.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(responseA.getBody().get("success")).isEqualTo(true);
+
+        // Record uncommit zset size after first deduct
+        String uncommitKey = String.format("inventory:uncommit:%s:%s", shopId, skuId);
+        Long uncommitSizeAfterA = redisTemplate.opsForZSet().size(uncommitKey);
+        assertThat(uncommitSizeAfterA).isEqualTo(1L);
+
+        String deductedKey = String.format("inventory:deducted:%s:%s", shopId, skuId);
+        String deductedAfterA = redisTemplate.opsForValue().get(deductedKey);
+        assertThat(deductedAfterA).isEqualTo("10");
+
+        // When: second deduct with SAME idempotency key K, but different orderId B
+        String orderIdB = "ORDER-E07-B-" + UUID.randomUUID();
+        
+        Map<String, Object> requestB = Map.of(
+            "orderId", orderIdB, // DIFFERENT!
+            "items", List.of(Map.of("shopId", shopId, "skuId", skuId, "quantity", 5))
+        );
+
+        HttpHeaders headersB = new HttpHeaders();
+        headersB.setContentType(MediaType.APPLICATION_JSON);
+        headersB.add("Idempotency-Key", sharedIdemKey); // SAME KEY!
+
+        ResponseEntity<Map> responseB = restTemplate.postForEntity(
+            "http://localhost:" + port + "/api/inventory/deduct",
+            new HttpEntity<>(requestB, headersB),
+            Map.class
+        );
+
+        // Then: HTTP 200 OK (not 4xx)
+        assertThat(responseB.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        // Then: payload indicates conflict
+        assertThat(responseB.getBody()).isNotNull();
+        assertThat(responseB.getBody().get("success")).isEqualTo(false);
+        assertThat(responseB.getBody().get("message")).isEqualTo("IDEMPOTENCY_CONFLICT");
+        assertThat(responseB.getBody().get("occupyPairs")).asList().isEmpty();
+        assertThat(responseB.getBody().get("lackSkuIds")).asList().isEmpty();
+
+        // Then: no additional uncommit member added (still size=1)
+        Long uncommitSizeAfterB = redisTemplate.opsForZSet().size(uncommitKey);
+        assertThat(uncommitSizeAfterB).isEqualTo(1L);
+
+        // Then: deducted counter unchanged (still 10, not 15)
+        String deductedAfterB = redisTemplate.opsForValue().get(deductedKey);
+        assertThat(deductedAfterB).isEqualTo("10");
+    }
+
+    @Test
+    @org.junit.jupiter.api.Tag("scheduler:v2-cleanup")
+    @DisplayName("B-05/B-06: V2 scheduled cleanup chain (SCAN → cleanTimeoutUncommitV2 → rollback)")
+    void b05b06_v2ScheduledCleanupChain_scanAndRollback() throws Exception {
+        // Given: stock exists
+        String shopId = "SHOP-B05";
+        String skuId = "SKU-B05";
+        
+        stockRepository.save(new InventoryStockEntity()
+            .setShopId(shopId)
+            .setSkuId(skuId)
+            .setTotalQuantity(100)
+            .setReservedQuantity(0));
+
+        // When: create an uncommit member via deduct
+        String idemKey = "idem-b05-" + UUID.randomUUID();
+        String orderId = "ORDER-B05-" + UUID.randomUUID();
+        
+        Map<String, Object> deductRequest = Map.of(
+            "orderId", orderId,
+            "items", List.of(Map.of("shopId", shopId, "skuId", skuId, "quantity", 20))
+        );
+
+        HttpHeaders deductHeaders = new HttpHeaders();
+        deductHeaders.setContentType(MediaType.APPLICATION_JSON);
+        deductHeaders.add("Idempotency-Key", idemKey);
+
+        ResponseEntity<Map> deductResponse = restTemplate.postForEntity(
+            "http://localhost:" + port + "/api/inventory/deduct",
+            new HttpEntity<>(deductRequest, deductHeaders),
+            Map.class
+        );
+
+        assertThat(deductResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(deductResponse.getBody().get("success")).isEqualTo(true);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, String>> occupyPairs = (List<Map<String, String>>) deductResponse.getBody().get("occupyPairs");
+        String occupyId = occupyPairs.get(0).get("occupyId");
+
+        // Verify initial state: uncommit member exists, deducted=20
+        String uncommitKey = String.format("inventory:uncommit:%s:%s", shopId, skuId);
+        Double scoreBefore = redisTemplate.opsForZSet().score(uncommitKey, occupyId);
+        assertThat(scoreBefore).isNotNull();
+
+        String deductedKey = String.format("inventory:deducted:%s:%s", shopId, skuId);
+        String deductedBefore = redisTemplate.opsForValue().get(deductedKey);
+        assertThat(deductedBefore).isEqualTo("20");
+
+        // When: simulate timeout by modifying ZSET score to 30min+1s ago
+        long now = System.currentTimeMillis();
+        long timeoutScore = now - (30 * 60 * 1000 + 1000); // 30min + 1s ago
+        redisTemplate.opsForZSet().add(uncommitKey, occupyId, timeoutScore);
+
+        // When: invoke V2 cleanup task (SCAN pattern → cleanTimeoutUncommitV2)
+        cleanupTask.cleanupOnce();
+
+        // Then: uncommit member should be removed (rollback executed)
+        Double scoreAfter = redisTemplate.opsForZSet().score(uncommitKey, occupyId);
+        assertThat(scoreAfter).as("Timeout member should be removed by cleanup task").isNull();
+
+        // Then: deducted counter should be rolled back (20 → 0)
+        String deductedAfter = redisTemplate.opsForValue().get(deductedKey);
+        assertThat(deductedAfter).isIn("0", null);
+
+        // Then: cleanup task can find the key without explicit SKU list (SCAN pattern works)
+        // (implicit verification: if SCAN failed, the member would still exist)
+    }
 }
+

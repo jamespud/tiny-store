@@ -11,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * 库存扣减领域服务
@@ -44,7 +43,8 @@ public class InventoryDeductDomainService {
     /**
      * 执行库存扣减
      * <ol>
-     *   <li>幂等命中 → 直接返回上次结果</li>
+     *   <li>orderId绑定检测：同一幂等键必须绑定同一orderId，否则返回冲突</li>
+     *   <li>幂等回放：如已执行过则返回缓存结果</li>
      *   <li>校验：items 中 (shopId, skuId) 不允许重复</li>
      *   <li>逐条预扣，任一失败 → 对已成功项全部回滚 → 返回失败</li>
      *   <li>全部成功 → DB 落扣减流水（本地事务） → 若 DB 失败则补偿回滚 Redis</li>
@@ -52,14 +52,47 @@ public class InventoryDeductDomainService {
      * </ol>
      */
     public DeductResult deduct(InventoryDeductCommand command) {
-        // 1. 幂等
+        // 1. orderId 冲突检测（E-07）
+        Optional<String> boundOrderId = idempotencyRepository.getDeductOrderId(command.getIdempotencyKey());
+        if (boundOrderId.isPresent()) {
+            if (!boundOrderId.get().equals(command.getOrderId())) {
+                log.warn("Idempotency conflict: key={}, bound={}, current={}", 
+                         command.getIdempotencyKey(), boundOrderId.get(), command.getOrderId());
+                return DeductResult.builder()
+                        .success(false)
+                        .message("IDEMPOTENCY_CONFLICT")
+                        .occupyPairs(List.of())
+                        .lackSkuIds(List.of())
+                        .build();
+            }
+        } else {
+            // 尝试绑定 orderId（SETNX 语义）
+            boolean bound = idempotencyRepository.bindDeductOrderIdIfAbsent(
+                    command.getIdempotencyKey(), command.getOrderId());
+            if (!bound) {
+                // 并发竞态：绑定失败，再次读取并比对
+                Optional<String> reread = idempotencyRepository.getDeductOrderId(command.getIdempotencyKey());
+                if (reread.isPresent() && !reread.get().equals(command.getOrderId())) {
+                    log.warn("Idempotency conflict (race): key={}, bound={}, current={}", 
+                             command.getIdempotencyKey(), reread.get(), command.getOrderId());
+                    return DeductResult.builder()
+                            .success(false)
+                            .message("IDEMPOTENCY_CONFLICT")
+                            .occupyPairs(List.of())
+                            .lackSkuIds(List.of())
+                            .build();
+                }
+            }
+        }
+
+        // 2. 幂等回放
         Optional<DeductResult> cached = idempotencyRepository.getDeductResult(command.getIdempotencyKey());
         if (cached.isPresent()) {
             log.info("Deduct idempotent hit: idempotencyKey={}", command.getIdempotencyKey());
             return cached.get();
         }
 
-        // 2. 重复 sku 校验
+        // 3. 重复 sku 校验
         Set<String> seen = new HashSet<>();
         for (InventoryDeductCommand.Item item : command.getItems()) {
             String key = item.getShopId() + ":" + item.getSkuId();
@@ -67,12 +100,13 @@ public class InventoryDeductDomainService {
                 return DeductResult.builder()
                         .success(false)
                         .message("DUPLICATE_SKU_ID")
+                        .occupyPairs(List.of())
                         .lackSkuIds(List.of(item.getSkuId()))
                         .build();
             }
         }
 
-        // 3. 逐条预扣（原子一致性：失败则回滚所有已成功项）
+        // 4. 逐条预扣（原子一致性：失败则回滚所有已成功项）
         List<OccupyPair> successPairs = new ArrayList<>();
         List<Integer> successQuantities = new ArrayList<>();
 
@@ -97,7 +131,7 @@ public class InventoryDeductDomainService {
             successQuantities.add(item.getQuantity());
         }
 
-        // 4. DB 落流水（最小一致性保障）
+        // 5. DB 落流水（最小一致性保障）
         try {
             recordRepository.saveDeducted(
                     command.getOrderId(), command.getIdempotencyKey(),
@@ -111,7 +145,7 @@ public class InventoryDeductDomainService {
                     .build();
         }
 
-        // 5. 缓存幂等结果
+        // 6. 缓存幂等结果
         DeductResult result = DeductResult.builder()
                 .success(true)
                 .message("ok")
@@ -146,7 +180,6 @@ public class InventoryDeductDomainService {
         }
 
         // 2. 逐条回滚
-        List<String> failedSkus = new ArrayList<>();
         for (OccupyPair pair : command.getOccupyPairs()) {
             boolean ok = deductGateway.rollback(pair.getShopId(), pair.getSkuId(), pair.getOccupyId());
             if (!ok) {

@@ -35,4 +35,21 @@ public interface IdempotencyRepository {
      * 标记 release 已完成
      */
     void markReleased(String idempotencyKey);
+
+    /**
+     * 查询幂等键绑定的 orderId（用于冲突检测）
+     *
+     * @param idempotencyKey 幂等键
+     * @return 已绑定的 orderId，不存在则 empty
+     */
+    Optional<String> getDeductOrderId(String idempotencyKey);
+
+    /**
+     * 仅当不存在时绑定幂等键到 orderId（SETNX 语义）
+     *
+     * @param idempotencyKey 幂等键
+     * @param orderId        订单 ID
+     * @return true=本次成功绑定，false=已存在绑定（需调用方再读取并比对）
+     */
+    boolean bindDeductOrderIdIfAbsent(String idempotencyKey, String orderId);
 }
