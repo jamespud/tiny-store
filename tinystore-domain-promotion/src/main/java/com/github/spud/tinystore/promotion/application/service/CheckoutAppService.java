@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.github.spud.tinystore.promotion.interfaces.dto.ChangeReason;
@@ -97,13 +98,15 @@ public class CheckoutAppService {
                 conflict.setChangeReasons(List.of(ChangeReason.of("IDEMPOTENCY_CONFLICT", null)));
                 return conflict;
             }
-            Object v = stored.value();
-            if (v instanceof CheckoutQuoteResponse r) {
-                return r;
+            CheckoutQuoteResponse replay = restoreStoredValue(stored.value(), CheckoutQuoteResponse.class);
+            if (replay != null) {
+                return replay;
             }
         }
         CheckoutQuoteResponse resp = createQuote(request);
-        idempotencyStorage.put(key, requestHash, resp);
+        if (!storeIdempotencyResponse(key, requestHash, resp)) {
+            return buildQuoteConflictResponse();
+        }
         return resp;
     }
 
@@ -111,7 +114,7 @@ public class CheckoutAppService {
     public CheckoutCommitResponse commit(String idempotencyKey, CheckoutCommitRequest request) {
         String key = "promotion:checkout:commit:" + idempotencyKey;
         String requestHash = sha256(request.getQuoteId() + "|" + request.getTradeId() + "|"
-                + request.getInputHash() + "|" + request.getPayNo() + "|" + request.getPaidAt());
+                + request.getInputHash());
         IdempotencyStorage.StoredValue stored = idempotencyStorage.get(key);
         if (stored != null) {
             if (!Objects.equals(requestHash, stored.requestHash())) {
@@ -123,9 +126,9 @@ public class CheckoutAppService {
                 conflict.setMessage("IDEMPOTENCY_CONFLICT");
                 return conflict;
             }
-            Object v = stored.value();
-            if (v instanceof CheckoutCommitResponse r) {
-                return r;
+            CheckoutCommitResponse replay = restoreStoredValue(stored.value(), CheckoutCommitResponse.class);
+            if (replay != null) {
+                return replay;
             }
         }
 
@@ -139,7 +142,9 @@ public class CheckoutAppService {
             resp.setSnapshot(null);
             resp.setChangeReasons(List.of(ChangeReason.of("QUOTE_NOT_FOUND", null)));
             resp.setMessage("需要重新报价");
-            idempotencyStorage.put(key, requestHash, resp);
+            if (!storeIdempotencyResponse(key, requestHash, resp)) {
+                return buildCommitConflictResponse();
+            }
             return resp;
         }
 
@@ -150,7 +155,9 @@ public class CheckoutAppService {
             resp.setSnapshot(null);
             resp.setChangeReasons(List.of(ChangeReason.of("QUOTE_NOT_FOUND", null)));
             resp.setMessage("需要重新报价");
-            idempotencyStorage.put(key, requestHash, resp);
+            if (!storeIdempotencyResponse(key, requestHash, resp)) {
+                return buildCommitConflictResponse();
+            }
             return resp;
         }
         CheckoutQuoteEntity entity = opt.get();
@@ -165,7 +172,9 @@ public class CheckoutAppService {
             resp.setSnapshot(newQuote.getSnapshot());
             resp.setChangeReasons(List.of(ChangeReason.of("QUOTE_EXPIRED", null)));
             resp.setMessage("需要重新报价");
-            idempotencyStorage.put(key, requestHash, resp);
+            if (!storeIdempotencyResponse(key, requestHash, resp)) {
+                return buildCommitConflictResponse();
+            }
             return resp;
         }
 
@@ -177,7 +186,9 @@ public class CheckoutAppService {
             resp.setSnapshot(newQuote.getSnapshot());
             resp.setChangeReasons(List.of(ChangeReason.of("INPUT_CHANGED", null)));
             resp.setMessage("需要重新报价");
-            idempotencyStorage.put(key, requestHash, resp);
+            if (!storeIdempotencyResponse(key, requestHash, resp)) {
+                return buildCommitConflictResponse();
+            }
             return resp;
         }
 
@@ -190,7 +201,9 @@ public class CheckoutAppService {
             resp.setSnapshot(newQuote.getSnapshot());
             resp.setChangeReasons(List.of(ChangeReason.of("SECKILL_PRICE_CHANGED", null)));
             resp.setMessage("需要重新报价");
-            idempotencyStorage.put(key, requestHash, resp);
+            if (!storeIdempotencyResponse(key, requestHash, resp)) {
+                return buildCommitConflictResponse();
+            }
             return resp;
         }
         if (!Objects.equals(currentShippingVersion, snapshot.getVersion().getShippingRulesVersion())) {
@@ -200,20 +213,24 @@ public class CheckoutAppService {
             resp.setSnapshot(newQuote.getSnapshot());
             resp.setChangeReasons(List.of(ChangeReason.of("SHIPPING_INPUT_CHANGED", null)));
             resp.setMessage("需要重新报价");
-            idempotencyStorage.put(key, requestHash, resp);
+            if (!storeIdempotencyResponse(key, requestHash, resp)) {
+                return buildCommitConflictResponse();
+            }
             return resp;
         }
 
         List<ChangeReason> changes = new ArrayList<>();
-        // 核心修改：原子扣减优惠券（无降级），失败则直接返回错误
-        boolean couponDeductSuccess = applyCouponUsageAtomic(payload, request.getTradeId(), now, changes);
-        if (!couponDeductSuccess) {
+        boolean couponLockSuccess = lockCouponsAtomic(payload, request.getTradeId(), entity.getExpiresAt(), now, changes);
+        if (!couponLockSuccess) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             resp.setStatus(CheckoutResultStatus.REQUOTE_REQUIRED);
             resp.setFinalQuoteId(null);
             resp.setSnapshot(null);
             resp.setChangeReasons(changes);
-            resp.setMessage("优惠券扣减失败，请重新报价");
-            idempotencyStorage.put(key, requestHash, resp);
+            resp.setMessage("优惠券预占失败，请重新报价");
+            if (!storeIdempotencyResponse(key, requestHash, resp)) {
+                return buildCommitConflictResponse();
+            }
             return resp;
         }
 
@@ -229,7 +246,9 @@ public class CheckoutAppService {
         resp.setSnapshot(payload.getSnapshot());
         resp.setChangeReasons(changes);
         resp.setMessage(changes.isEmpty() ? "成功" : "已降级/部分优惠失效");
-        idempotencyStorage.put(key, requestHash, resp);
+        if (!storeIdempotencyResponse(key, requestHash, resp)) {
+            return buildCommitConflictResponse();
+        }
         return resp;
     }
 
@@ -242,9 +261,9 @@ public class CheckoutAppService {
             if (!Objects.equals(requestHash, stored.requestHash())) {
                 return CheckoutReleaseResponse.of(false, "IDEMPOTENCY_CONFLICT");
             }
-            Object v = stored.value();
-            if (v instanceof CheckoutReleaseResponse r) {
-                return r;
+            CheckoutReleaseResponse replay = restoreStoredValue(stored.value(), CheckoutReleaseResponse.class);
+            if (replay != null) {
+                return replay;
             }
         }
         LocalDateTime now = LocalDateTime.now();
@@ -253,20 +272,60 @@ public class CheckoutAppService {
             quoteId = UUID.fromString(request.getQuoteId());
         } catch (Exception e) {
             CheckoutReleaseResponse resp = CheckoutReleaseResponse.of(true, "released");
-            idempotencyStorage.put(key, requestHash, resp);
+            if (!storeIdempotencyResponse(key, requestHash, resp)) {
+                return CheckoutReleaseResponse.of(false, "IDEMPOTENCY_CONFLICT");
+            }
             return resp;
         }
 
         Optional<CheckoutQuoteEntity> opt = checkoutQuoteRepository.findById(quoteId);
         if (opt.isPresent()) {
             CheckoutQuoteEntity entity = opt.get();
+            CheckoutQuotePayload payload = readPayload(entity.getSnapshot());
+            releaseLocks(payload, now);
+            entity.setSnapshot(writePayload(payload));
+            entity.setUpdatedAt(now);
+            checkoutQuoteRepository.save(entity);
             if ("QUOTED".equals(entity.getStatus())) {
                 checkoutQuoteRepository.updateStatus(entity.getId(), "QUOTED", "RELEASED", now);
+            } else if ("COMMITTED".equals(entity.getStatus())) {
+                checkoutQuoteRepository.updateStatus(entity.getId(), "COMMITTED", "RELEASED", now);
             }
         }
         CheckoutReleaseResponse resp = CheckoutReleaseResponse.of(true, "released");
-        idempotencyStorage.put(key, requestHash, resp);
+        if (!storeIdempotencyResponse(key, requestHash, resp)) {
+            return CheckoutReleaseResponse.of(false, "IDEMPOTENCY_CONFLICT");
+        }
         return resp;
+    }
+
+    private boolean storeIdempotencyResponse(String key, String requestHash, Object response) {
+        try {
+            idempotencyStorage.put(key, requestHash, response);
+            return true;
+        } catch (IdempotencyConflictException e) {
+            return false;
+        }
+    }
+
+    private CheckoutQuoteResponse buildQuoteConflictResponse() {
+        CheckoutQuoteResponse conflict = new CheckoutQuoteResponse();
+        conflict.setStatus(CheckoutResultStatus.REQUOTE_REQUIRED);
+        conflict.setQuoteId(null);
+        conflict.setExpiresAtEpochMs(0L);
+        conflict.setSnapshot(null);
+        conflict.setChangeReasons(List.of(ChangeReason.of("IDEMPOTENCY_CONFLICT", null)));
+        return conflict;
+    }
+
+    private CheckoutCommitResponse buildCommitConflictResponse() {
+        CheckoutCommitResponse conflict = new CheckoutCommitResponse();
+        conflict.setStatus(CheckoutResultStatus.REQUOTE_REQUIRED);
+        conflict.setFinalQuoteId(null);
+        conflict.setSnapshot(null);
+        conflict.setChangeReasons(List.of(ChangeReason.of("IDEMPOTENCY_CONFLICT", null)));
+        conflict.setMessage("IDEMPOTENCY_CONFLICT");
+        return conflict;
     }
 
     private CheckoutQuoteResponse createQuote(CheckoutQuoteRequest request) {
@@ -475,8 +534,8 @@ public class CheckoutAppService {
         return new CouponPlanResult(benefits, plans, invalidReasons);
     }
 
-    // 原子扣减优惠券（无降级）
-    private boolean applyCouponUsageAtomic(CheckoutQuotePayload payload, String tradeId, LocalDateTime now,
+    private boolean lockCouponsAtomic(CheckoutQuotePayload payload, String tradeId, LocalDateTime lockExpireTime,
+                                       LocalDateTime now,
                                            List<ChangeReason> changes) {
         PricingSnapshot snapshot = payload.getSnapshot();
         List<PricingSnapshot.AppliedBenefit> benefits = new ArrayList<>(snapshot.getAppliedBenefits());
@@ -508,30 +567,34 @@ public class CheckoutAppService {
                             "UNUSED"
                     );
             if (userCouponOpt.isEmpty()) {
-                changes.add(ChangeReason.of("COUPON_ALREADY_USED", couponNo));
+                changes.add(ChangeReason.of("COUPON_UNAVAILABLE", couponNo));
                 return false;
             }
 
-            // 3. 原子标记为已用
+            String lockId = buildCouponLockId(tradeId, couponNo);
             UserCouponEntity userCoupon = userCouponOpt.get();
-            int updated = userCouponRepository.markAsUsed(
+            int updated = userCouponRepository.lockUnused(
                     userCoupon.getId(),
-                    "UNUSED",
-                    "USED",
-                    tradeId,
-                    now,
+                    lockId,
+                    lockExpireTime,
                     now
             );
             if (updated <= 0) {
-                changes.add(ChangeReason.of("COUPON_DEDUCT_FAILED", couponNo));
+                changes.add(ChangeReason.of("COUPON_LOCK_FAILED", couponNo));
                 return false;
             }
 
-            log.info("优惠券原子扣减成功，userId={}, couponNo={}, tradeId={}",
-                    payload.getQuoteRequest().getUserId(), couponNo, tradeId);
+            b.setLockId(lockId);
+            log.info("优惠券预占成功，userId={}, couponNo={}, tradeId={}, lockId={}",
+                    payload.getQuoteRequest().getUserId(), couponNo, tradeId, lockId);
         }
 
         return true;
+    }
+
+    private String buildCouponLockId(String tradeId, String couponNo) {
+        String digest = sha256(tradeId + "|" + couponNo);
+        return "plk:" + digest.substring(0, 28);
     }
 
     // 以下方法无核心修改，仅适配移除锁后的逻辑
@@ -560,9 +623,38 @@ public class CheckoutAppService {
         snapshot.setPayableCents(payable);
     }
 
-    // 核心修改：移除优惠券解锁逻辑
     private void releaseLocks(CheckoutQuotePayload payload, LocalDateTime now) {
-        // 无锁定环节，无需解锁
+        PricingSnapshot snapshot = payload.getSnapshot();
+        if (snapshot == null || snapshot.getAppliedBenefits() == null) {
+            return;
+        }
+        for (PricingSnapshot.AppliedBenefit benefit : snapshot.getAppliedBenefits()) {
+            if (benefit.getLockId() == null || benefit.getLockId().isBlank()) {
+                continue;
+            }
+            int released = userCouponRepository.unlockByLockId(benefit.getLockId(), now);
+            if (released > 0) {
+                log.info("优惠券释放成功，lockId={}", benefit.getLockId());
+            }
+            benefit.setLockId(null);
+        }
+    }
+
+    private <T> T restoreStoredValue(Object value, Class<T> type) {
+        if (value == null) {
+            return null;
+        }
+        if (type.isInstance(value)) {
+            return type.cast(value);
+        }
+        if (value instanceof JsonNode node) {
+            try {
+                return objectMapper.treeToValue(node, type);
+            } catch (Exception e) {
+                throw new IllegalStateException("failed to restore idempotency stored value", e);
+            }
+        }
+        return null;
     }
 
     private String computeInputHash(CheckoutQuoteRequest request) {
