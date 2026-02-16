@@ -84,8 +84,12 @@ public class TradeApplicationService {
     @Transactional
     public CreateTradeData createTrade(String idempotencyKey, CreateTradeCommand command) throws Exception {
         try {
+            String tradeId = (command.getTradeId() != null && !command.getTradeId().isEmpty())
+                    ? command.getTradeId()
+                    : TradeIdGenerator.generateTradeId();
+
             // 1. 幂等性检查与获取缓存
-            String fingerprint = command.getTradeId() + ":" + command.getBuyerId();
+            String fingerprint = tradeId + ":" + command.getBuyerId();
             if (!idempotencyService.tryAcquire("trade:create", idempotencyKey, fingerprint)) {
                 String cachedResponse = idempotencyService.getCachedResponse("trade:create", idempotencyKey);
                 if (cachedResponse != null) {
@@ -95,8 +99,6 @@ public class TradeApplicationService {
                 throw new DomainConflictException("IDEMPOTENT_CONFLICT",
                         "Trade creation already in progress with this idempotency key");
             }
-
-            String tradeId = TradeIdGenerator.generateTradeId();
 
             // 2. 调用 promotion quote（优惠报价）
             PromotionQuoteRequest quoteRequest = buildPromotionQuoteRequest(command);
@@ -156,7 +158,7 @@ public class TradeApplicationService {
                 command.getShopCouponCodesByShop().values().forEach(allCouponCodes::addAll);
             }
 
-            // 3. 按 shopId 分组生成 ShopOrder（先生成，后续会补充 inventoryPreOccupyIds）
+            // 3. 按 shopId 分组生成 ShopOrder（先生成，后续会补充 inventoryOccupyPairs）
             Map<String, List<CreateTradeCommand.OrderLineCommand>> groupedByShop = command.getOrderLines()
                     .stream()
                     .collect(Collectors.groupingBy(CreateTradeCommand.OrderLineCommand::getShopId));
@@ -300,7 +302,7 @@ public class TradeApplicationService {
             }
 
             Trade trade = Trade.builder()
-                    .tradeId(command.getTradeId())
+                    .tradeId(tradeId)
                     .buyerId(command.getBuyerId())
                     .buyerNick(command.getBuyerNick())
                     .payStatus(PayStatus.UNPAID)
@@ -479,7 +481,7 @@ public class TradeApplicationService {
             }
 
             // 同步补偿：释放库存和优惠
-            // 按 ShopOrder 遍历释放库存（V2 occupyPairs 优先，兼容旧 preOccupyIds）
+            // 按 ShopOrder 遍历释放库存（仅 V2 occupyPairs）
             for (ShopOrder shopOrder : shopOrders) {
                 try {
                     if (shopOrder.getInventoryOccupyPairs() != null && !shopOrder.getInventoryOccupyPairs().isEmpty()) {
@@ -497,18 +499,6 @@ public class TradeApplicationService {
                         inventoryClient.releaseV2(shopIdempotencyKey, releaseRequestV2);
                         log.info("Inventory V2 released for cancelled shopOrder: orderId={}, shopId={}, occupyPairs={}",
                                 shopOrder.getOrderId(), shopOrder.getShopId(), shopOrder.getInventoryOccupyPairs());
-                    } else if (shopOrder.getInventoryPreOccupyIds() != null && !shopOrder.getInventoryPreOccupyIds().isEmpty()) {
-                        // Legacy：使用旧 release 接口
-                        InventoryReleaseRequest inventoryReleaseRequest = InventoryReleaseRequest.builder()
-                                .shopId(shopOrder.getShopId())
-                                .tradeId(trade.getTradeId())
-                                .reason(command.getReason())
-                                .preOccupyIds(shopOrder.getInventoryPreOccupyIds())
-                                .build();
-                        String shopIdempotencyKey = idempotencyKey + ":inv:rel:" + shopOrder.getShopId();
-                        inventoryClient.release(shopIdempotencyKey, inventoryReleaseRequest);
-                        log.info("Inventory legacy released for cancelled shopOrder: orderId={}, shopId={}, preOccupyIds={}",
-                                shopOrder.getOrderId(), shopOrder.getShopId(), shopOrder.getInventoryPreOccupyIds());
                     } else {
                         log.warn("Missing inventory occupy info for shopOrder: {}, skipping inventory release", shopOrder.getOrderId());
                     }
@@ -592,7 +582,6 @@ public class TradeApplicationService {
                         .orderStatus(OrderStatus.PENDING_SHIP)
                         .inventoryStatus(shopOrder.getInventoryStatus())
                         .promotionStatus(shopOrder.getPromotionStatus())
-                        .inventoryPreOccupyIds(shopOrder.getInventoryPreOccupyIds())
                         .inventoryOccupyPairs(shopOrder.getInventoryOccupyPairs())
                         .totalAmountCents(shopOrder.getTotalAmountCents())
                         .orderLines(shopOrder.getOrderLines())
@@ -608,35 +597,13 @@ public class TradeApplicationService {
             paymentIntent.setPaidAt(LocalDateTime.now());
             paymentIntentJpaRepository.save(paymentIntent);
 
-            // 同步确认：按 ShopOrder 遍历 inventory commit（V2 链路无需 commit，仅旧链路需要）
+            // 同步确认：V2 链路为原子扣减，无需 inventory commit
             long paidAtEpochMs = System.currentTimeMillis();
             for (ShopOrder shopOrder : shopOrders) {
                 try {
-                    // V2 新链路：直接扣减，无需 2-phase commit
-                    if (shopOrder.getInventoryOccupyPairs() != null && !shopOrder.getInventoryOccupyPairs().isEmpty()) {
-                        log.info("V2 inventory deduct path, skip commit for shopOrder: orderId={}, shopId={}",
-                                shopOrder.getOrderId(), shopOrder.getShopId());
-                        continue;
-                    }
-
-                    // Legacy：旧链路需要 commit
-                    if (shopOrder.getInventoryPreOccupyIds() == null || shopOrder.getInventoryPreOccupyIds().isEmpty()) {
-                        log.warn("Missing inventoryPreOccupyIds for shopOrder: {}, skipping inventory commit", shopOrder.getOrderId());
-                        continue;
-                    }
-
-                    InventoryCommitRequest inventoryCommitRequest = InventoryCommitRequest.builder()
-                            .shopId(shopOrder.getShopId())
-                            .tradeId(trade.getTradeId())
-                            .payNo(command.getPaymentId())
-                            .paidAtEpochMs(paidAtEpochMs)
-                            .preOccupyIds(shopOrder.getInventoryPreOccupyIds())
-                            .build();
-
-                    String shopIdempotencyKey = idempotencyKey + ":inv:com:" + shopOrder.getShopId();
-                    inventoryClient.commit(shopIdempotencyKey, inventoryCommitRequest);
-                    log.info("Inventory committed for paid shopOrder: orderId={}, shopId={}, preOccupyIds={}",
-                            shopOrder.getOrderId(), shopOrder.getShopId(), shopOrder.getInventoryPreOccupyIds());
+                    log.info("V2 inventory deduct path, skip commit for shopOrder: orderId={}, shopId={}, occupyPairs={}",
+                            shopOrder.getOrderId(), shopOrder.getShopId(),
+                            shopOrder.getInventoryOccupyPairs() != null ? shopOrder.getInventoryOccupyPairs().size() : 0);
                 } catch (Exception e) {
                     log.error("Failed to commit inventory for shopOrder: {}", shopOrder.getOrderId(), e);
                     // 继续处理其他 shop，不抛异常，允许重试

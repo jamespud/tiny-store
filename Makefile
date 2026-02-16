@@ -42,7 +42,7 @@ debug: build ## Start debug environment (fixed ports: 5432/6379/9092/8848)
 
 unit: ## Run pure unit tests (fast, no Docker, mocked deps)
 	@echo "Running unit tests (excluding E2E)..."
-	$(MAVEN) -pl '!tests/api' test
+	$(MAVEN) -pl '!tests/api,!tests/performance' test
 	@echo "Unit tests completed successfully"
 
 it: build ## Run integration tests (Testcontainers only, no compose)
@@ -65,7 +65,7 @@ it: build ## Run integration tests (Testcontainers only, no compose)
 	fi
 	@echo "Running integration tests with Testcontainers..."
 	@echo "WARNING: Ensure no other Docker containers conflict with Testcontainers infra"
-	$(MAVEN) clean verify -Pit -DskipITs=false -DskipTests -pl '!tests/api' $(MAVEN_CLEAN_OPTS)
+	$(MAVEN) clean verify -Pit -DskipITs=false -DskipTests -pl '!tests/api,!tests/performance' $(MAVEN_CLEAN_OPTS)
 	@echo "Integration tests completed successfully"
 
 e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)

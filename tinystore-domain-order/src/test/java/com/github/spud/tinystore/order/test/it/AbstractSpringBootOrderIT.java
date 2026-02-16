@@ -19,9 +19,11 @@ import org.springframework.context.annotation.Primary;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 /**
@@ -84,22 +86,40 @@ public abstract class AbstractSpringBootOrderIT extends AbstractOrderIT {
             .build();
         when(promotionClient.commit(any(), any())).thenReturn(commitResponse);
 
-        // Inventory Client - preOccupy 默认成功
-        InventoryPreOccupyResponse preOccupyResponse = InventoryPreOccupyResponse.builder()
-            .success(true)
-            .preOccupyIds(Collections.singletonList("test-occupy-id"))
-            .lackSkuIds(Collections.emptyList())
-            .expiresAtEpochMs(System.currentTimeMillis() + 300000L)
-            .message("PreOccupy successful")
-            .build();
-        when(inventoryClient.preOccupy(any(), any())).thenReturn(preOccupyResponse);
+        // Inventory Client - deduct (V2) 默认成功
+        when(inventoryClient.deduct(anyString(), any(InventoryDeductRequest.class))).thenAnswer(invocation -> {
+            InventoryDeductRequest request = invocation.getArgument(1, InventoryDeductRequest.class);
+            List<InventoryDeductResponse.OccupyPairDto> occupyPairs = request != null && request.getItems() != null
+                ? request.getItems().stream()
+                    .map(item -> InventoryDeductResponse.OccupyPairDto.builder()
+                        .shopId(item.getShopId())
+                        .skuId(item.getSkuId())
+                        .occupyId("test-occupy-" + item.getShopId() + "-" + item.getSkuId())
+                        .build())
+                    .collect(Collectors.toList())
+                : Collections.emptyList();
 
-        // Inventory Client - commit 默认成功
-        InventoryCommitResponse inventoryCommitResponse = InventoryCommitResponse.builder()
+            return InventoryDeductResponse.builder()
+                .success(true)
+                .message("Deduct successful")
+                .occupyPairs(occupyPairs)
+                .lackSkuIds(Collections.emptyList())
+                .build();
+        });
+
+        // Inventory Client - releaseV2 默认成功
+        InventoryReleaseResponseV2 releaseResponseV2 = InventoryReleaseResponseV2.builder()
             .success(true)
-            .message("Inventory committed")
+            .message("ReleaseV2 successful")
             .build();
-        when(inventoryClient.commit(any(), any())).thenReturn(inventoryCommitResponse);
+        when(inventoryClient.releaseV2(any(), any())).thenReturn(releaseResponseV2);
+
+        // Inventory Client - restock 默认成功
+        InventoryRestockResponse inventoryRestockResponse = InventoryRestockResponse.builder()
+            .success(true)
+            .message("Inventory restock successful")
+            .build();
+        when(inventoryClient.restock(any(), any())).thenReturn(inventoryRestockResponse);
     }
 
     /**

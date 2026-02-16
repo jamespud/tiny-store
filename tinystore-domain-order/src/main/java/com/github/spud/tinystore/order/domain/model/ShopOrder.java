@@ -30,13 +30,6 @@ public class ShopOrder {
     
     private String inventoryStatus;
     private String promotionStatus;
-    
-    /**
-     * @deprecated 使用 {@link #inventoryOccupyPairs} 替代
-     */
-    @Deprecated
-    @Builder.Default
-    private List<String> inventoryPreOccupyIds = new ArrayList<>();
 
     /**
      * V2 库存占用凭证（shopId + skuId + occupyId）
