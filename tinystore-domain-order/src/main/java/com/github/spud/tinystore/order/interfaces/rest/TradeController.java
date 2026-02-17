@@ -6,6 +6,7 @@ import com.github.spud.tinystore.order.application.command.PaymentSucceededComma
 import com.github.spud.tinystore.order.application.service.TradeApplicationService;
 import com.github.spud.tinystore.order.application.service.PaymentApplicationService;
 import com.github.spud.tinystore.order.application.query.TradeQueryService;
+import com.github.spud.tinystore.order.domain.exception.IdempotencyServiceUnavailableException;
 import com.github.spud.tinystore.order.interfaces.dto.request.*;
 import com.github.spud.tinystore.order.interfaces.dto.response.*;
 import lombok.extern.slf4j.Slf4j;
@@ -39,12 +40,12 @@ public class TradeController {
     @PostMapping
     public ResponseEntity<OrderHttpResponse<CreateTradeData>> createTrade(
         @jakarta.validation.Valid @RequestBody CreateTradeRequest request,
-        @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        @RequestHeader("Idempotency-Key") String idempotencyKey) throws IdempotencyServiceUnavailableException {
 
         try {
             java.util.List<String> platformCodes = request.getPlatformCouponCodes();
             java.util.Map<String, java.util.List<String>> shopCodesMap = request.getShopCouponCodesByShop();
-            
+
             // 构建 CreateTradeCommand
             CreateTradeCommand.CreateTradeCommandBuilder commandBuilder = CreateTradeCommand.builder()
                 .tradeId(request.getTradeId())
@@ -83,6 +84,9 @@ public class TradeController {
 
             return ResponseEntity.ok(OrderHttpResponse.ok(result));
 
+        } catch (IdempotencyServiceUnavailableException e) {
+            // 幂等服务不可用异常需要重新抛出，由 GlobalExceptionHandler 处理返回 503
+            throw e;
         } catch (Exception e) {
             log.error("Create trade failed", e);
             return ResponseEntity.status(500).body(

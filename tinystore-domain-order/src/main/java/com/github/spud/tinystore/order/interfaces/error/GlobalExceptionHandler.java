@@ -2,6 +2,7 @@ package com.github.spud.tinystore.order.interfaces.error;
 
 import com.github.spud.tinystore.order.domain.exception.DomainConflictException;
 import com.github.spud.tinystore.order.domain.exception.IdempotencyConflictException;
+import com.github.spud.tinystore.order.domain.exception.IdempotencyServiceUnavailableException;
 import com.github.spud.tinystore.order.interfaces.dto.response.OrderHttpResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -21,6 +22,20 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    /**
+     * 处理幂等服务不可用异常（Redis 故障等基础设施问题）
+     * 返回 503 Service Unavailable，通知客户端稍后重试
+     */
+    @ExceptionHandler(IdempotencyServiceUnavailableException.class)
+    public ResponseEntity<OrderHttpResponse<Object>> handleIdempotencyServiceUnavailableException(
+            IdempotencyServiceUnavailableException ex) {
+        log.error("[operation={}] [idempotencyKey={}] Idempotency service unavailable",
+                ex.getOperation(), ex.getIdempotencyKey(), ex);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+            .body(OrderHttpResponse.fail(HttpStatus.SERVICE_UNAVAILABLE.value(),
+                    "Idempotency service unavailable, please retry later"));
+    }
 
     /**
      * 处理领域冲突异常（状态迁移非法、并发冲突等）

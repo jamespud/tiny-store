@@ -22,6 +22,8 @@ public class RedisIdempotencyRepository implements IdempotencyRepository {
     private static final String DEDUCT_PREFIX = "idem:deduct:";
     private static final String RELEASE_PREFIX = "idem:release:";
     private static final String DEDUCT_ORDER_PREFIX = "idem:deduct:order:";
+    private static final String KAFKA_DEDUCT_PREFIX = "idem:kafka:deduct:";
+    private static final String KAFKA_RELEASE_PREFIX = "idem:kafka:release:";
     private static final long TTL_HOURS = 24;
 
     private final StringRedisTemplate redisTemplate;
@@ -82,5 +84,60 @@ public class RedisIdempotencyRepository implements IdempotencyRepository {
         String key = DEDUCT_ORDER_PREFIX + idempotencyKey;
         Boolean success = redisTemplate.opsForValue().setIfAbsent(key, orderId, TTL_HOURS, TimeUnit.HOURS);
         return Boolean.TRUE.equals(success);
+    }
+
+    // ========================== Kafka 消费幂等（扣减） ==========================
+
+    /**
+     * 检查 Kafka 扣减消息是否已处理
+     * <p>
+     * Key 格式：idem:kafka:deduct:{orderId}
+     * <p>
+     * 用于防止 Kafka 消费者重复消费同一 orderId 的扣减事件。
+     * 与领域服务内部的幂等（idem:deduct:{idempotencyKey}）独立，提供双重保障。
+     *
+     * @param orderId 订单 ID
+     * @return true 如果已处理过
+     */
+    public boolean isKafkaDeductProcessed(String orderId) {
+        String key = KAFKA_DEDUCT_PREFIX + orderId;
+        return Boolean.TRUE.equals(redisTemplate.hasKey(key));
+    }
+
+    /**
+     * 标记 Kafka 扣减消息已处理
+     * <p>
+     * 成功消费后调用，TTL 24h。
+     *
+     * @param orderId 订单 ID
+     */
+    public void markKafkaDeductProcessed(String orderId) {
+        String key = KAFKA_DEDUCT_PREFIX + orderId;
+        redisTemplate.opsForValue().set(key, "1", TTL_HOURS, TimeUnit.HOURS);
+    }
+
+    // ========================== Kafka 消费幂等（释放） ==========================
+
+    /**
+     * 检查 Kafka 释放消息是否已处理
+     * <p>
+     * Key 格式：idem:kafka:release:{orderId}
+     *
+     * @param orderId 订单 ID
+     * @return true 如果已处理过
+     */
+    public boolean isKafkaReleaseProcessed(String orderId) {
+        String key = KAFKA_RELEASE_PREFIX + orderId;
+        return Boolean.TRUE.equals(redisTemplate.hasKey(key));
+    }
+
+    /**
+     * 标记 Kafka 释放消息已处理
+     *
+     * @param orderId 订单 ID
+     */
+    public void markKafkaReleaseProcessed(String orderId) {
+        String key = KAFKA_RELEASE_PREFIX + orderId;
+        redisTemplate.opsForValue().set(key, "1", TTL_HOURS, TimeUnit.HOURS);
     }
 }

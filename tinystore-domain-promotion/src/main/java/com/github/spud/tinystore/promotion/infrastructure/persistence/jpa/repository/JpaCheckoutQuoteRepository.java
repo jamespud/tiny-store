@@ -2,6 +2,7 @@ package com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.repos
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -27,5 +28,7 @@ public interface JpaCheckoutQuoteRepository extends JpaRepository<CheckoutQuoteE
 	@Query("UPDATE CheckoutQuoteEntity q SET q.status = 'COMMITTED', q.tradeId = :tradeId, q.updatedAt = :now " +
 		"WHERE q.id = :id AND q.status = 'QUOTED'")
 	int markCommitted(@Param("id") UUID id, @Param("tradeId") String tradeId, @Param("now") LocalDateTime now);
+
+	Optional<CheckoutQuoteEntity> findByTradeId(String tradeId);
 }
 

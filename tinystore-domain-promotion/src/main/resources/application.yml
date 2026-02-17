@@ -22,6 +22,14 @@ spring:
     locations: classpath:db/migration/promotion
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    consumer:
+      group-id: promotion-service
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: manual
   data:
     redis:
       host: localhost
@@ -43,6 +51,9 @@ promotion:
     interval-minutes: 5
     hot-coupon-interval-minutes: 1
     hot-coupons: []
+  kafka:
+    topic:
+      order-events: tinystore.order.general
 server:
   port: 1200
 
