@@ -6,7 +6,10 @@ import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.Out
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.OutboxEventJpaRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -106,5 +109,52 @@ public class OutboxEventService {
             log.warn("Outbox event marked as failed: eventId={}, retryCount={}, error={}",
                 eventId, event.getRetryCount(), error);
         });
+    }
+
+    /**
+     * 查询失败的 Outbox 事件
+     *
+     * @param limit 限制数量
+     * @param since 起始时间（查询此时间之后创建的事件）
+     * @param eventType 事件类型过滤（可选）
+     * @return 失败事件列表
+     */
+    public List<OutboxEventEntity> findFailedEvents(int limit, LocalDateTime since, String eventType) {
+        Pageable pageable = PageRequest.of(0, limit);
+
+        if (eventType != null && !eventType.isBlank()) {
+            return outboxEventJpaRepository.findByStatusAndEventTypeAndCreatedAtAfterOrderByCreatedAtDesc(
+                "FAILED", eventType, since, pageable);
+        } else {
+            return outboxEventJpaRepository.findByStatusAndCreatedAtAfterOrderByCreatedAtDesc(
+                "FAILED", since, pageable);
+        }
+    }
+
+    /**
+     * 重试失败的 Outbox 事件（重置状态为 PENDING）
+     *
+     * @param eventId 事件 ID
+     * @throws IllegalStateException 当事件不存在时
+     */
+    @Transactional
+    public void retryEvent(String eventId) {
+        OutboxEventEntity event = outboxEventJpaRepository.findByEventId(eventId)
+            .orElseThrow(() -> new IllegalStateException("Outbox event not found: " + eventId));
+
+        // 如果已经是 PUBLISHED 状态，跳过重试
+        if ("PUBLISHED".equals(event.getStatus())) {
+            log.info("Outbox event already published, skip retry: eventId={}", eventId);
+            return;
+        }
+
+        // 重置状态为 PENDING，清零重试计数
+        event.setStatus("PENDING");
+        event.setRetryCount(0);
+        event.setLastError(null);
+        outboxEventJpaRepository.save(event);
+
+        log.info("Outbox event reset to PENDING for retry: eventId={}, previousStatus={}",
+            eventId, event.getStatus());
     }
 }

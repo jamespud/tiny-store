@@ -13,6 +13,7 @@ spring:
 order:
   idempotency:
     ttl-seconds: 600
+    fail-on-redis-error: true
   payment:
     timeout-seconds: 120
   auto-receive:

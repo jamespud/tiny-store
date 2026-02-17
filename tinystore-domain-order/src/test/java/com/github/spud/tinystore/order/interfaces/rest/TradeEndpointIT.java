@@ -1,5 +1,7 @@
 package com.github.spud.tinystore.order.interfaces.rest;
 
+import com.github.spud.tinystore.order.domain.exception.IdempotencyServiceUnavailableException;
+import com.github.spud.tinystore.order.infrastructure.idempotency.IdempotencyService;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.TradeEntity;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.TradeJpaRepository;
 import com.github.spud.tinystore.order.test.it.AbstractSpringBootOrderIT;
@@ -8,24 +10,30 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.time.LocalDateTime;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
 /**
  * Trade Endpoint Integration Test
- * 
+ *
  * Coverage:
  * - POST /api/order/trades (创建交易)
  * - GET /api/order/trades/{tradeId} (查询交易)
- * 
+ *
  * Tests full request-response cycle with database
  */
 @DisplayName("Trade Endpoint Integration Tests")
@@ -37,10 +45,19 @@ class TradeEndpointIT extends AbstractSpringBootOrderIT {
     @Autowired
     private TradeJpaRepository tradeRepository;
 
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
     @BeforeEach
     void cleanup() {
         outboxEventJpaRepository.deleteAll();
         tradeRepository.deleteAll();
+
+        // 清理 Redis 中的幂等键
+        Set<String> keys = redisTemplate.keys("idempotency:*");
+        if (keys != null && !keys.isEmpty()) {
+            redisTemplate.delete(keys);
+        }
     }
 
     @Test

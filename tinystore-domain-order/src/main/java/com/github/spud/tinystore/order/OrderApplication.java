@@ -1,10 +1,12 @@
 package com.github.spud.tinystore.order;
 
+import com.github.spud.tinystore.order.infrastructure.config.AdminSecurityProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 
 /**
@@ -20,6 +22,7 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 		"com.github.spud.tinystore.order.infrastructure.acl",
 		"com.github.spud.tinystore.infrastructure.rpc"
 })
+@EnableConfigurationProperties(AdminSecurityProperties.class)
 public class OrderApplication {
 
     public static void main(String[] args) {

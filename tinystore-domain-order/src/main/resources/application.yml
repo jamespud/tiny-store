@@ -39,10 +39,17 @@ tinystore:
   security:
     resource-server:
       enabled: ${TINYSTORE_SECURITY_RESOURCESERVER_ENABLED:false}
+  order:
+    admin:
+      token: ${ADMIN_TOKEN:change-me-in-production}
 
 order:
   idempotency:
     ttl-seconds: 600
+    # Redis 故障处理策略：
+    # - true（默认）：Redis 不可用时抛出异常返回 503，保证幂等语义严格性
+    # - false（降级模式）：Redis 不可用时跳过幂等检查，允许请求通过（有重复风险，仅用于紧急情况）
+    fail-on-redis-error: true
   payment-timeout-seconds: 900
   auto-receive-timeout-seconds: 604800
   kafka:
