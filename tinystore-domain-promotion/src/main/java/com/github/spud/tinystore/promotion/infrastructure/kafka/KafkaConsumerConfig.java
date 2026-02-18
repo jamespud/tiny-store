@@ -1,4 +1,4 @@
-package com.github.spud.tinystore.inventory.infrastructure.config;
+package com.github.spud.tinystore.promotion.infrastructure.kafka;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -22,13 +22,7 @@ import java.util.function.BiFunction;
  * <p>
  * 核心配置：
  * - 手动 ack 模式（ack-mode: MANUAL）
- * - 配合 application.yml 中的 enable-auto-commit: false
  * - 统一的 DLT（Dead Letter Topic）错误处理
- * <p>
- * 手动 ack 的意义：
- * - 业务处理成功后才确认消息
- * - 异常时不 ack，让 Kafka 重试（避免消息丢失）
- * - 幂等保证重试安全
  * <p>
  * DLT 错误处理：
  * - 可重试异常：exponential backoff 后重试，达上限后进 DLT
@@ -119,10 +113,6 @@ public class KafkaConsumerConfig {
         backOff.setMaxInterval(maxInterval);
 
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
-
-        errorHandler.setRetryListeners((record, ex, deliveryAttempt) -> {
-            // 可选：记录重试日志
-        });
 
         // 配置不可重试异常（毒消息）
         errorHandler.addNotRetryableExceptions(

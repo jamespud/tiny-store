@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -52,4 +53,14 @@ public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventEntit
         LocalDateTime since,
         Pageable pageable
     );
+
+    /**
+     * Delete published outbox events that were published before the specified time
+     *
+     * @param publishedBefore Cutoff time - events published before this will be deleted
+     * @return Number of deleted events
+     */
+    @Modifying
+    @Query("DELETE FROM OutboxEventEntity e WHERE e.status = 'PUBLISHED' AND e.publishedAt IS NOT NULL AND e.publishedAt < :publishedBefore")
+    int deletePublishedEventsBefore(@Param("publishedBefore") LocalDateTime publishedBefore);
 }

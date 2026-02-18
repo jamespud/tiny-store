@@ -39,6 +39,17 @@ tinystore:
   security:
     permit-all:
       enabled: ${TINYSTORE_SECURITY_PERMIT_ALL_ENABLED:false}
+  kafka:
+    consumer:
+      retry:
+        max-attempts: 5
+        backoff:
+          initial-ms: 500
+          multiplier: 2.0
+          max-ms: 10000
+      dlt:
+        enabled: true
+        suffix: .DLT
 
 promotion:
   coupon:

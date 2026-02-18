@@ -1,11 +1,12 @@
 package com.github.spud.tinystore.order.infrastructure.idempotency;
 
 import com.github.spud.tinystore.order.domain.exception.IdempotencyServiceUnavailableException;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.RedisConnectionFailureException;
@@ -40,12 +41,16 @@ class IdempotencyServiceTest {
     @Mock
     private ValueOperations<String, String> valueOperations;
 
-    @InjectMocks
     private IdempotencyService idempotencyService;
 
     @BeforeEach
     void setUp() {
-        // Set default configuration
+        // 手动构造（需要 MeterRegistry）
+        MeterRegistry meterRegistry = new SimpleMeterRegistry();
+        idempotencyService = new IdempotencyService(meterRegistry);
+
+        // Set dependencies
+        ReflectionTestUtils.setField(idempotencyService, "redisTemplate", redisTemplate);
         ReflectionTestUtils.setField(idempotencyService, "ttlSeconds", 600L);
         ReflectionTestUtils.setField(idempotencyService, "failOnRedisError", true);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);

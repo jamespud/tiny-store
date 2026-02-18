@@ -8,6 +8,7 @@ import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfi
 import org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.openfeign.EnableFeignClients;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Order Service Application
@@ -23,6 +24,7 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 		"com.github.spud.tinystore.infrastructure.rpc"
 })
 @EnableConfigurationProperties(AdminSecurityProperties.class)
+@EnableScheduling
 public class OrderApplication {
 
     public static void main(String[] args) {

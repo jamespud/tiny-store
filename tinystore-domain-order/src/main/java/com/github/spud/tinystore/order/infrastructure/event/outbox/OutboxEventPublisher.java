@@ -2,6 +2,8 @@ package com.github.spud.tinystore.order.infrastructure.event.outbox;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.OutboxEventEntity;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -25,8 +27,17 @@ public class OutboxEventPublisher {
     @Autowired
     private ObjectMapper objectMapper;
 
+    private final Counter outboxPublishFailureCounter;
+
     @org.springframework.beans.factory.annotation.Value("${order.kafka.topic.general:tinystore.order.general}")
     private String kafkaTopic;
+
+    public OutboxEventPublisher(MeterRegistry meterRegistry) {
+        this.outboxPublishFailureCounter = Counter.builder("tinystore.outbox.publish.failure.total")
+            .description("Count of outbox event publish failures")
+            .tag("service", "order")
+            .register(meterRegistry);
+    }
 
     /**
      * 发布单个事件到 Kafka
@@ -57,7 +68,8 @@ public class OutboxEventPublisher {
                         event.getEventId(), kafkaTopic, result.getRecordMetadata().offset());
                 })
                 .exceptionally(ex -> {
-                    // 发送失败，标记为 FAILED 并增加重试计数
+                    // 发送失败，增加指标计数并标记为 FAILED
+                    outboxPublishFailureCounter.increment();
                     outboxEventService.markAsFailed(event.getEventId(), ex.getMessage());
                     log.error("Failed to publish Outbox event to Kafka: eventId={}, error={}",
                         event.getEventId(), ex.getMessage());
@@ -67,6 +79,7 @@ public class OutboxEventPublisher {
         } catch (Exception e) {
             log.error("Error preparing Outbox event for Kafka: eventId={}, error={}",
                 event.getEventId(), e.getMessage(), e);
+            outboxPublishFailureCounter.increment();
             outboxEventService.markAsFailed(event.getEventId(), e.getMessage());
         }
     }

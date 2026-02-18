@@ -1,6 +1,8 @@
 package com.github.spud.tinystore.order.infrastructure.idempotency;
 
 import com.github.spud.tinystore.order.domain.exception.IdempotencyServiceUnavailableException;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,11 +27,22 @@ public class IdempotencyService {
     @Autowired
     private StringRedisTemplate redisTemplate;
 
+    private final MeterRegistry meterRegistry;
+    private final Counter idempotencyUnavailableCounter;
+
     @Value("${order.idempotency.ttl-seconds:600}")
     private long ttlSeconds;
 
     @Value("${order.idempotency.fail-on-redis-error:true}")
     private boolean failOnRedisError;
+
+    public IdempotencyService(MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry;
+        this.idempotencyUnavailableCounter = Counter.builder("tinystore.idempotency.unavailable.total")
+            .description("Count of idempotency service unavailable exceptions")
+            .tag("service", "order")
+            .register(meterRegistry);
+    }
 
     /**
      * 尝试获取幂等锁
@@ -134,6 +147,8 @@ public class IdempotencyService {
         if (failOnRedisError) {
             log.error("[operation={}] [idempotencyKey={}] Idempotency service unavailable: Redis error",
                     operation, idempotencyKey, cause);
+            // 增加指标计数
+            idempotencyUnavailableCounter.increment();
             throw new IdempotencyServiceUnavailableException(operation, idempotencyKey, cause);
         } else {
             log.warn("[operation={}] [idempotencyKey={}] Redis unavailable, using fallback value (degraded mode): {}",
