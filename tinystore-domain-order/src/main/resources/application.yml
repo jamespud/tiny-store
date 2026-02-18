@@ -58,6 +58,10 @@ order:
   outbox:
     poll-interval: 5000
     batch-size: 100
+    cleanup:
+      enabled: true
+      cron: "0 0 3 * * ?"
+      retention-days: 7
   scheduler:
     payment-timeout-interval: 60000
 

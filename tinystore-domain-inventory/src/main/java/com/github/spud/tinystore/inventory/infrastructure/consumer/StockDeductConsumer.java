@@ -23,14 +23,15 @@ import java.util.stream.Collectors;
  * - 消费 topic: stock-deduct 和 stock-release
  * - 手动 ack（enable-auto-commit: false）
  * - Kafka 消费幂等（基于 orderId）+ 领域服务内部幂等（双重保障）
- * - 异常不 ack，允许 Kafka 重试
+ * - 毒消息（JSON 解析/字段校验失败）→ 抛出不可重试异常 → 进 DLT
+ * - 业务异常 → 不 ack，由 DefaultErrorHandler 重试 → 最终进 DLT
  * <p>
  * 消费流程：
- * 1. 解析 JSON 消息（失败直接 ack 防止死循环）
+ * 1. 解析 JSON 消息（失败抛出 JsonProcessingException → DLT）
  * 2. Kafka 消费幂等检查（已处理则直接 ack）
  * 3. 构造领域命令，调用领域服务
  * 4. 成功 → 标记 Kafka 消费幂等 → ack
- * 5. 异常 → 不 ack（Kafka 自动重试）
+ * 5. 业务异常 → 抛出，由 error handler 处理重试/DLT
  */
 @Slf4j
 @Component
@@ -54,7 +55,9 @@ public class StockDeductConsumer {
     /**
      * 消费库存扣减事件
      * <p>
-     * 手动 ack 模式：成功处理后调用 ack.acknowledge()，异常不 ack。
+     * 手动 ack 模式：成功处理后调用 ack.acknowledge()。
+     * 毒消息（解析/校验失败）：抛出不可重试异常 → DefaultErrorHandler 立即发布到 DLT。
+     * 业务异常：抛出 → DefaultErrorHandler 重试 → 最终 DLT。
      *
      * @param message 消息体（JSON 字符串）
      * @param ack     手动确认对象
@@ -63,21 +66,19 @@ public class StockDeductConsumer {
     public void consumeDeduct(String message, Acknowledgment ack) {
         log.info("Received deduct message: {}", message);
 
-        // 1. 解析消息（解析失败直接 ack，避免死循环）
+        // 1. 解析消息（解析失败抛出 JsonProcessingException → DLT）
         StockDeductMessage msg;
         try {
             msg = objectMapper.readValue(message, StockDeductMessage.class);
         } catch (Exception e) {
-            log.error("Failed to parse deduct message (invalid JSON, will ack): message={}", message, e);
-            ack.acknowledge();
-            return;
+            log.error("Failed to parse deduct message (poison, will go to DLT): message={}", message, e);
+            throw new IllegalArgumentException("Invalid JSON for deduct message", e);
         }
 
-        // 验证必需字段
+        // 验证必需字段（校验失败 → DLT）
         if (msg.getOrderId() == null || msg.getItems() == null || msg.getItems().isEmpty()) {
-            log.error("Invalid deduct message (missing orderId or items, will ack): message={}", message);
-            ack.acknowledge();
-            return;
+            log.error("Invalid deduct message (missing orderId or items, will go to DLT): message={}", message);
+            throw new IllegalArgumentException("Missing required fields: orderId or items");
         }
 
         String orderId = msg.getOrderId();
@@ -104,29 +105,25 @@ public class StockDeductConsumer {
                 .build();
 
         // 4. 调用领域服务（内部有自己的幂等，双重保障）
-        try {
-            DeductResult result = deductDomainService.deduct(command);
-            if (!result.isSuccess()) {
-                log.error("Deduct failed (will NOT ack for retry): orderId={}, reason={}", orderId, result.getMessage());
-                // 不 ack，让 Kafka 重试
-                return;
-            }
-
-            // 5. 成功 → 标记 Kafka 消费幂等 → ack
-            idempotencyRepository.markKafkaDeductProcessed(orderId);
-            ack.acknowledge();
-            log.info("Deduct success: orderId={}, occupyPairs={}", orderId, result.getOccupyPairs());
-
-        } catch (Exception e) {
-            log.error("Unexpected exception in deduct (will NOT ack for retry): orderId={}", orderId, e);
-            // 不 ack，让 Kafka 重试
+        DeductResult result = deductDomainService.deduct(command);
+        if (!result.isSuccess()) {
+            log.error("Deduct failed (will throw for retry/DLT): orderId={}, reason={}", orderId, result.getMessage());
+            // 抛出业务异常，由 error handler 处理重试
+            throw new RuntimeException("Deduct failed: " + result.getMessage());
         }
+
+        // 5. 成功 → 标记 Kafka 消费幂等 → ack
+        idempotencyRepository.markKafkaDeductProcessed(orderId);
+        ack.acknowledge();
+        log.info("Deduct success: orderId={}, occupyPairs={}", orderId, result.getOccupyPairs());
     }
 
     /**
      * 消费库存释放事件
      * <p>
-     * 手动 ack 模式：成功处理后调用 ack.acknowledge()，异常不 ack。
+     * 手动 ack 模式：成功处理后调用 ack.acknowledge()。
+     * 毒消息（解析/校验失败）：抛出不可重试异常 → DefaultErrorHandler 立即发布到 DLT。
+     * 业务异常：抛出 → DefaultErrorHandler 重试 → 最终 DLT。
      *
      * @param message 消息体（JSON 字符串）
      * @param ack     手动确认对象
@@ -135,21 +132,19 @@ public class StockDeductConsumer {
     public void consumeRelease(String message, Acknowledgment ack) {
         log.info("Received release message: {}", message);
 
-        // 1. 解析消息
+        // 1. 解析消息（解析失败抛出 → DLT）
         StockReleaseMessage msg;
         try {
             msg = objectMapper.readValue(message, StockReleaseMessage.class);
         } catch (Exception e) {
-            log.error("Failed to parse release message (invalid JSON, will ack): message={}", message, e);
-            ack.acknowledge();
-            return;
+            log.error("Failed to parse release message (poison, will go to DLT): message={}", message, e);
+            throw new IllegalArgumentException("Invalid JSON for release message", e);
         }
 
-        // 验证必需字段
+        // 验证必需字段（校验失败 → DLT）
         if (msg.getOrderId() == null || msg.getOccupyPairs() == null || msg.getOccupyPairs().isEmpty()) {
-            log.error("Invalid release message (missing orderId or occupyPairs, will ack): message={}", message);
-            ack.acknowledge();
-            return;
+            log.error("Invalid release message (missing orderId or occupyPairs, will go to DLT): message={}", message);
+            throw new IllegalArgumentException("Missing required fields: orderId or occupyPairs");
         }
 
         String orderId = msg.getOrderId();
@@ -179,22 +174,16 @@ public class StockDeductConsumer {
                 .build();
 
         // 4. 调用领域服务
-        try {
-            DeductResult result = deductDomainService.release(command);
-            if (!result.isSuccess()) {
-                log.error("Release failed (will NOT ack for retry): orderId={}, reason={}", orderId, result.getMessage());
-                // 不 ack，让 Kafka 重试
-                return;
-            }
-
-            // 5. 成功 → 标记 Kafka 消费幂等 → ack
-            idempotencyRepository.markKafkaReleaseProcessed(orderId);
-            ack.acknowledge();
-            log.info("Release success: orderId={}, reason={}", orderId, reason);
-
-        } catch (Exception e) {
-            log.error("Unexpected exception in release (will NOT ack for retry): orderId={}", orderId, e);
-            // 不 ack，让 Kafka 重试
+        DeductResult result = deductDomainService.release(command);
+        if (!result.isSuccess()) {
+            log.error("Release failed (will throw for retry/DLT): orderId={}, reason={}", orderId, result.getMessage());
+            // 抛出业务异常，由 error handler 处理重试
+            throw new RuntimeException("Release failed: " + result.getMessage());
         }
+
+        // 5. 成功 → 标记 Kafka 消费幂等 → ack
+        idempotencyRepository.markKafkaReleaseProcessed(orderId);
+        ack.acknowledge();
+        log.info("Release success: orderId={}, reason={}", orderId, reason);
     }
 }
