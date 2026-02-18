@@ -266,6 +266,7 @@ class OrderEventConsumerIT {
 		uc.setId(UUID.randomUUID());
 		uc.setUserId(userId);
 		uc.setCouponId(couponId);
+		uc.setCouponNo("COUPON-NO-" + UUID.randomUUID().toString().substring(0, 8)); // 添加必需的 coupon_no
 		uc.setUseStatus(status);
 		uc.setLockId(lockId);
 		uc.setLockExpireTime(LocalDateTime.now().plusHours(1));

@@ -45,7 +45,7 @@ unit: ## Run pure unit tests (fast, no Docker, mocked deps)
 	$(MAVEN) -pl '!tests/api,!tests/performance' test
 	@echo "Unit tests completed successfully"
 
-it: build ## Run integration tests (Testcontainers only, no compose)
+it: build ## Run integration tests (Testcontainers only, no compose; excludes tests/api)
 	@echo "Checking Docker Java API configuration for Testcontainers..."
 	@if [ ! -f "$$HOME/.docker-java.properties" ]; then \
 		echo "ERROR: $$HOME/.docker-java.properties not found"; \
