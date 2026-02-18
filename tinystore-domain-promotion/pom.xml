@@ -72,6 +72,12 @@
 			<artifactId>testcontainers-kafka</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+			<version>2.15.1</version>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
