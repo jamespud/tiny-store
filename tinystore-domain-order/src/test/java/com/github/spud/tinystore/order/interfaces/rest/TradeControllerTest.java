@@ -3,6 +3,8 @@ package com.github.spud.tinystore.order.interfaces.rest;
 import com.github.spud.tinystore.order.application.service.TradeApplicationService;
 import com.github.spud.tinystore.order.application.service.PaymentApplicationService;
 import com.github.spud.tinystore.order.application.query.TradeQueryService;
+import com.github.spud.tinystore.order.domain.exception.IdempotencyServiceUnavailableException;
+import com.github.spud.tinystore.order.interfaces.error.GlobalExceptionHandler;
 import com.github.spud.tinystore.order.interfaces.dto.response.CreateTradeData;
 import com.github.spud.tinystore.order.interfaces.dto.response.TradeDetailData;
 import org.junit.jupiter.api.DisplayName;
@@ -11,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -21,7 +24,9 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.hamcrest.Matchers.containsString;
 
 /**
  * Trade Controller Unit Test
@@ -34,6 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Validates HTTP protocol semantics and parameter validation
  */
 @WebMvcTest(controllers = TradeController.class, excludeAutoConfiguration = {SecurityAutoConfiguration.class, OAuth2ResourceServerAutoConfiguration.class})
+@Import(GlobalExceptionHandler.class)
 @DisplayName("Trade Controller Unit Tests")
 class TradeControllerTest {
 
@@ -81,6 +87,33 @@ class TradeControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"tradeId\":\"trade-456\"}"))
             .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades:redis-failure")
+    @DisplayName("POST /api/order/trades - idempotency unavailable returns 503")
+    void createTrade_idempotencyUnavailable_returns503() throws Exception {
+        // Given: application service fails due to underlying Redis/idempotency outage
+        when(tradeApplicationService.createTrade(anyString(), any()))
+            .thenThrow(new IdempotencyServiceUnavailableException(
+                "tryAcquire",
+                "idem-redis-down-001",
+                new RuntimeException("redis down")
+            ));
+
+        // When & Then: valid request reaches controller, handled by GlobalExceptionHandler
+        mockMvc.perform(post("/order/trades")
+                .header("Idempotency-Key", "idem-redis-down-001")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tradeId\":\"trade-redis-down-001\"," +
+                         "\"buyerId\":\"buyer-redis-001\"," +
+                         "\"orderLines\":[{\"skuId\":\"SKU_REDIS_001\"," +
+                         "\"shopId\":\"SHOP_REDIS_001\"," +
+                         "\"sellerId\":\"SELLER_REDIS_001\"," +
+                         "\"quantity\":1," +
+                         "\"priceCents\":5000}] }"))
+            .andExpect(status().isServiceUnavailable())
+            .andExpect(content().string(containsString("Idempotency service unavailable")));
     }
 
     @Test
