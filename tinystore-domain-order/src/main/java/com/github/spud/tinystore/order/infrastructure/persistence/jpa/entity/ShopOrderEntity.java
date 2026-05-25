@@ -46,6 +46,21 @@ public class ShopOrderEntity {
     @Column(name = "inventory_pre_occupy_ids_json", columnDefinition = "TEXT")
     private String inventoryPreOccupyIdsJson;
 
+    /**
+     * Canonical inventory reservation refs JSON (version 2 orders).
+     * Format: [{shopId, skuId, reservationId}]
+     */
+    @Column(name = "inventory_reservation_refs_json", columnDefinition = "TEXT")
+    private String inventoryReservationRefsJson;
+
+    /**
+     * Inventory projection version: 1=legacy V2, 2=canonical reservation.
+     * Default 1 for backward compatibility.
+     */
+    @Column(name = "inventory_projection_version", nullable = false)
+    @Builder.Default
+    private int inventoryProjectionVersion = 1;
+
     @Column(name = "logistics_status", length = 32)
     private String logisticsStatus;
 

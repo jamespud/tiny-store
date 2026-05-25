@@ -58,6 +58,13 @@ order:
   outbox:
     poll-interval: 5000
     batch-size: 100
+
+  # ============================================================
+  # Inventory Integration Feature Flags (RFC-001 Canonical Reservation)
+  # ============================================================
+  inventory:
+    # When true, use canonical /api/inventory/reservations/* endpoints instead of legacy /api/inventory/deduct
+    use-canonical-reservation-api: ${ORDER_INVENTORY_USE_CANONICAL_RESERVATION_API:false}
     cleanup:
       enabled: true
       cron: "0 0 3 * * ?"

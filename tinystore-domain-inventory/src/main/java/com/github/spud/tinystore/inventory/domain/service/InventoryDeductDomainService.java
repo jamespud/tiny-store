@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 
 /**
- * 库存扣减领域服务
+ * 库存扣减领域服务（Legacy Compatibility Layer）
  * <p>
  * 职责：
  * - 幂等校验与回放
@@ -21,6 +21,12 @@ import java.util.*;
  * - 最小一致性保障（Redis 扣减 + DB 流水本地事务）
  * <p>
  * 只依赖领域端口（port），不感知 Redis / JPA / 具体 Key 设计。
+ * <p>
+ * <strong>架构注意（RFC-001）</strong>：此类已降级为 compatibility façade。
+ * 禁止在此类中新增任何业务状态判断或新的库存生命周期逻辑。
+ * 新代码应使用 {@link InventoryReservationDomainService}。
+ *
+ * @deprecated Use {@link InventoryReservationDomainService} for canonical reservation lifecycle.
  */
 @Slf4j
 @Service

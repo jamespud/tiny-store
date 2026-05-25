@@ -9,25 +9,43 @@ import com.github.spud.tinystore.inventory.interfaces.dto.DeductRequest;
 import com.github.spud.tinystore.inventory.interfaces.dto.DeductResponse;
 import com.github.spud.tinystore.inventory.interfaces.dto.InventoryReleaseRequest;
 import com.github.spud.tinystore.inventory.interfaces.dto.InventoryReleaseResponse;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 /**
- * 库存扣减应用服务（薄层编排）
+ * 库存扣减应用服务（Compatibility Façade）
  * <p>
- * 职责：DTO ↔ Command 转换，调用领域服务，Domain Result → Response DTO。
+ * 当 inventory.reservation.canonical-enabled=true 时，此服务委派给 InventoryReservationAppService。
+ * 当 flag=false 时，维持原有 InventoryDeductDomainService 行为（legacy V2 deduct 链路）。
+ * <p>
+ * 对外 contract 不变：/api/inventory/deduct 和 /api/inventory/release
+ *
+ * @deprecated 新代码应直接使用 InventoryReservationAppService；本类仅用于兼容过渡。
  */
+@Slf4j
 @Service
 public class InventoryDeductAppService {
 
-    private final InventoryDeductDomainService domainService;
+    private final InventoryDeductDomainService legacyDomainService;
+    private final InventoryReservationAppService canonicalService;
 
-    public InventoryDeductAppService(InventoryDeductDomainService domainService) {
-        this.domainService = domainService;
+    @Value("${inventory.reservation.canonical-enabled:false}")
+    private boolean canonicalEnabled;
+
+    public InventoryDeductAppService(InventoryDeductDomainService legacyDomainService,
+                                     InventoryReservationAppService canonicalService) {
+        this.legacyDomainService = legacyDomainService;
+        this.canonicalService = canonicalService;
     }
 
     public DeductResponse deduct(String idempotencyKey, DeductRequest request) {
+        if (canonicalEnabled) {
+            log.debug("deduct: routing to canonical reserve (canonical-enabled=true)");
+            return canonicalService.reserve(idempotencyKey, request);
+        }
         InventoryDeductCommand command = InventoryDeductCommand.builder()
                 .orderId(request.getOrderId())
                 .idempotencyKey(idempotencyKey)
@@ -39,12 +57,15 @@ public class InventoryDeductAppService {
                                 .build())
                         .toList())
                 .build();
-
-        DeductResult result = domainService.deduct(command);
+        DeductResult result = legacyDomainService.deduct(command);
         return toDeductResponse(result);
     }
 
     public InventoryReleaseResponse release(String idempotencyKey, InventoryReleaseRequest request) {
+        if (canonicalEnabled) {
+            log.debug("release: routing to canonical release (canonical-enabled=true)");
+            return canonicalService.release(idempotencyKey, request);
+        }
         InventoryReleaseCommand command = InventoryReleaseCommand.builder()
                 .orderId(request.getOrderId())
                 .idempotencyKey(idempotencyKey)
@@ -57,8 +78,7 @@ public class InventoryDeductAppService {
                                 .build())
                         .toList())
                 .build();
-
-        DeductResult result = domainService.release(command);
+        DeductResult result = legacyDomainService.release(command);
         if (result.isSuccess()) {
             return InventoryReleaseResponse.ok(result.getMessage());
         }

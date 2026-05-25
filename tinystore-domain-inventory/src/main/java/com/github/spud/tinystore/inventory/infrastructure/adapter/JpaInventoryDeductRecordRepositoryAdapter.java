@@ -12,6 +12,10 @@ import java.util.List;
 
 /**
  * 扣减流水仓储（基础设施层适配器）
+ * <p>
+ * <strong>架构约束（RFC-001）</strong>：此适配器只能写 DEDUCTED 和 RELEASED 两种执行日志状态。
+ * 禁止为 confirm 操作新增 CONFIRMED 状态写入。
+ * inventory_deduct_record 是执行审计日志，不承载库存生命周期状态机的裁决逻辑。
  */
 @Slf4j
 @Component

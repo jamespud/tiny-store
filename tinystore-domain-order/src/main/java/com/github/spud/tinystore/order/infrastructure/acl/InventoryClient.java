@@ -38,4 +38,33 @@ public interface InventoryClient {
         @RequestHeader("Idempotency-Key") String idempotencyKey,
         @RequestBody InventoryRestockRequest request
     );
+
+    // ==================== Canonical Reservation API (RFC-001) ====================
+
+    /**
+     * Canonical: Reserve inventory (creates PRE_DEDUCTED reservations).
+     * Route: POST /api/inventory/reservations/reserve
+     */
+    @PostMapping("/api/inventory/reservations/reserve")
+    InventoryDeductResponse reserveCanonical(
+        @RequestHeader("Idempotency-Key") String idempotencyKey,
+        @RequestBody InventoryDeductRequest request);
+
+    /**
+     * Canonical: Confirm reservations on payment success (PRE_DEDUCTED → CONFIRMED).
+     * Route: POST /api/inventory/reservations/confirm
+     */
+    @PostMapping("/api/inventory/reservations/confirm")
+    InventoryConfirmResponse confirmReservation(
+        @RequestHeader("Idempotency-Key") String idempotencyKey,
+        @RequestBody InventoryConfirmRequest request);
+
+    /**
+     * Canonical: Release reservations on order cancellation (PRE_DEDUCTED → RELEASED).
+     * Route: POST /api/inventory/reservations/release
+     */
+    @PostMapping("/api/inventory/reservations/release")
+    InventoryReleaseResponseV2 releaseCanonical(
+        @RequestHeader("Idempotency-Key") String idempotencyKey,
+        @RequestBody InventoryReleaseRequestV2 request);
 }
