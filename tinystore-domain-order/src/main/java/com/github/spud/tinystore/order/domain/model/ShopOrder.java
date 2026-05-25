@@ -1,5 +1,6 @@
 package com.github.spud.tinystore.order.domain.model;
 
+import com.github.spud.tinystore.order.domain.enums.InventoryProjectionVersion;
 import com.github.spud.tinystore.order.domain.enums.OrderStatus;
 import lombok.Builder;
 import lombok.Getter;
@@ -32,8 +33,26 @@ public class ShopOrder {
     private String promotionStatus;
 
     /**
-     * V2 库存占用凭证（shopId + skuId + occupyId）
+     * Inventory projection version.
+     * VERSION_1 = legacy V2 deduct (InventoryOccupyPair, LOCKED/DEDUCTED vocabulary).
+     * VERSION_2 = canonical reservation (InventoryReservationRef, PRE_DEDUCTED/CONFIRMED vocabulary).
      */
+    @Builder.Default
+    private InventoryProjectionVersion inventoryProjectionVersion = InventoryProjectionVersion.VERSION_1;
+
+    /**
+     * Canonical inventory reservation refs (version 2 orders only).
+     * reservationId == occupyId from the V2 path.
+     */
+    @Builder.Default
+    private List<InventoryReservationRef> inventoryReservationRefs = new ArrayList<>();
+
+    /**
+     * Legacy V2 inventory occupation pairs (version 1 orders).
+     *
+     * @deprecated Use inventoryReservationRefs for version 2 orders.
+     */
+    @Deprecated
     @Builder.Default
     private List<InventoryOccupyPair> inventoryOccupyPairs = new ArrayList<>();
     

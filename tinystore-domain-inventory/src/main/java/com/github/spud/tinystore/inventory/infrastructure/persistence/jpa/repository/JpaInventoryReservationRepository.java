@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -20,5 +21,21 @@ public interface JpaInventoryReservationRepository extends JpaRepository<Invento
 
 	@Query("select r from InventoryReservationEntity r where r.status = :status and r.expireAt < :now")
 	List<InventoryReservationEntity> findByStatusAndExpireAtBefore(@Param("status") String status, @Param("now") OffsetDateTime now);
+
+	@Query("select r.status from InventoryReservationEntity r where r.reservationId = :reservationId")
+	Optional<String> findStatusByReservationId(@Param("reservationId") String reservationId);
+
+	@Query("select r.reservationId from InventoryReservationEntity r where r.status = 'PRE_DEDUCTED' and r.expireAt < :now")
+	List<String> findExpiredCandidateIds(@Param("now") OffsetDateTime now);
+
+	@Modifying
+	@Query("update InventoryReservationEntity r set r.status = :targetStatus, r.confirmedAt = :confirmedAt, " +
+	       "r.releaseReason = :releaseReason " +
+	       "where r.reservationId = :reservationId and r.status = :expectedStatus")
+	int transitionStatus(@Param("reservationId") String reservationId,
+	                     @Param("expectedStatus") String expectedStatus,
+	                     @Param("targetStatus") String targetStatus,
+	                     @Param("confirmedAt") OffsetDateTime confirmedAt,
+	                     @Param("releaseReason") String releaseReason);
 }
 

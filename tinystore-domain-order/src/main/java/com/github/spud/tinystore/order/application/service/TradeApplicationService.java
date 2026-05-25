@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.spud.tinystore.order.application.command.CancelTradeCommand;
 import com.github.spud.tinystore.order.application.command.CreateTradeCommand;
 import com.github.spud.tinystore.order.application.command.PaymentSucceededCommand;
+import com.github.spud.tinystore.order.domain.enums.InventoryProjectionVersion;
 import com.github.spud.tinystore.order.domain.enums.InventoryStatus;
 import com.github.spud.tinystore.order.domain.enums.OrderStatus;
 import com.github.spud.tinystore.order.domain.enums.PayStatus;
@@ -12,6 +13,7 @@ import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
 import com.github.spud.tinystore.order.domain.event.OrderEventType;
 import com.github.spud.tinystore.order.domain.exception.DomainConflictException;
 import com.github.spud.tinystore.order.domain.model.InventoryOccupyPair;
+import com.github.spud.tinystore.order.domain.model.InventoryReservationRef;
 import com.github.spud.tinystore.order.domain.model.OrderLine;
 import com.github.spud.tinystore.order.domain.model.ShopOrder;
 import com.github.spud.tinystore.order.domain.model.Trade;
@@ -28,6 +30,7 @@ import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository
 import com.github.spud.tinystore.order.interfaces.dto.response.CreateTradeData;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,6 +68,13 @@ public class TradeApplicationService {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    /**
+     * When true, use canonical reservation API (POST /api/inventory/reservations/*) instead of legacy deduct.
+     * Controls order-side routing per RFC-001 Rollout C.
+     */
+    @Value("${order.inventory.use-canonical-reservation-api:false}")
+    private boolean useCanonicalReservationApi;
 
     /**
      * 创建交易 Saga（半编排式）
@@ -217,29 +227,46 @@ public class TradeApplicationService {
                 String shopIdempotencyKey = idempotencyKey + ":inv:deduct:" + shopId;
                 InventoryDeductResponse deductResponse;
                 try {
-                    deductResponse = inventoryClient.deduct(shopIdempotencyKey, deductRequest);
+                    if (useCanonicalReservationApi) {
+                        deductResponse = inventoryClient.reserveCanonical(shopIdempotencyKey, deductRequest);
+                    } else {
+                        deductResponse = inventoryClient.deduct(shopIdempotencyKey, deductRequest);
+                    }
                     if (deductResponse == null || !Boolean.TRUE.equals(deductResponse.getSuccess())) {
                         String msg = deductResponse != null ? deductResponse.getMessage() : "null response";
                         throw new DomainConflictException("INVENTORY_DEDUCT_FAILED",
                                 "Inventory deduct failed for shop: " + shopId + ", msg: " + msg);
                     }
-                    log.info("Inventory deduct succeeded for shop {}: occupyPairs={}",
+                    log.info("Inventory reserve succeeded for shop {}: occupyPairs={}",
                             shopId, deductResponse.getOccupyPairs());
                 } catch (Exception e) {
-                    log.error("Inventory deduct failed for shop: {}", shopId, e);
+                    log.error("Inventory reserve failed for shop: {}", shopId, e);
                     // 补偿：释放已成功扣减的其他 shop
                     for (ShopOrder prev : updatedOrders) {
                         try {
-                            List<InventoryReleaseRequestV2.OccupyPairDto> relPairs = prev.getInventoryOccupyPairs().stream()
-                                    .map(p -> InventoryReleaseRequestV2.OccupyPairDto.builder()
-                                            .shopId(p.getShopId()).skuId(p.getSkuId()).occupyId(p.getOccupyId()).build())
-                                    .collect(Collectors.toList());
-                            inventoryClient.releaseV2(idempotencyKey + ":inv:comp:" + prev.getShopId(),
-                                    InventoryReleaseRequestV2.builder()
-                                            .orderId(prev.getOrderId())
-                                            .reason("INVENTORY_DEDUCT_COMPENSATION")
-                                            .occupyPairs(relPairs)
-                                            .build());
+                            if (useCanonicalReservationApi && prev.getInventoryProjectionVersion() == InventoryProjectionVersion.VERSION_2) {
+                                List<InventoryReleaseRequestV2.OccupyPairDto> relPairs = prev.getInventoryReservationRefs().stream()
+                                        .map(r -> InventoryReleaseRequestV2.OccupyPairDto.builder()
+                                                .shopId(r.getShopId()).skuId(r.getSkuId()).occupyId(r.getReservationId()).build())
+                                        .collect(Collectors.toList());
+                                inventoryClient.releaseCanonical(idempotencyKey + ":inv:comp:" + prev.getShopId(),
+                                        InventoryReleaseRequestV2.builder()
+                                                .orderId(prev.getOrderId())
+                                                .reason("INVENTORY_RESERVE_COMPENSATION")
+                                                .occupyPairs(relPairs)
+                                                .build());
+                            } else {
+                                List<InventoryReleaseRequestV2.OccupyPairDto> relPairs = prev.getInventoryOccupyPairs().stream()
+                                        .map(p -> InventoryReleaseRequestV2.OccupyPairDto.builder()
+                                                .shopId(p.getShopId()).skuId(p.getSkuId()).occupyId(p.getOccupyId()).build())
+                                        .collect(Collectors.toList());
+                                inventoryClient.releaseV2(idempotencyKey + ":inv:comp:" + prev.getShopId(),
+                                        InventoryReleaseRequestV2.builder()
+                                                .orderId(prev.getOrderId())
+                                                .reason("INVENTORY_DEDUCT_COMPENSATION")
+                                                .occupyPairs(relPairs)
+                                                .build());
+                            }
                         } catch (Exception compE) {
                             log.error("Compensation release failed for shop: {}", prev.getShopId(), compE);
                         }
@@ -258,31 +285,54 @@ public class TradeApplicationService {
                             "Inventory deduct failed for shop: " + shopId + ", error: " + e.getMessage());
                 }
 
-                // 转换 occupyPairs 为领域值对象
-                List<InventoryOccupyPair> occupyPairs = deductResponse.getOccupyPairs().stream()
-                        .map(dto -> new InventoryOccupyPair(dto.getShopId(), dto.getSkuId(), dto.getOccupyId()))
-                        .collect(Collectors.toList());
-
-                // 保存 occupyPairs 到 ShopOrder（使用 Builder 重建实例，保留所有原字段）
-                ShopOrder updatedShopOrder = ShopOrder.builder()
-                        .id(shopOrder.getId())
-                        .orderId(shopOrder.getOrderId())
-                        .tradeId(shopOrder.getTradeId())
-                        .shopId(shopOrder.getShopId())
-                        .sellerId(shopOrder.getSellerId())
-                        .orderStatus(shopOrder.getOrderStatus())
-                        .inventoryStatus(shopOrder.getInventoryStatus())
-                        .promotionStatus(shopOrder.getPromotionStatus())
-                        .totalAmountCents(shopOrder.getTotalAmountCents())
-                        .orderLines(shopOrder.getOrderLines())
-                        .inventoryOccupyPairs(occupyPairs)
-                        .createdAt(shopOrder.getCreatedAt())
-                        .updatedAt(shopOrder.getUpdatedAt())
-                        .acceptedAt(shopOrder.getAcceptedAt())
-                        .build();
+                ShopOrder updatedShopOrder;
+                if (useCanonicalReservationApi) {
+                    // Canonical path: store reservationRefs with VERSION_2
+                    List<InventoryReservationRef> reservationRefs = deductResponse.getOccupyPairs().stream()
+                            .map(dto -> new InventoryReservationRef(dto.getShopId(), dto.getSkuId(), dto.getOccupyId()))
+                            .collect(Collectors.toList());
+                    updatedShopOrder = ShopOrder.builder()
+                            .id(shopOrder.getId())
+                            .orderId(shopOrder.getOrderId())
+                            .tradeId(shopOrder.getTradeId())
+                            .shopId(shopOrder.getShopId())
+                            .sellerId(shopOrder.getSellerId())
+                            .orderStatus(shopOrder.getOrderStatus())
+                            .inventoryStatus(shopOrder.getInventoryStatus())
+                            .promotionStatus(shopOrder.getPromotionStatus())
+                            .totalAmountCents(shopOrder.getTotalAmountCents())
+                            .orderLines(shopOrder.getOrderLines())
+                            .inventoryProjectionVersion(InventoryProjectionVersion.VERSION_2)
+                            .inventoryReservationRefs(reservationRefs)
+                            .createdAt(shopOrder.getCreatedAt())
+                            .build();
+                    log.info("ShopOrder updated with reservationRefs (canonical): orderId={}, refs={}",
+                            shopOrder.getOrderId(), reservationRefs);
+                } else {
+                    // Legacy path: store occupyPairs with VERSION_1
+                    List<InventoryOccupyPair> occupyPairs = deductResponse.getOccupyPairs().stream()
+                            .map(dto -> new InventoryOccupyPair(dto.getShopId(), dto.getSkuId(), dto.getOccupyId()))
+                            .collect(Collectors.toList());
+                    updatedShopOrder = ShopOrder.builder()
+                            .id(shopOrder.getId())
+                            .orderId(shopOrder.getOrderId())
+                            .tradeId(shopOrder.getTradeId())
+                            .shopId(shopOrder.getShopId())
+                            .sellerId(shopOrder.getSellerId())
+                            .orderStatus(shopOrder.getOrderStatus())
+                            .inventoryStatus(shopOrder.getInventoryStatus())
+                            .promotionStatus(shopOrder.getPromotionStatus())
+                            .totalAmountCents(shopOrder.getTotalAmountCents())
+                            .orderLines(shopOrder.getOrderLines())
+                            .inventoryOccupyPairs(occupyPairs)
+                            .createdAt(shopOrder.getCreatedAt())
+                            .updatedAt(shopOrder.getUpdatedAt())
+                            .acceptedAt(shopOrder.getAcceptedAt())
+                            .build();
+                    log.info("ShopOrder updated with occupyPairs: orderId={}, occupyPairs={}",
+                            shopOrder.getOrderId(), occupyPairs);
+                }
                 updatedOrders.add(updatedShopOrder);
-                log.info("ShopOrder updated with occupyPairs: orderId={}, occupyPairs={}",
-                        shopOrder.getOrderId(), occupyPairs);
             }
 
             // 5. promotion commit（现在 trade 已落库且所有 shop 库存已预占，可以 commit 了）
@@ -481,11 +531,28 @@ public class TradeApplicationService {
             }
 
             // 同步补偿：释放库存和优惠
-            // 按 ShopOrder 遍历释放库存（仅 V2 occupyPairs）
+            // 按 ShopOrder 遍历释放库存（VERSION_2 用 canonical release，VERSION_1 用 legacy releaseV2）
             for (ShopOrder shopOrder : shopOrders) {
                 try {
-                    if (shopOrder.getInventoryOccupyPairs() != null && !shopOrder.getInventoryOccupyPairs().isEmpty()) {
-                        // V2：使用 releaseV2 按 SKU 释放
+                    if (InventoryProjectionVersion.VERSION_2.equals(shopOrder.getInventoryProjectionVersion())
+                            && shopOrder.getInventoryReservationRefs() != null
+                            && !shopOrder.getInventoryReservationRefs().isEmpty()) {
+                        // Canonical path: release via /api/inventory/reservations/release
+                        List<InventoryReleaseRequestV2.OccupyPairDto> relPairs = shopOrder.getInventoryReservationRefs().stream()
+                                .map(r -> InventoryReleaseRequestV2.OccupyPairDto.builder()
+                                        .shopId(r.getShopId()).skuId(r.getSkuId()).occupyId(r.getReservationId()).build())
+                                .collect(Collectors.toList());
+                        InventoryReleaseRequestV2 releaseRequest = InventoryReleaseRequestV2.builder()
+                                .orderId(shopOrder.getOrderId())
+                                .reason(command.getReason())
+                                .occupyPairs(relPairs)
+                                .build();
+                        String shopKey = idempotencyKey + ":inv:rel:" + shopOrder.getShopId();
+                        inventoryClient.releaseCanonical(shopKey, releaseRequest);
+                        log.info("Canonical inventory released for cancelled shopOrder: orderId={}, shopId={}, refs={}",
+                                shopOrder.getOrderId(), shopOrder.getShopId(), relPairs.size());
+                    } else if (shopOrder.getInventoryOccupyPairs() != null && !shopOrder.getInventoryOccupyPairs().isEmpty()) {
+                        // Legacy V2 path
                         List<InventoryReleaseRequestV2.OccupyPairDto> relPairs = shopOrder.getInventoryOccupyPairs().stream()
                                 .map(p -> InventoryReleaseRequestV2.OccupyPairDto.builder()
                                         .shopId(p.getShopId()).skuId(p.getSkuId()).occupyId(p.getOccupyId()).build())
@@ -582,6 +649,8 @@ public class TradeApplicationService {
                         .orderStatus(OrderStatus.PENDING_SHIP)
                         .inventoryStatus(shopOrder.getInventoryStatus())
                         .promotionStatus(shopOrder.getPromotionStatus())
+                        .inventoryProjectionVersion(shopOrder.getInventoryProjectionVersion())
+                        .inventoryReservationRefs(shopOrder.getInventoryReservationRefs())
                         .inventoryOccupyPairs(shopOrder.getInventoryOccupyPairs())
                         .totalAmountCents(shopOrder.getTotalAmountCents())
                         .orderLines(shopOrder.getOrderLines())
@@ -597,15 +666,40 @@ public class TradeApplicationService {
             paymentIntent.setPaidAt(LocalDateTime.now());
             paymentIntentJpaRepository.save(paymentIntent);
 
-            // 同步确认：V2 链路为原子扣减，无需 inventory commit
+            // 同步确认：VERSION_2 canonical 路径调用 inventory confirm；VERSION_1 跳过
             long paidAtEpochMs = System.currentTimeMillis();
             for (ShopOrder shopOrder : shopOrders) {
                 try {
-                    log.info("V2 inventory deduct path, skip commit for shopOrder: orderId={}, shopId={}, occupyPairs={}",
-                            shopOrder.getOrderId(), shopOrder.getShopId(),
-                            shopOrder.getInventoryOccupyPairs() != null ? shopOrder.getInventoryOccupyPairs().size() : 0);
+                    if (InventoryProjectionVersion.VERSION_2.equals(shopOrder.getInventoryProjectionVersion())
+                            && shopOrder.getInventoryReservationRefs() != null
+                            && !shopOrder.getInventoryReservationRefs().isEmpty()) {
+                        List<InventoryConfirmRequest.OccupyPairDto> confirmPairs = shopOrder.getInventoryReservationRefs().stream()
+                                .map(r -> InventoryConfirmRequest.OccupyPairDto.builder()
+                                        .shopId(r.getShopId()).skuId(r.getSkuId()).occupyId(r.getReservationId()).build())
+                                .collect(Collectors.toList());
+                        InventoryConfirmRequest confirmRequest = InventoryConfirmRequest.builder()
+                                .paymentId(command.getPaymentId())
+                                .tradeId(command.getTradeId())
+                                .orderId(shopOrder.getOrderId())
+                                .traceId(command.getTraceId())
+                                .occupyPairs(confirmPairs)
+                                .build();
+                        String confirmKey = command.getPaymentId() + ":inv:confirm:" + shopOrder.getShopId();
+                        InventoryConfirmResponse confirmResp = inventoryClient.confirmReservation(confirmKey, confirmRequest);
+                        if (confirmResp != null && !confirmResp.isSuccess()) {
+                            log.error("Inventory confirm partial failure for shopOrder: orderId={}, message={}, conflicts={}",
+                                    shopOrder.getOrderId(), confirmResp.getMessage(), confirmResp.getConflictReservationIds());
+                        } else {
+                            log.info("Inventory canonical confirm succeeded for shopOrder: orderId={}, shopId={}",
+                                    shopOrder.getOrderId(), shopOrder.getShopId());
+                        }
+                    } else {
+                        log.info("V2/V1 legacy path, skip inventory confirm for shopOrder: orderId={}, shopId={}, refs={}",
+                                shopOrder.getOrderId(), shopOrder.getShopId(),
+                                shopOrder.getInventoryOccupyPairs() != null ? shopOrder.getInventoryOccupyPairs().size() : 0);
+                    }
                 } catch (Exception e) {
-                    log.error("Failed to commit inventory for shopOrder: {}", shopOrder.getOrderId(), e);
+                    log.error("Failed to confirm inventory for shopOrder: {}", shopOrder.getOrderId(), e);
                     // 继续处理其他 shop，不抛异常，允许重试
                 }
             }

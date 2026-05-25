@@ -45,6 +45,9 @@ public class InventoryReservationEntity {
 	@Column(name = "release_reason", length = 255)
 	private String releaseReason;
 
+	@Column(name = "confirmed_at")
+	private OffsetDateTime confirmedAt;
+
 	@Version
 	@Column(name = "version", nullable = false)
 	private long version;

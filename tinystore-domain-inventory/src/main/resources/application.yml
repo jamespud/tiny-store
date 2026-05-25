@@ -58,6 +58,25 @@ tinystore:
   security:
     resource-server:
       enabled: ${TINYSTORE_SECURITY_RESOURCESERVER_ENABLED:false}
+
+# ============================================================
+# Inventory Feature Flags (RFC-001 Canonical Reservation)
+# ============================================================
+inventory:
+  # Batch-3: Set to false to shut down legacy /api/inventory/stock/* endpoints
+  legacy-stock-api-enabled: ${INVENTORY_LEGACY_STOCK_API_ENABLED:true}
+
+  reservation:
+    # When true, InventoryDeductAppService routes to canonical InventoryReservationAppService
+    canonical-enabled: ${INVENTORY_RESERVATION_CANONICAL_ENABLED:false}
+
+    expiry:
+      # Enable/disable the reservation expiry scheduler
+      enabled: ${INVENTORY_RESERVATION_EXPIRY_ENABLED:true}
+      # Spring Duration format
+      fixed-delay: ${INVENTORY_RESERVATION_EXPIRY_FIXED_DELAY:PT1M}
+      # Default reservation TTL in minutes (used when caller does not supply expireAt)
+      default-minutes: ${INVENTORY_RESERVATION_EXPIRY_DEFAULT_MINUTES:30}
     permit-all:
       enabled: ${TINYSTORE_SECURITY_PERMIT_ALL_ENABLED:false}
   kafka:
