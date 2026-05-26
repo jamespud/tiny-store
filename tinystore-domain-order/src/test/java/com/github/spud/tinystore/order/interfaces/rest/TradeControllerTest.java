@@ -3,6 +3,7 @@ package com.github.spud.tinystore.order.interfaces.rest;
 import com.github.spud.tinystore.order.application.service.TradeApplicationService;
 import com.github.spud.tinystore.order.application.service.PaymentApplicationService;
 import com.github.spud.tinystore.order.application.query.TradeQueryService;
+import com.github.spud.tinystore.order.domain.exception.DomainConflictException;
 import com.github.spud.tinystore.order.domain.exception.IdempotencyServiceUnavailableException;
 import com.github.spud.tinystore.order.interfaces.error.GlobalExceptionHandler;
 import com.github.spud.tinystore.order.interfaces.dto.response.CreateTradeData;
@@ -21,12 +22,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 
 /**
  * Trade Controller Unit Test
@@ -160,6 +163,37 @@ class TradeControllerTest {
     }
 
     @Test
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades/{tradeId}/cancel")
+    @DisplayName("POST /api/order/trades/{tradeId}/cancel - inventory release conflict returns 409")
+    void cancelTrade_inventoryReleaseConflict_returns409() throws Exception {
+        doThrow(new DomainConflictException("INVENTORY_RELEASE_CONFLICT", "Inventory release conflict during cancel for trade: trade-123"))
+            .when(tradeApplicationService).cancelTrade(anyString(), any());
+
+        mockMvc.perform(post("/order/trades/trade-123/cancel")
+                .header("Idempotency-Key", "idem-cancel-conflict")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"User cancel\"}"))
+            .andExpect(status().isConflict())
+            .andExpect(content().string(containsString("Inventory release conflict during cancel for trade: trade-123")));
+    }
+
+    @Test
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades/{tradeId}/cancel")
+    @DisplayName("POST /api/order/trades/{tradeId}/cancel - unexpected failure hides internal details")
+    void cancelTrade_unexpectedFailure_hidesInternalDetails() throws Exception {
+        doThrow(new RuntimeException("release failed for order-123"))
+            .when(tradeApplicationService).cancelTrade(anyString(), any());
+
+        mockMvc.perform(post("/order/trades/trade-123/cancel")
+                .header("Idempotency-Key", "idem-cancel-failure")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"User cancel\"}"))
+            .andExpect(status().isInternalServerError())
+            .andExpect(content().string(containsString("Cancel trade failed")))
+            .andExpect(content().string(not(containsString("release failed for order-123"))));
+    }
+
+    @Test
     @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades/{tradeId}/pay/callback")
     @DisplayName("POST /api/order/trades/{tradeId}/pay/callback - valid callback returns 200")
     void paymentCallback_validRequest_returns200() throws Exception {
@@ -172,6 +206,52 @@ class TradeControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"paymentIntentId\":\"pay-intent-123\",\"amountCents\":9900,\"traceId\":\"trace-123\"}"))
             .andExpect(status().isOk());
+    }
+
+    @Test
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades/{tradeId}/pay/callback")
+    @DisplayName("POST /api/order/trades/{tradeId}/pay/callback - inventory confirm conflict returns 409")
+    void paymentCallback_confirmConflict_returns409() throws Exception {
+        doThrow(new DomainConflictException("INVENTORY_CONFIRM_CONFLICT", "inventory confirm conflict"))
+            .when(tradeApplicationService).onPaymentSucceeded(anyString(), any());
+
+        mockMvc.perform(post("/order/trades/trade-pay-123/pay/callback")
+                .header("Idempotency-Key", "idem-payment-callback-conflict")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"paymentIntentId\":\"pay-intent-123\",\"amountCents\":9900,\"traceId\":\"trace-123\"}"))
+            .andExpect(status().isConflict());
+    }
+
+    @Test
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades/{tradeId}/pay/callback")
+    @DisplayName("POST /api/order/trades/{tradeId}/pay/callback - non inventory conflicts use global handler")
+    void paymentCallback_nonInventoryConflict_usesGlobalHandler() throws Exception {
+        doThrow(new DomainConflictException("PAYMENT_AMOUNT_MISMATCH", "payment amount mismatch"))
+            .when(tradeApplicationService).onPaymentSucceeded(anyString(), any());
+
+        mockMvc.perform(post("/order/trades/trade-pay-123/pay/callback")
+                .header("Idempotency-Key", "idem-payment-callback-mismatch")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"paymentIntentId\":\"pay-intent-123\",\"amountCents\":9900,\"traceId\":\"trace-123\"}"))
+            .andExpect(status().isConflict())
+            .andExpect(content().string(containsString("payment amount mismatch")))
+            .andExpect(content().string(not(containsString("Payment callback conflict"))));
+    }
+
+    @Test
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades/{tradeId}/pay/callback")
+    @DisplayName("POST /api/order/trades/{tradeId}/pay/callback - unexpected failure hides internal details")
+    void paymentCallback_unexpectedFailure_hidesInternalDetails() throws Exception {
+        doThrow(new RuntimeException("missing reservation refs for order-123"))
+            .when(tradeApplicationService).onPaymentSucceeded(anyString(), any());
+
+        mockMvc.perform(post("/order/trades/trade-pay-123/pay/callback")
+                .header("Idempotency-Key", "idem-payment-callback-failure")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"paymentIntentId\":\"pay-intent-123\",\"amountCents\":9900,\"traceId\":\"trace-123\"}"))
+            .andExpect(status().isInternalServerError())
+            .andExpect(content().string(containsString("Payment callback failed")))
+            .andExpect(content().string(not(containsString("missing reservation refs for order-123"))));
     }
 
     @Test

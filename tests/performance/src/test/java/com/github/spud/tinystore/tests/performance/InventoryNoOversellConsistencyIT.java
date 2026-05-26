@@ -26,10 +26,9 @@ import org.slf4j.LoggerFactory;
  * - 库存充足（10000 >> 200），理论上全部请求应该成功
  * 
  * 断言（强，基于DB）：
- * - tinystore_inventory.inventory_stock 中 reserved_quantity <= 10000
- * - tinystore_inventory.inventory_reservation 中 status='RESERVED' 的记录数 = 200
+ * - tinystore_inventory.inventory_reservation 中 status='PRE_DEDUCTED' 的记录数 = 200
  * - COUNT(trade) = 200（成功创建的订单数）
- * - reserved_quantity 增量 = 200（与成功订单数一致）
+ * - reserve-only 创建链路不会直接改写 authoritative stock ledger（total_quantity / reserved_quantity 不变）
  * 
  * 断言（弱，基于HTTP）：
  * - 成功响应（200 + code=0）数量 = 200（库存充足，无失败）
@@ -74,7 +73,7 @@ class InventoryNoOversellConsistencyIT {
         PostgresClient.InventoryStock initialStock = pgClient.getInventoryStock("SHOP_A", "SKU_A");
         log.info("Initial stock: total={}, reserved={}", initialStock.totalQuantity, initialStock.reservedQuantity);
         
-        long maxAllowedReservations = initialStock.totalQuantity - initialStock.reservedQuantity;
+        long maxAllowedReservations = initialStock.totalQuantity;
         assertThat(maxAllowedReservations).as("Initial available stock should be 10000").isGreaterThanOrEqualTo(10000);
 
         // Given: 固定的testRun前缀，用于后续DB查询隔离
@@ -146,22 +145,22 @@ class InventoryNoOversellConsistencyIT {
         // Then: DB层强断言
         PostgresClient.InventoryStock finalStock = pgClient.getInventoryStock("SHOP_A", "SKU_A");
         log.info("Final stock: total={}, reserved={}", finalStock.totalQuantity, finalStock.reservedQuantity);
-        assertThat(finalStock.reservedQuantity).as("Reserved quantity must not exceed total quantity").isLessThanOrEqualTo(finalStock.totalQuantity);
-        assertThat(finalStock.reservedQuantity).as("Reserved quantity should not exceed initial available + initial reserved").isLessThanOrEqualTo(initialStock.totalQuantity);
+        assertThat(finalStock.totalQuantity)
+            .as("Reserve-only create flow must not deduct authoritative total_quantity before confirm")
+            .isEqualTo(initialStock.totalQuantity);
+        assertThat(finalStock.reservedQuantity)
+            .as("Canonical reservation flow must not rely on reserved_quantity projection during reserve")
+            .isEqualTo(initialStock.reservedQuantity);
 
-        long reservationCount = pgClient.countReservations("SHOP_A", "SKU_A", "RESERVED");
-        log.info("DB reservation count (RESERVED) for SHOP_A/SKU_A: {}", reservationCount);
+        long reservationCount = pgClient.countReservationsByTradePrefix(testRunPrefix, "PRE_DEDUCTED");
+        log.info("DB reservation count (PRE_DEDUCTED) for prefix {}: {}", testRunPrefix, reservationCount);
+        assertThat(reservationCount).as("Canonical PRE_DEDUCTED reservations should match success count").isEqualTo(successCount);
         assertThat(reservationCount).as("Reservation records should not exceed total stock").isLessThanOrEqualTo(finalStock.totalQuantity);
 
         long tradeCount = pgClient.countSuccessfulTrades(testRunPrefix);
         log.info("DB trade count with prefix {}: {}", testRunPrefix, tradeCount);
         assertThat(tradeCount).as("Trade count should match success count").isEqualTo(successCount);
         assertThat(tradeCount).as("Trade count should not exceed available stock").isLessThanOrEqualTo(maxAllowedReservations);
-
-        // 核心不变式：reserved_quantity增量 = 成功订单数
-        long reservedIncrement = finalStock.reservedQuantity - initialStock.reservedQuantity;
-        log.info("Reserved increment: {} (should match success count: {})", reservedIncrement, successCount);
-        assertThat(reservedIncrement).as("Reserved increment should match trade success count").isEqualTo(successCount);
     }
 
     private Map<String, Object> buildCreateTradeRequest(String tradeId, String buyerId) {

@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -60,8 +61,9 @@ class MallE2EIT {
 
     @Test
     @org.junit.jupiter.api.Tag("ep:product:GET:/api/skus/{skuId}")
-    @org.junit.jupiter.api.Tag("ep:inventory:POST:/api/inventory/stock/pre-occupy")
-    @org.junit.jupiter.api.Tag("ep:inventory:POST:/api/inventory/stock/release")
+    @org.junit.jupiter.api.Tag("ep:inventory:POST:/api/inventory/reservations/reserve")
+    @org.junit.jupiter.api.Tag("ep:inventory:POST:/api/inventory/reservations/release")
+    @org.junit.jupiter.api.Tag("ep:inventory:POST:/api/inventory/reservations/confirm")
     @org.junit.jupiter.api.Tag("ep:promotion:POST:/api/promotion/checkout/quote")
     @org.junit.jupiter.api.Tag("ep:promotion:POST:/api/promotion/checkout/release")
     @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades")
@@ -258,6 +260,169 @@ class MallE2EIT {
         });
     }
 
+    @Test
+    @org.junit.jupiter.api.Tag("ep:inventory:POST:/api/inventory/reservations/confirm")
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades")
+    @org.junit.jupiter.api.Tag("ep:order:GET:/api/order/trades/{tradeId}")
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades/{tradeId}/cancel")
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades/{tradeId}/pay/callback")
+    void cancelledCanonicalTrade_payCallbackShouldConflictAndKeepTradeUnpaid() {
+        validateSeedContract();
+
+        String tradeId = UUID.randomUUID().toString();
+        String buyerId = "buyer-conflict-" + UUID.randomUUID();
+
+        Map<String, Object> createTradeRequest = new HashMap<>();
+        createTradeRequest.put("tradeId", tradeId);
+        createTradeRequest.put("buyerId", buyerId);
+        createTradeRequest.put("buyerNick", "buyer-conflict");
+        createTradeRequest.put("addressId", "addr-001");
+        createTradeRequest.put("traceId", "trace-" + tradeId);
+        createTradeRequest.put("orderLines", List.of(orderLine(SKU_A, "prod-1", "Product A", SHOP_A, "seller-A", 1, 1000L, 0L)));
+
+        HttpHeaders createHeaders = new HttpHeaders();
+        createHeaders.add("Content-Type", "application/json");
+        createHeaders.add("Idempotency-Key", "idem-conflict-" + tradeId);
+
+        ResponseEntity<Map> createResponse = restTemplate.exchange(
+            gatewayBaseUrl + "/api/order/trades",
+            HttpMethod.POST,
+            new HttpEntity<>(createTradeRequest, createHeaders),
+            Map.class
+        );
+
+        assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> createData = (Map<String, Object>) createResponse.getBody().get("data");
+        assertThat(createData).isNotNull();
+        String paymentIntentId = (String) createData.get("paymentIntentId");
+        long payableAmountCents = ((Number) createData.get("payableAmountCents")).longValue();
+
+        Map<String, Object> cancelRequest = new HashMap<>();
+        cancelRequest.put("reason", "buyer-cancelled-before-payment");
+
+        HttpHeaders cancelHeaders = new HttpHeaders();
+        cancelHeaders.add("Content-Type", "application/json");
+        cancelHeaders.add("Idempotency-Key", "idem-cancel-" + tradeId);
+
+        ResponseEntity<Map> cancelResponse = restTemplate.exchange(
+            gatewayBaseUrl + "/api/order/trades/" + tradeId + "/cancel",
+            HttpMethod.POST,
+            new HttpEntity<>(cancelRequest, cancelHeaders),
+            Map.class
+        );
+
+        assertThat(cancelResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            Map<String, Object> tradeDetail = getTradeDetail(tradeId);
+            assertThat(tradeDetail.get("payStatus")).isEqualTo("UNPAID");
+            List<Map<String, Object>> shopOrders = (List<Map<String, Object>>) tradeDetail.get("shopOrders");
+            assertThat(shopOrders).isNotEmpty();
+            assertThat(shopOrders.get(0).get("orderStatus")).isEqualTo("CLOSED");
+        });
+
+        Map<String, Object> payCallbackRequest = new HashMap<>();
+        payCallbackRequest.put("paymentIntentId", paymentIntentId);
+        payCallbackRequest.put("amountCents", payableAmountCents);
+        payCallbackRequest.put("traceId", "trace-pay-conflict-" + tradeId);
+
+        HttpHeaders payHeaders = new HttpHeaders();
+        payHeaders.add("Content-Type", "application/json");
+        payHeaders.add("Idempotency-Key", "idem-pay-conflict-" + tradeId);
+
+        ResponseEntity<Map> payResponse = restTemplate.exchange(
+            gatewayBaseUrl + "/api/order/trades/" + tradeId + "/pay/callback",
+            HttpMethod.POST,
+            new HttpEntity<>(payCallbackRequest, payHeaders),
+            Map.class
+        );
+
+        assertThat(payResponse.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            Map<String, Object> tradeDetail = getTradeDetail(tradeId);
+            assertThat(tradeDetail.get("payStatus")).isEqualTo("UNPAID");
+            List<Map<String, Object>> shopOrders = (List<Map<String, Object>>) tradeDetail.get("shopOrders");
+            assertThat(shopOrders).isNotEmpty();
+            assertThat(shopOrders.get(0).get("orderStatus")).isEqualTo("CLOSED");
+        });
+    }
+
+    @Test
+    @org.junit.jupiter.api.Tag("ep:inventory:POST:/api/inventory/reservations/confirm")
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades")
+    @org.junit.jupiter.api.Tag("ep:order:GET:/api/order/trades/{tradeId}")
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades/{tradeId}/pay/callback")
+    void expiredCanonicalTrade_payCallbackShouldConflictAndKeepTradeUnpaid() {
+        validateSeedContract();
+
+        String tradeId = UUID.randomUUID().toString();
+        String buyerId = "buyer-expired-" + UUID.randomUUID();
+
+        Map<String, Object> createTradeRequest = new HashMap<>();
+        createTradeRequest.put("tradeId", tradeId);
+        createTradeRequest.put("buyerId", buyerId);
+        createTradeRequest.put("buyerNick", "buyer-expired");
+        createTradeRequest.put("addressId", "addr-001");
+        createTradeRequest.put("traceId", "trace-" + tradeId);
+        createTradeRequest.put("orderLines", List.of(orderLine(SKU_A, "prod-1", "Product A", SHOP_A, "seller-A", 1, 1000L, 0L)));
+
+        HttpHeaders createHeaders = new HttpHeaders();
+        createHeaders.add("Content-Type", "application/json");
+        createHeaders.add("Idempotency-Key", "idem-expired-" + tradeId);
+
+        ResponseEntity<Map> createResponse = restTemplate.exchange(
+            gatewayBaseUrl + "/api/order/trades",
+            HttpMethod.POST,
+            new HttpEntity<>(createTradeRequest, createHeaders),
+            Map.class
+        );
+
+        assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> createData = (Map<String, Object>) createResponse.getBody().get("data");
+        assertThat(createData).isNotNull();
+        String paymentIntentId = (String) createData.get("paymentIntentId");
+        long payableAmountCents = ((Number) createData.get("payableAmountCents")).longValue();
+
+        await().pollDelay(Duration.ofSeconds(75)).atMost(Duration.ofSeconds(90)).untilAsserted(() -> {
+            Map<String, Object> tradeDetail = getTradeDetail(tradeId);
+            assertThat(tradeDetail.get("payStatus")).isEqualTo("UNPAID");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> shopOrders = (List<Map<String, Object>>) tradeDetail.get("shopOrders");
+            assertThat(shopOrders).isNotEmpty();
+            assertThat(shopOrders.get(0).get("orderStatus")).isEqualTo("PENDING_PAY");
+        });
+
+        Map<String, Object> payCallbackRequest = new HashMap<>();
+        payCallbackRequest.put("paymentIntentId", paymentIntentId);
+        payCallbackRequest.put("amountCents", payableAmountCents);
+        payCallbackRequest.put("traceId", "trace-pay-expired-" + tradeId);
+
+        HttpHeaders payHeaders = new HttpHeaders();
+        payHeaders.add("Content-Type", "application/json");
+        payHeaders.add("Idempotency-Key", "idem-pay-expired-" + tradeId);
+
+        ResponseEntity<Map> payResponse = restTemplate.exchange(
+            gatewayBaseUrl + "/api/order/trades/" + tradeId + "/pay/callback",
+            HttpMethod.POST,
+            new HttpEntity<>(payCallbackRequest, payHeaders),
+            Map.class
+        );
+
+        assertThat(payResponse.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            Map<String, Object> tradeDetail = getTradeDetail(tradeId);
+            assertThat(tradeDetail.get("payStatus")).isEqualTo("UNPAID");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> shopOrders = (List<Map<String, Object>>) tradeDetail.get("shopOrders");
+            assertThat(shopOrders).isNotEmpty();
+            assertThat(shopOrders.get(0).get("orderStatus")).isEqualTo("PENDING_PAY");
+        });
+    }
+
     /**
      * Seed contract validation (fail-fast with clear error if seeds not ready)
      */
@@ -266,7 +431,7 @@ class MallE2EIT {
         validateSkuExists(SKU_A, SHOP_A);
         validateSkuExists(SKU_B, SHOP_B);
 
-        // 2. Validate Inventory (pre-occupy + release to check stock availability)
+        // 2. Validate Inventory (canonical reserve + release to check stock availability)
         validateInventoryAvailable();
 
         // 3. Validate Promotion (quote + release to check promotion can quote)
@@ -291,58 +456,91 @@ class MallE2EIT {
     }
 
     private void validateInventoryAvailable() {
-        Map<String, Object> preOccupyRequest = new HashMap<>();
-        preOccupyRequest.put("shopId", SHOP_A);
-        preOccupyRequest.put("tradeId", "seed-check-" + UUID.randomUUID());
-        preOccupyRequest.put("expiresAtEpochMs", System.currentTimeMillis() + 60000);
+        AtomicReference<List<Map<String, Object>>> occupyPairsRef = new AtomicReference<>();
+        AtomicReference<String> releaseOrderIdRef = new AtomicReference<>();
+        AtomicReference<String> releaseIdempotencyKeyRef = new AtomicReference<>();
 
-        List<Map<String, Object>> lines = new ArrayList<>();
-        Map<String, Object> line = new HashMap<>();
-        line.put("skuId", SKU_A);
-        line.put("quantity", 1);
-        lines.add(line);
-        preOccupyRequest.put("lines", lines);
+        await().atMost(Duration.ofSeconds(20))
+            .pollInterval(Duration.ofSeconds(1))
+            .ignoreExceptions()
+            .untilAsserted(() -> {
+                if (occupyPairsRef.get() == null) {
+                    String tradeId = "seed-check-" + UUID.randomUUID();
+                    String orderId = "seed-order-" + UUID.randomUUID();
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.add("Content-Type", "application/json");
-        headers.add("Idempotency-Key", "seed-inv-" + UUID.randomUUID());
+                    Map<String, Object> reserveRequest = new HashMap<>();
+                    reserveRequest.put("tradeId", tradeId);
+                    reserveRequest.put("orderId", orderId);
+                    List<Map<String, Object>> reserveItems = new ArrayList<>();
+                    Map<String, Object> reserveItem = new HashMap<>();
+                    reserveItem.put("shopId", SHOP_A);
+                    reserveItem.put("skuId", SKU_A);
+                    reserveItem.put("quantity", 1);
+                    reserveItems.add(reserveItem);
+                    reserveRequest.put("items", reserveItems);
 
-        ResponseEntity<Map> response = restTemplate.exchange(
-            "http://localhost:13000/api/inventory/stock/pre-occupy",
-            HttpMethod.POST,
-            new HttpEntity<>(preOccupyRequest, headers),
-            Map.class
-        );
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.add("Content-Type", "application/json");
+                    headers.add("Idempotency-Key", "seed-inv-" + UUID.randomUUID());
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        Map<String, Object> body = response.getBody();
-        assertThat(body).isNotNull();
-        assertThat(body.get("success"))
-            .withFailMessage("Seed contract failed: Inventory pre-occupy failed, lackSkuIds: %s", 
-                body.get("lackSkuIds"))
-            .isEqualTo(true);
+                    ResponseEntity<Map> response = restTemplate.exchange(
+                        "http://localhost:13000/api/inventory/reservations/reserve",
+                        HttpMethod.POST,
+                        new HttpEntity<>(reserveRequest, headers),
+                        Map.class
+                    );
 
-        // Release the pre-occupy
-        List<String> preOccupyIds = (List<String>) body.get("preOccupyIds");
-        if (preOccupyIds != null && !preOccupyIds.isEmpty()) {
-            Map<String, Object> releaseRequest = new HashMap<>();
-            releaseRequest.put("shopId", SHOP_A);
-            releaseRequest.put("tradeId", preOccupyRequest.get("tradeId"));
-            releaseRequest.put("reason", "seed-check-cleanup");
-            releaseRequest.put("preOccupyIds", preOccupyIds);
+                    assertThat(response.getStatusCode())
+                        .withFailMessage("Seed contract failed: Inventory reserve HTTP status %s, body=%s",
+                            response.getStatusCode(), response.getBody())
+                        .isEqualTo(HttpStatus.OK);
 
-            HttpHeaders releaseHeaders = new HttpHeaders();
-            releaseHeaders.add("Content-Type", "application/json");
-            releaseHeaders.add("Idempotency-Key", "seed-inv-rel-" + UUID.randomUUID());
+                    Map<String, Object> body = response.getBody();
+                    assertThat(body).isNotNull();
+                    assertThat(body.get("success"))
+                        .withFailMessage("Seed contract failed: Inventory reserve failed, body=%s", body)
+                        .isEqualTo(true);
 
-            restTemplate.exchange(
-                "http://localhost:13000/api/inventory/stock/release",
-                HttpMethod.POST,
-                new HttpEntity<>(releaseRequest, releaseHeaders),
-                Map.class
-            );
-        }
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> occupyPairs = (List<Map<String, Object>>) body.get("occupyPairs");
+                    assertThat(occupyPairs)
+                        .withFailMessage("Seed contract failed: Inventory reserve returned no occupyPairs, body=%s", body)
+                        .isNotNull()
+                        .isNotEmpty();
+                    occupyPairsRef.set(occupyPairs);
+                    releaseOrderIdRef.set(orderId);
+                    releaseIdempotencyKeyRef.set("seed-inv-rel-" + UUID.randomUUID());
+                }
+
+                Map<String, Object> releaseRequest = new HashMap<>();
+                releaseRequest.put("orderId", releaseOrderIdRef.get());
+                releaseRequest.put("reason", "seed-check-cleanup");
+                releaseRequest.put("occupyPairs", occupyPairsRef.get());
+
+                HttpHeaders releaseHeaders = new HttpHeaders();
+                releaseHeaders.add("Content-Type", "application/json");
+                releaseHeaders.add("Idempotency-Key", releaseIdempotencyKeyRef.get());
+
+                ResponseEntity<Map> releaseResponse = restTemplate.exchange(
+                    "http://localhost:13000/api/inventory/reservations/release",
+                    HttpMethod.POST,
+                    new HttpEntity<>(releaseRequest, releaseHeaders),
+                    Map.class
+                );
+
+                assertThat(releaseResponse.getStatusCode())
+                    .withFailMessage("Seed contract failed: Inventory release HTTP status %s, body=%s",
+                        releaseResponse.getStatusCode(), releaseResponse.getBody())
+                    .isEqualTo(HttpStatus.OK);
+                assertThat(releaseResponse.getBody())
+                    .withFailMessage("Seed contract failed: Inventory release response body is null")
+                    .isNotNull();
+                assertThat(releaseResponse.getBody().get("success"))
+                    .withFailMessage("Seed contract failed: Inventory release failed, body=%s", releaseResponse.getBody())
+                    .isEqualTo(true);
+            });
     }
+
 
     private void validatePromotionCanQuote() {
         Map<String, Object> quoteRequest = new HashMap<>();

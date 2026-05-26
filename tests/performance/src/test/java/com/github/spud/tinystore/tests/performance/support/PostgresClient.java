@@ -43,6 +43,12 @@ public class PostgresClient implements AutoCloseable {
         return executeCount(sql, tradeId, status);
     }
 
+    public long countReservationsByTradePrefix(String tradeIdPrefix, String status) {
+        String sql = "SELECT COUNT(*) FROM tinystore_inventory.inventory_reservation " +
+                     "WHERE trade_id LIKE ? AND status = ?";
+        return executeCount(sql, tradeIdPrefix + "%", status);
+    }
+
     public InventoryStock getInventoryStock(String shopId, String skuId) {
         String sql = "SELECT total_quantity, reserved_quantity FROM tinystore_inventory.inventory_stock " +
                      "WHERE shop_id = ? AND sku_id = ?";

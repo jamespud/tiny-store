@@ -30,4 +30,17 @@ public interface InventoryDeductRecordRepository {
      * @param reason      释放原因
      */
     void markReleased(String orderId, List<OccupyPair> occupyPairs, String reason);
+
+    /**
+     * 持久化 Redis 补偿回滚失败的审计记录（canonical 预扣路径专用）。
+     * <p>
+     * 依据 failure-arbitration.md §2 原则 3：所有 Redis 补偿失败必须写执行日志。
+     * DB 终态（RELEASED / EXPIRED）已提交，此记录仅用于运维审计与人工补偿。
+     *
+     * @param reservationId 预扣凭证 ID（唯一标识此次失败事件）
+     * @param shopId        店铺 ID
+     * @param skuId         SKU ID
+     * @param reason        失败原因描述（含错误类型）
+     */
+    void saveRedisRollbackFailed(String reservationId, String shopId, String skuId, String reason);
 }

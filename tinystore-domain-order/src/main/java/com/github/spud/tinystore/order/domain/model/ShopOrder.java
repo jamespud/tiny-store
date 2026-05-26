@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.order.domain.model;
 
 import com.github.spud.tinystore.order.domain.enums.InventoryProjectionVersion;
+import com.github.spud.tinystore.order.domain.enums.InventoryStatus;
 import com.github.spud.tinystore.order.domain.enums.OrderStatus;
 import lombok.Builder;
 import lombok.Getter;
@@ -34,7 +35,7 @@ public class ShopOrder {
 
     /**
      * Inventory projection version.
-     * VERSION_1 = legacy V2 deduct (InventoryOccupyPair, LOCKED/DEDUCTED vocabulary).
+        * VERSION_1 = legacy occupy-pair projection for backward compatibility.
      * VERSION_2 = canonical reservation (InventoryReservationRef, PRE_DEDUCTED/CONFIRMED vocabulary).
      */
     @Builder.Default
@@ -103,6 +104,14 @@ public class ShopOrder {
      */
     public void close() {
         this.orderStatus = OrderStatus.CLOSED;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    /**
+     * 标记库存已释放
+     */
+    public void markInventoryReleased() {
+        this.inventoryStatus = InventoryStatus.RELEASED.getCode();
         this.updatedAt = LocalDateTime.now();
     }
 }

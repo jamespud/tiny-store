@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 /**
  * Canonical inventory reservation controller.
  * <p>
@@ -48,6 +50,9 @@ public class InventoryReservationController {
     public ResponseEntity<DeductResponse> reserve(
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @RequestBody @Valid DeductRequest request) {
+        if (request.getTradeId() == null || request.getTradeId().isBlank()) {
+            return ResponseEntity.badRequest().body(DeductResponse.fail(List.of(), "tradeId 不能为空"));
+        }
         DeductResponse response = appService.reserve(idempotencyKey, request);
         return ResponseEntity.ok(response);
     }

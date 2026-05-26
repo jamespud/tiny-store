@@ -15,6 +15,8 @@ public class DeductRequest {
     @NotBlank(message = "orderId 不能为空")
     private String orderId;
 
+    private String tradeId;
+
     @NotEmpty(message = "扣减项不能为空")
     @Valid
     private List<Item> items;

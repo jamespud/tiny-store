@@ -77,6 +77,10 @@ public class TradeQueryService {
                 .shopId(shopOrder.getShopId())
                 .sellerId(shopOrder.getSellerId())
                 .orderStatus(shopOrder.getOrderStatus().name())
+                .inventoryStatus(shopOrder.getInventoryStatus())
+                .inventoryProjectionVersion(shopOrder.getInventoryProjectionVersion() != null
+                    ? shopOrder.getInventoryProjectionVersion().getValue()
+                    : null)
                 .createdAt(shopOrder.getCreatedAt().toString())
                 .orderLines(orderLineDetails)
                 .packages(packageDetails)

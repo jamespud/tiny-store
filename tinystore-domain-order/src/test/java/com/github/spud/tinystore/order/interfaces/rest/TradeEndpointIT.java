@@ -166,4 +166,36 @@ class TradeEndpointIT extends AbstractSpringBootOrderIT {
         // Then: returns 404
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
+
+    @Test
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades/{tradeId}/cancel")
+    @DisplayName("POST /api/order/trades/{tradeId}/cancel - unpaid trade returns 200")
+    void cancelTrade_whenUnpaid_returns200() {
+        TradeEntity trade = TradeEntity.builder()
+            .tradeId("trade-cancel-it")
+            .buyerId("buyer-cancel-it")
+            .payStatus("UNPAID")
+            .totalAmountCents(10900L)
+            .payableAmountCents(10900L)
+            .discountAmountCents(0L)
+            .createdAt(LocalDateTime.now())
+            .updatedAt(LocalDateTime.now())
+            .build();
+        tradeRepository.save(trade);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("Idempotency-Key", "idem-trade-cancel-001");
+
+        HttpEntity<String> request = new HttpEntity<>("{\"reason\":\"test-cancel\"}", headers);
+
+        ResponseEntity<String> response = restTemplate.exchange(
+            "/order/trades/trade-cancel-it/cancel",
+            HttpMethod.POST,
+            request,
+            String.class
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
 }

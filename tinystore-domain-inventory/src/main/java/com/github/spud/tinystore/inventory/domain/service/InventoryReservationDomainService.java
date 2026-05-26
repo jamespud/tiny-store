@@ -6,6 +6,7 @@ import com.github.spud.tinystore.inventory.domain.command.InventoryReserveComman
 import com.github.spud.tinystore.inventory.domain.enums.InventoryReservationStatus;
 import com.github.spud.tinystore.inventory.domain.port.IdempotencyRepository;
 import com.github.spud.tinystore.inventory.domain.port.InventoryDeductGateway;
+import com.github.spud.tinystore.inventory.domain.port.InventoryDeductRecordRepository;
 import com.github.spud.tinystore.inventory.domain.port.InventoryReservationRepository;
 import com.github.spud.tinystore.inventory.domain.port.InventoryStockRepository;
 import com.github.spud.tinystore.inventory.domain.value.OccupyPair;
@@ -26,19 +27,22 @@ import java.util.UUID;
 /**
  * Canonical inventory reservation domain service.
  * <p>
- * This is the single authoritative orchestrator for inventory reservation lifecycle:
+ * This is the single authoritative orchestrator for inventory reservation
+ * lifecycle:
  * PRE_DEDUCTED → CONFIRMED | RELEASED | EXPIRED
  * <p>
- * All state transitions, idempotency decisions, and Redis/DB consistency arbitration
+ * All state transitions, idempotency decisions, and Redis/DB consistency
+ * arbitration
  * are concentrated here. No other class may write reservation lifecycle states.
  * <p>
  * Invariants enforced by this service:
  * <ul>
- *   <li>CONFIRMED is terminal and irreversible</li>
- *   <li>RELEASED and EXPIRED are terminal</li>
- *   <li>Only the expiry scheduler may produce EXPIRED</li>
- *   <li>Redis failure never reverts a committed DB terminal state</li>
- *   <li>inventory_deduct_record is an execution log only — CONFIRMED is never written there</li>
+ * <li>CONFIRMED is terminal and irreversible</li>
+ * <li>RELEASED and EXPIRED are terminal</li>
+ * <li>Only the expiry scheduler may produce EXPIRED</li>
+ * <li>Redis failure never reverts a committed DB terminal state</li>
+ * <li>inventory_deduct_record is an execution log only — CONFIRMED is never
+ * written there</li>
  * </ul>
  */
 @Slf4j
@@ -49,16 +53,19 @@ public class InventoryReservationDomainService {
     private final InventoryStockRepository stockRepository;
     private final InventoryDeductGateway deductGateway;
     private final IdempotencyRepository idempotencyRepository;
+    private final InventoryDeductRecordRepository deductRecordRepository;
 
     public InventoryReservationDomainService(
             InventoryReservationRepository reservationRepository,
             InventoryStockRepository stockRepository,
             InventoryDeductGateway deductGateway,
-            IdempotencyRepository idempotencyRepository) {
+            IdempotencyRepository idempotencyRepository,
+            InventoryDeductRecordRepository deductRecordRepository) {
         this.reservationRepository = reservationRepository;
         this.stockRepository = stockRepository;
         this.deductGateway = deductGateway;
         this.idempotencyRepository = idempotencyRepository;
+        this.deductRecordRepository = deductRecordRepository;
     }
 
     // ======================================================
@@ -69,8 +76,10 @@ public class InventoryReservationDomainService {
      * Reserve inventory for all items in the command.
      * <p>
      * On success, all items get PRE_DEDUCTED reservations.
-     * On any single failure, all already-admitted items are rolled back (all-or-nothing).
-     * Redis admission is done first; DB reservation is written inside a transaction.
+     * On any single failure, all already-admitted items are rolled back
+     * (all-or-nothing).
+     * Redis admission is done first; DB reservation is written inside a
+     * transaction.
      */
     @Transactional
     public ReservationResult reserve(InventoryReserveCommand command) {
@@ -78,8 +87,13 @@ public class InventoryReservationDomainService {
         Optional<String> cachedResult = idempotencyRepository.getDeductOrderId(command.getIdempotencyKey());
         if (cachedResult.isPresent()) {
             log.info("Reserve idempotent hit: idempotencyKey={}", command.getIdempotencyKey());
-            // Return ok - caller can re-query refs if needed; this is a best-effort replay
-            return ReservationResult.ok(List.of(), InventoryReservationStatus.PRE_DEDUCTED);
+            List<ReservationRef> replayedRefs = reservationRepository.findByOperationId(command.getIdempotencyKey());
+            if (replayedRefs == null || replayedRefs.isEmpty()) {
+                log.error("Reserve idempotent hit missing reservation refs: idempotencyKey={}",
+                        command.getIdempotencyKey());
+                return ReservationResult.fail("IDEMPOTENT_REPLAY_MISSING_REFS");
+            }
+            return ReservationResult.ok(replayedRefs, InventoryReservationStatus.PRE_DEDUCTED);
         }
 
         // Validate: no duplicate (shopId, skuId) within a single command
@@ -87,7 +101,7 @@ public class InventoryReservationDomainService {
         for (InventoryReserveCommand.Item item : command.getItems()) {
             String key = item.getShopId() + ":" + item.getSkuId();
             if (!seen.add(key)) {
-                return ReservationResult.fail("DUPLICATE_SKU: " + item.getSkuId());
+                return ReservationResult.fail(List.of(item.getSkuId()), "DUPLICATE_SKU: " + item.getSkuId());
             }
         }
 
@@ -106,7 +120,7 @@ public class InventoryReservationDomainService {
             if (occupyId.isEmpty()) {
                 // Rollback all already-admitted items
                 rollbackRedisAll(redisSuccessForRollback);
-                return ReservationResult.fail("STOCK_LACK: " + item.getSkuId());
+                return ReservationResult.fail(List.of(item.getSkuId()), "STOCK_LACK: " + item.getSkuId());
             }
 
             String reservationId = occupyId.get(); // occupyId IS the reservationId
@@ -128,7 +142,9 @@ public class InventoryReservationDomainService {
                 deductGateway.rollback(item.getShopId(), item.getSkuId(), reservationId);
                 // Rollback previously succeeded items
                 rollbackRedisAll(redisSuccessForRollback);
-                return ReservationResult.fail("DB_WRITE_FAILED: " + e.getMessage());
+                // Throw to trigger @Transactional rollback for all previously saved
+                // reservations (all-or-nothing)
+                throw new IllegalStateException("DB_WRITE_FAILED for reservationId=" + reservationId, e);
             }
 
             redisSuccessForRollback.add(OccupyPair.builder()
@@ -154,8 +170,10 @@ public class InventoryReservationDomainService {
     /**
      * Confirm reservations on payment success.
      * <p>
-     * All occupyPairs in the command must transition PRE_DEDUCTED → CONFIRMED atomically.
-     * If any reservation is already in a terminal state that conflicts (RELEASED/EXPIRED),
+     * All occupyPairs in the command must transition PRE_DEDUCTED → CONFIRMED
+     * atomically.
+     * If any reservation is already in a terminal state that conflicts
+     * (RELEASED/EXPIRED),
      * the entire confirm is rejected with a deterministic conflict result.
      * <p>
      * Idempotency key must be derived from paymentId.
@@ -165,32 +183,60 @@ public class InventoryReservationDomainService {
         // Idempotency check
         if (idempotencyRepository.exists(command.getIdempotencyKey())) {
             log.info("Confirm idempotent hit: idempotencyKey={}", command.getIdempotencyKey());
-            return ReservationResult.ok(List.of(), InventoryReservationStatus.CONFIRMED);
+            // Replay original confirmed refs from DB-authoritative records (per Bug-Fix-7
+            // SEVERE-3).
+            // Must NOT use command payload shopId/skuId to prevent tampering.
+            List<ReservationRef> replayedRefs = new ArrayList<>();
+            for (OccupyPair pair : command.getOccupyPairs()) {
+                String reservationId = pair.getOccupyId();
+                Optional<ReservationRef> refOpt = reservationRepository.findByReservationIdForUpdate(reservationId);
+                if (refOpt.isEmpty()) {
+                    log.error(
+                            "Confirm idempotent hit: reservation not found in DB: reservationId={}, idempotencyKey={} — SYSTEM_INCONSISTENCY",
+                            reservationId, command.getIdempotencyKey());
+                    throw new IllegalStateException(
+                            "RESERVATION_NOT_FOUND during idempotent replay: " + reservationId
+                                    + " — system inconsistency");
+                }
+                ReservationRef ref = refOpt.get();
+                InventoryReservationStatus currentStatus = InventoryReservationStatus.fromCode(ref.getStatus());
+                if (currentStatus != InventoryReservationStatus.CONFIRMED) {
+                    log.error(
+                            "Confirm idempotent hit: reservation not in CONFIRMED state: reservationId={}, status={}, idempotencyKey={} — SYSTEM_INCONSISTENCY",
+                            reservationId, currentStatus, command.getIdempotencyKey());
+                    throw new IllegalStateException(
+                            "RESERVATION_NOT_CONFIRMED during idempotent replay: " + reservationId + ", status="
+                                    + currentStatus + " — system inconsistency");
+                }
+                replayedRefs.add(ReservationRef.builder()
+                        .shopId(ref.getShopId())
+                        .skuId(ref.getSkuId())
+                        .reservationId(reservationId)
+                        .build());
+            }
+            return ReservationResult.ok(replayedRefs, InventoryReservationStatus.CONFIRMED);
         }
 
         List<String> conflictIds = new ArrayList<>();
-        List<ReservationRef> confirmedRefs = new ArrayList<>();
 
+        // Pass 1: read-only pre-check — classify statuses; throw on NOT_FOUND (system
+        // error).
+        // Does NOT populate confirmedRefs to avoid using untrusted command payload
+        // shopId/skuId.
         for (OccupyPair pair : command.getOccupyPairs()) {
             String reservationId = pair.getOccupyId();
             Optional<String> statusOpt = reservationRepository.findStatusByReservationId(reservationId);
 
             if (statusOpt.isEmpty()) {
-                log.error("Reservation not found during confirm: reservationId={}, tradeId={}",
+                log.error(
+                        "Reservation not found during confirm: reservationId={}, tradeId={} — SYSTEM_INCONSISTENCY, manual intervention required",
                         reservationId, command.getTradeId());
-                conflictIds.add(reservationId);
-                continue;
+                throw new IllegalStateException(
+                        "RESERVATION_NOT_FOUND: " + reservationId
+                                + " — system inconsistency, manual intervention required");
             }
 
-            InventoryReservationStatus currentStatus =
-                    InventoryReservationStatus.fromCode(statusOpt.get());
-
-            if (currentStatus == InventoryReservationStatus.CONFIRMED) {
-                // Idempotent success
-                confirmedRefs.add(ReservationRef.builder()
-                        .shopId(pair.getShopId()).skuId(pair.getSkuId()).reservationId(reservationId).build());
-                continue;
-            }
+            InventoryReservationStatus currentStatus = InventoryReservationStatus.fromCode(statusOpt.get());
 
             if (currentStatus == InventoryReservationStatus.RELEASED
                     || currentStatus == InventoryReservationStatus.EXPIRED) {
@@ -198,34 +244,60 @@ public class InventoryReservationDomainService {
                 log.warn("Confirm conflict: reservationId={} is in terminal state {}", reservationId, currentStatus);
                 conflictIds.add(reservationId);
             }
+            // CONFIRMED and PRE_DEDUCTED items proceed to pass 2
         }
 
-        // If any conflicts found, abort the entire confirm
+        // If any conflicts found in pre-check, abort the entire confirm
         if (!conflictIds.isEmpty()) {
             return ReservationResult.conflict(conflictIds, "RESERVATION_CONFLICT");
         }
 
-        // All items are either PRE_DEDUCTED or already CONFIRMED — perform transitions
-        // Re-fetch with row lock for items that need PRE_DEDUCTED → CONFIRMED
+        // Pass 2a: SELECT FOR UPDATE — acquire ALL row locks before performing any
+        // writes.
+        // Locking all items first prevents partial commits if a race conflict is
+        // detected mid-batch.
+        // All refs are built exclusively from locked DB records (not command payload —
+        // tamper prevention).
+        // (per failure-arbitration.md §4; prohibits optimistic CAS for expire/confirm
+        // race).
+        List<ReservationRef> allLockedRefs = new ArrayList<>(command.getOccupyPairs().size());
+        List<String> raceConflictIds = new ArrayList<>();
         for (OccupyPair pair : command.getOccupyPairs()) {
             String reservationId = pair.getOccupyId();
-            // Re-check under lock
-            InventoryReservationStatus currentStatus =
-                    InventoryReservationStatus.fromCode(
-                            reservationRepository.findStatusByReservationId(reservationId)
-                                    .orElseThrow(() -> new IllegalStateException(
-                                            "Reservation disappeared: " + reservationId)));
+            ReservationRef lockedRef = reservationRepository.findByReservationIdForUpdate(reservationId)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "RESERVATION_NOT_FOUND under lock: " + reservationId + " — system inconsistency"));
+            InventoryReservationStatus currentStatus = InventoryReservationStatus.fromCode(lockedRef.getStatus());
+            if (currentStatus == InventoryReservationStatus.RELEASED
+                    || currentStatus == InventoryReservationStatus.EXPIRED) {
+                // Raced into terminal conflict between pre-check and lock acquisition
+                log.warn("Confirm conflict race: reservationId={} transitioned to {} between pre-check and lock",
+                        reservationId, currentStatus);
+                raceConflictIds.add(reservationId);
+            }
+            allLockedRefs.add(lockedRef);
+        }
+
+        // If any race conflicts found, return conflict — no writes have been performed,
+        // safe to return normally.
+        if (!raceConflictIds.isEmpty()) {
+            return ReservationResult.conflict(raceConflictIds, "RESERVATION_CONFLICT_RACE");
+        }
+
+        // Pass 2b: all items confirmed safe (CONFIRMED or PRE_DEDUCTED under lock) —
+        // perform transitions.
+        List<ReservationRef> confirmedRefs = new ArrayList<>();
+        for (int i = 0; i < command.getOccupyPairs().size(); i++) {
+            ReservationRef lockedRef = allLockedRefs.get(i);
+            String reservationId = lockedRef.getReservationId();
+            InventoryReservationStatus currentStatus = InventoryReservationStatus.fromCode(lockedRef.getStatus());
 
             if (currentStatus == InventoryReservationStatus.CONFIRMED) {
+                // Idempotent — ref built from authoritative DB record (not command payload)
                 confirmedRefs.add(ReservationRef.builder()
-                        .shopId(pair.getShopId()).skuId(pair.getSkuId()).reservationId(reservationId).build());
+                        .shopId(lockedRef.getShopId()).skuId(lockedRef.getSkuId()).reservationId(reservationId)
+                        .build());
                 continue;
-            }
-
-            if (currentStatus != InventoryReservationStatus.PRE_DEDUCTED) {
-                // Raced into terminal state between pre-check and lock acquisition
-                return ReservationResult.conflict(List.of(reservationId),
-                        "RESERVATION_CONFLICT_RACE: " + reservationId);
             }
 
             // Transition PRE_DEDUCTED → CONFIRMED
@@ -237,19 +309,20 @@ public class InventoryReservationDomainService {
                     null);
 
             if (!updated) {
-                return ReservationResult.conflict(List.of(reservationId),
-                        "CAS_FAILED: " + reservationId);
+                // CAS failed — rollback entire batch via transaction rollback
+                throw new IllegalStateException("CAS_FAILED_CONFIRM: " + reservationId);
             }
 
-            // Deduct from authoritative stock ledger (within same transaction)
-            // We need quantity — retrieve from reservation entity via repository
-            // For now: quantity is passed implicitly through the command item
-            // NOTE: stock deduction is done here to keep it in the same transaction
-            // The actual quantity must come from the reservation record itself (not the command)
-            // to avoid command-payload tampering.  The repository implementation must do this.
+            // Both quantity and shopId/skuId come from the locked DB record (not command
+            // payload — tamper prevention).
+            Integer quantity = lockedRef.getQuantity();
+            if (quantity == null || quantity <= 0) {
+                throw new IllegalStateException("Invalid quantity in locked reservation: " + reservationId);
+            }
+            stockRepository.deductConfirmed(lockedRef.getShopId(), lockedRef.getSkuId(), quantity);
 
             confirmedRefs.add(ReservationRef.builder()
-                    .shopId(pair.getShopId()).skuId(pair.getSkuId()).reservationId(reservationId).build());
+                    .shopId(lockedRef.getShopId()).skuId(lockedRef.getSkuId()).reservationId(reservationId).build());
         }
 
         // Mark idempotency
@@ -278,39 +351,117 @@ public class InventoryReservationDomainService {
     public ReservationResult release(InventoryReleaseCommand command) {
         if (idempotencyRepository.isReleased(command.getIdempotencyKey())) {
             log.info("Release idempotent hit: idempotencyKey={}", command.getIdempotencyKey());
-            return ReservationResult.ok(List.of(), InventoryReservationStatus.RELEASED);
+            // Replay original released refs from DB-authoritative records (per Bug-Fix-10).
+            // Must NOT use command payload shopId/skuId to prevent tampering.
+            List<ReservationRef> replayedRefs = new ArrayList<>();
+            for (OccupyPair pair : command.getOccupyPairs()) {
+                String reservationId = pair.getOccupyId();
+                Optional<ReservationRef> refOpt = reservationRepository.findByReservationIdForUpdate(reservationId);
+                if (refOpt.isEmpty()) {
+                    log.warn(
+                            "Release idempotent hit: reservation not found in DB: reservationId={}, idempotencyKey={} — treating as already released",
+                            reservationId, command.getIdempotencyKey());
+                    // Treat as already released — return ref from command payload (best-effort)
+                    replayedRefs.add(ReservationRef.builder()
+                            .shopId(pair.getShopId())
+                            .skuId(pair.getSkuId())
+                            .reservationId(reservationId)
+                            .build());
+                    continue;
+                }
+                ReservationRef ref = refOpt.get();
+                InventoryReservationStatus currentStatus = InventoryReservationStatus.fromCode(ref.getStatus());
+                if (currentStatus != InventoryReservationStatus.RELEASED
+                        && currentStatus != InventoryReservationStatus.EXPIRED) {
+                    log.error(
+                            "Release idempotent hit: reservation not in RELEASED/EXPIRED state: reservationId={}, status={}, idempotencyKey={} — SYSTEM_INCONSISTENCY",
+                            reservationId, currentStatus, command.getIdempotencyKey());
+                    throw new IllegalStateException(
+                            "RESERVATION_NOT_RELEASED during idempotent replay: " + reservationId + ", status="
+                                    + currentStatus + " — system inconsistency");
+                }
+                replayedRefs.add(ReservationRef.builder()
+                        .shopId(ref.getShopId())
+                        .skuId(ref.getSkuId())
+                        .reservationId(reservationId)
+                        .build());
+            }
+            return ReservationResult.ok(replayedRefs, InventoryReservationStatus.RELEASED);
         }
 
-        List<String> conflictIds = new ArrayList<>();
-        List<ReservationRef> releasedRefs = new ArrayList<>();
-
+        // Pass 1: pre-check for CONFIRMED conflicts — no writes, guarantees atomicity
+        // of write pass
         for (OccupyPair pair : command.getOccupyPairs()) {
             String reservationId = pair.getOccupyId();
             Optional<String> statusOpt = reservationRepository.findStatusByReservationId(reservationId);
+            if (statusOpt.isPresent()) {
+                InventoryReservationStatus status = InventoryReservationStatus.fromCode(statusOpt.get());
+                if (status == InventoryReservationStatus.CONFIRMED) {
+                    log.warn("Release rejected: reservationId={} is CONFIRMED (must use refund path)", reservationId);
+                    return ReservationResult.conflict(List.of(reservationId), "RELEASE_CONFLICT_CONFIRMED");
+                }
+            }
+        }
 
-            if (statusOpt.isEmpty()) {
+        // Pass 2a: SELECT FOR UPDATE — acquire ALL row locks before performing any
+        // writes.
+        // Locking all items first prevents partial commits if a CONFIRMED race is
+        // detected mid-batch.
+        // (per failure-arbitration.md §4; prohibits optimistic CAS for concurrent
+        // release/expire).
+        List<ReservationRef> lockedRefs = new ArrayList<>(command.getOccupyPairs().size());
+        List<Boolean> notFoundFlags = new ArrayList<>(command.getOccupyPairs().size());
+        List<String> raceConflictIds = new ArrayList<>();
+        for (OccupyPair pair : command.getOccupyPairs()) {
+            String reservationId = pair.getOccupyId();
+            Optional<ReservationRef> lockedRefOpt = reservationRepository.findByReservationIdForUpdate(reservationId);
+            if (lockedRefOpt.isEmpty()) {
+                lockedRefs.add(null);
+                notFoundFlags.add(true);
+                continue;
+            }
+            ReservationRef lockedRef = lockedRefOpt.get();
+            InventoryReservationStatus currentStatus = InventoryReservationStatus.fromCode(lockedRef.getStatus());
+            if (currentStatus == InventoryReservationStatus.CONFIRMED) {
+                // Raced into CONFIRMED between pre-check and lock acquisition
+                log.warn("Release conflict race: reservationId={} is CONFIRMED under lock (must use refund path)",
+                        reservationId);
+                raceConflictIds.add(reservationId);
+            }
+            lockedRefs.add(lockedRef);
+            notFoundFlags.add(false);
+        }
+
+        // If any race conflicts found, return conflict — no writes have been performed,
+        // safe to return normally.
+        if (!raceConflictIds.isEmpty()) {
+            return ReservationResult.conflict(raceConflictIds, "RELEASE_CONFLICT_CONFIRMED_RACE");
+        }
+
+        // Pass 2b: all items confirmed safe to release — perform transitions.
+        List<ReservationRef> releasedRefs = new ArrayList<>();
+        List<OccupyPair> redisRollbackPairs = new ArrayList<>();
+        for (int i = 0; i < command.getOccupyPairs().size(); i++) {
+            OccupyPair pair = command.getOccupyPairs().get(i);
+            String reservationId = pair.getOccupyId();
+            ReservationRef lockedRef = lockedRefs.get(i);
+
+            if (lockedRef == null) {
                 log.warn("Reservation not found during release (treating as already released): reservationId={}",
                         reservationId);
-                // Treat as idempotent success to avoid blocking cancellation
                 releasedRefs.add(ReservationRef.builder()
                         .shopId(pair.getShopId()).skuId(pair.getSkuId()).reservationId(reservationId).build());
                 continue;
             }
 
-            InventoryReservationStatus currentStatus =
-                    InventoryReservationStatus.fromCode(statusOpt.get());
-
-            if (currentStatus == InventoryReservationStatus.CONFIRMED) {
-                log.warn("Release rejected: reservationId={} is CONFIRMED (must use refund path)", reservationId);
-                conflictIds.add(reservationId);
-                continue;
-            }
+            InventoryReservationStatus currentStatus = InventoryReservationStatus.fromCode(lockedRef.getStatus());
 
             if (currentStatus == InventoryReservationStatus.RELEASED
                     || currentStatus == InventoryReservationStatus.EXPIRED) {
                 // Idempotent
                 releasedRefs.add(ReservationRef.builder()
-                        .shopId(pair.getShopId()).skuId(pair.getSkuId()).reservationId(reservationId).build());
+                        .shopId(lockedRef.getShopId()).skuId(lockedRef.getSkuId()).reservationId(reservationId)
+                        .build());
                 continue;
             }
 
@@ -323,26 +474,42 @@ public class InventoryReservationDomainService {
                     command.getReason());
 
             if (!updated) {
-                // CAS failed — state may have changed; treat as conflict
-                conflictIds.add(reservationId);
-                continue;
-            }
-
-            // Restore Redis admission count (best-effort)
-            boolean redisOk = deductGateway.rollback(pair.getShopId(), pair.getSkuId(), reservationId);
-            if (!redisOk) {
-                log.error("Redis admission restore failed after DB RELEASED — alert required: " +
-                        "shopId={}, skuId={}, reservationId={}", pair.getShopId(), pair.getSkuId(), reservationId);
-                // DB state is already terminal (RELEASED) — do NOT revert DB
-                // Compensation task must re-sync Redis
+                // CAS failed — rollback entire batch via transaction rollback
+                throw new IllegalStateException("CAS_FAILED_DURING_RELEASE: " + reservationId);
             }
 
             releasedRefs.add(ReservationRef.builder()
-                    .shopId(pair.getShopId()).skuId(pair.getSkuId()).reservationId(reservationId).build());
+                    .shopId(lockedRef.getShopId()).skuId(lockedRef.getSkuId()).reservationId(reservationId).build());
+            // Use authoritative shopId/skuId from locked record (not command payload —
+            // tamper prevention)
+            redisRollbackPairs.add(OccupyPair.builder()
+                    .shopId(lockedRef.getShopId()).skuId(lockedRef.getSkuId()).occupyId(reservationId).build());
         }
 
-        if (!conflictIds.isEmpty()) {
-            return ReservationResult.conflict(conflictIds, "RELEASE_CONFLICT_CONFIRMED");
+        // Pass 3: Redis rollbacks — best-effort; exceptions must NOT trigger
+        // @Transactional rollback.
+        // DB terminal state RELEASED is already written; failure-arbitration.md §2
+        // principle 1.
+        // principle 3: all Redis compensation failures must write
+        // inventory_deduct_record execution log.
+        for (OccupyPair pair : redisRollbackPairs) {
+            try {
+                boolean redisOk = deductGateway.rollback(pair.getShopId(), pair.getSkuId(), pair.getOccupyId());
+                if (!redisOk) {
+                    log.error("Redis admission restore failed after DB RELEASED — alert required: " +
+                            "shopId={}, skuId={}, reservationId={}", pair.getShopId(), pair.getSkuId(),
+                            pair.getOccupyId());
+                    writeRedisRollbackFailedLog(pair.getOccupyId(), pair.getShopId(), pair.getSkuId(),
+                            "REDIS_ROLLBACK_FAILED_AFTER_RELEASED");
+                }
+            } catch (Exception e) {
+                log.error("Redis rollback threw exception after DB RELEASED — alert required: " +
+                        "shopId={}, skuId={}, reservationId={}", pair.getShopId(), pair.getSkuId(), pair.getOccupyId(),
+                        e);
+                writeRedisRollbackFailedLog(pair.getOccupyId(), pair.getShopId(), pair.getSkuId(),
+                        "REDIS_ROLLBACK_EXCEPTION_AFTER_RELEASED: " + e.getMessage());
+                // DB state is terminal (RELEASED) — catch to prevent @Transactional rollback
+            }
         }
 
         // Mark idempotency
@@ -393,15 +560,22 @@ public class InventoryReservationDomainService {
             return 0;
         }
 
-        InventoryReservationStatus currentStatus =
-                InventoryReservationStatus.fromCode(statusOpt.get());
+        InventoryReservationStatus currentStatus = InventoryReservationStatus.fromCode(statusOpt.get());
 
         if (currentStatus != InventoryReservationStatus.PRE_DEDUCTED) {
             // Already transitioned (e.g., confirmed or released concurrently) — skip
             return 0;
         }
 
-        // Transition PRE_DEDUCTED → EXPIRED with row lock
+        // Acquire row lock and retrieve shopId/skuId needed for Redis rollback after
+        // expiry
+        Optional<ReservationRef> refOpt = reservationRepository.findByReservationIdForUpdate(reservationId);
+        if (refOpt.isEmpty()) {
+            return 0;
+        }
+        ReservationRef ref = refOpt.get();
+
+        // Transition PRE_DEDUCTED → EXPIRED (CAS under lock)
         boolean updated = reservationRepository.transitionStatus(
                 reservationId,
                 InventoryReservationStatus.PRE_DEDUCTED,
@@ -415,20 +589,41 @@ public class InventoryReservationDomainService {
             return 0;
         }
 
-        // Restore Redis admission count (best-effort)
-        // We need shopId/skuId/occupyId — these must come from the reservation entity
-        // The reservationId itself is the occupyId; shopId/skuId must be fetched
-        // This is handled by the repository implementation which has full entity access
-        log.info("Expired reservation: reservationId={}", reservationId);
-        // NOTE: Redis restoration is delegated to the JPA adapter implementation
-        // because it has access to the full entity (shopId, skuId) needed for the Redis key
+        // Restore Redis admission count (best-effort — DB state is terminal;
+        // failure-arbitration.md §2)
+        // principle 3: all Redis compensation failures must write
+        // inventory_deduct_record execution log.
+        try {
+            boolean redisOk = deductGateway.rollback(ref.getShopId(), ref.getSkuId(), reservationId);
+            if (!redisOk) {
+                log.error("Redis admission restore failed after DB EXPIRED — alert required: " +
+                        "shopId={}, skuId={}, reservationId={}", ref.getShopId(), ref.getSkuId(), reservationId);
+                writeRedisRollbackFailedLog(reservationId, ref.getShopId(), ref.getSkuId(),
+                        "REDIS_ROLLBACK_FAILED_AFTER_EXPIRED");
+            }
+        } catch (Exception e) {
+            log.error("Redis rollback threw exception after DB EXPIRED — alert required: " +
+                    "shopId={}, skuId={}, reservationId={}", ref.getShopId(), ref.getSkuId(), reservationId, e);
+            writeRedisRollbackFailedLog(reservationId, ref.getShopId(), ref.getSkuId(),
+                    "REDIS_ROLLBACK_EXCEPTION_AFTER_EXPIRED: " + e.getMessage());
+            // DB state is terminal (EXPIRED) — catch to prevent propagation
+        }
 
+        log.info("Expired reservation: reservationId={}", reservationId);
         return 1;
     }
 
     // ======================================================
     // Private helpers
     // ======================================================
+
+    private void writeRedisRollbackFailedLog(String reservationId, String shopId, String skuId, String reason) {
+        try {
+            deductRecordRepository.saveRedisRollbackFailed(reservationId, shopId, skuId, reason);
+        } catch (Exception ex) {
+            log.error("Failed to persist Redis rollback failure log: reservationId={}", reservationId, ex);
+        }
+    }
 
     private void rollbackRedisAll(List<OccupyPair> pairs) {
         for (OccupyPair pair : pairs) {
