@@ -21,8 +21,8 @@ import org.slf4j.LoggerFactory;
  * 断言（强，基于DB）：
  * - tinystore_order.trade 表中 trade_id = ? 的记录数 = 1
  * - tinystore_order.shop_order 表中 trade_id = ? 的记录数 = 1
- * - tinystore_inventory.inventory_reservation 表中 trade_id = ? AND status='RESERVED' 的记录数 = 1
- * - tinystore_inventory.inventory_stock 表中 reserved_quantity = 1（单SKU场景）
+ * - tinystore_inventory.inventory_reservation 表中 trade_id = ? AND status='PRE_DEDUCTED' 的记录数 = 1
+ * - reserve-only 创建链路不会直接改写 authoritative stock ledger（total_quantity / reserved_quantity 不变）
  * 
  * 断言（弱，基于HTTP）：
  * - 不允许出现5xx
@@ -68,6 +68,10 @@ class OrderCreateIdempotencyConsistencyIT {
         String tradeId = "perf-idempotency-" + UUID.randomUUID();
         String idempotencyKey = "idem-" + tradeId;
         String buyerId = "buyer-perf-" + System.currentTimeMillis();
+
+        PostgresClient.InventoryStock initialStock = pgClient.getInventoryStock("SHOP_A", "SKU_A");
+        log.info("Initial inventory_stock: total={}, reserved={}",
+            initialStock.totalQuantity, initialStock.reservedQuantity);
 
         // Given: 请求体（购买SHOP_A/SKU_A，数量1）
         Map<String, Object> requestBody = buildCreateTradeRequest(tradeId, buyerId);
@@ -137,14 +141,18 @@ class OrderCreateIdempotencyConsistencyIT {
         log.info("DB shop_order count for tradeId={}: {}", tradeId, shopOrderCount);
         assertThat(shopOrderCount).as("Only 1 shop_order record should exist").isEqualTo(1);
 
-        long reservationCount = pgClient.countReservationsByTradeId(tradeId, "RESERVED");
-        log.info("DB reservation count (RESERVED) for tradeId={}: {}", tradeId, reservationCount);
-        assertThat(reservationCount).as("Only 1 inventory reservation should exist in RESERVED status").isEqualTo(1);
+        long reservationCount = pgClient.countReservationsByTradeId(tradeId, "PRE_DEDUCTED");
+        log.info("DB reservation count (PRE_DEDUCTED) for tradeId={}: {}", tradeId, reservationCount);
+        assertThat(reservationCount).as("Only 1 inventory reservation should exist in PRE_DEDUCTED status").isEqualTo(1);
 
-        PostgresClient.InventoryStock stock = pgClient.getInventoryStock("SHOP_A", "SKU_A");
-        log.info("DB inventory_stock: total={}, reserved={}", stock.totalQuantity, stock.reservedQuantity);
-        assertThat(stock.reservedQuantity).as("Exact 1 unit should be reserved").isEqualTo(1);
-        assertThat(stock.reservedQuantity).as("Reserved quantity must not exceed total").isLessThanOrEqualTo(stock.totalQuantity);
+        PostgresClient.InventoryStock finalStock = pgClient.getInventoryStock("SHOP_A", "SKU_A");
+        log.info("Final inventory_stock: total={}, reserved={}", finalStock.totalQuantity, finalStock.reservedQuantity);
+        assertThat(finalStock.totalQuantity)
+            .as("Reserve-only create flow must not deduct authoritative total_quantity before confirm")
+            .isEqualTo(initialStock.totalQuantity);
+        assertThat(finalStock.reservedQuantity)
+            .as("Canonical reservation flow must not rely on reserved_quantity projection during reserve")
+            .isEqualTo(initialStock.reservedQuantity);
     }
 
     private Map<String, Object> buildCreateTradeRequest(String tradeId, String buyerId) {

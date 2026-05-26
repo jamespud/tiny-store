@@ -32,12 +32,30 @@ public class JpaInventoryReservationRepositoryAdapter implements InventoryReserv
                         .shopId(e.getShopId())
                         .skuId(e.getSkuId())
                         .reservationId(e.getReservationId())
+                        .status(e.getStatus())
+                        .quantity((int) e.getQuantity())
                         .build());
     }
 
     @Override
     public Optional<String> findStatusByReservationId(String reservationId) {
         return jpaRepo.findStatusByReservationId(reservationId);
+    }
+
+    @Override
+    public Optional<Integer> findQuantityByReservationId(String reservationId) {
+        return jpaRepo.findQuantityByReservationId(reservationId);
+    }
+
+    @Override
+    public List<ReservationRef> findByOperationId(String operationId) {
+        return jpaRepo.findByOperationId(operationId).stream()
+                .map(e -> ReservationRef.builder()
+                        .shopId(e.getShopId())
+                        .skuId(e.getSkuId())
+                        .reservationId(e.getReservationId())
+                        .build())
+                .toList();
     }
 
     @Override

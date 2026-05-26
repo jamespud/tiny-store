@@ -6,6 +6,7 @@ import com.github.spud.tinystore.order.application.command.PaymentSucceededComma
 import com.github.spud.tinystore.order.application.service.TradeApplicationService;
 import com.github.spud.tinystore.order.application.service.PaymentApplicationService;
 import com.github.spud.tinystore.order.application.query.TradeQueryService;
+import com.github.spud.tinystore.order.domain.exception.DomainConflictException;
 import com.github.spud.tinystore.order.domain.exception.IdempotencyServiceUnavailableException;
 import com.github.spud.tinystore.order.interfaces.dto.request.*;
 import com.github.spud.tinystore.order.interfaces.dto.response.*;
@@ -135,10 +136,12 @@ public class TradeController {
 
             return ResponseEntity.ok(OrderHttpResponse.ok("Trade cancelled"));
 
+        } catch (DomainConflictException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Cancel trade failed: tradeId={}", tradeId, e);
             return ResponseEntity.status(500).body(
-                OrderHttpResponse.fail(500, "Cancel trade failed: " + e.getMessage()));
+                OrderHttpResponse.fail(500, "Cancel trade failed"));
         }
     }
 
@@ -163,10 +166,17 @@ public class TradeController {
 
             return ResponseEntity.ok(OrderHttpResponse.ok("Payment callback processed"));
 
+        } catch (DomainConflictException e) {
+            if ("INVENTORY_CONFIRM_CONFLICT".equals(e.getErrorCode())) {
+                log.warn("Payment callback inventory confirm conflict: tradeId={}", tradeId, e);
+                return ResponseEntity.status(409).body(
+                    OrderHttpResponse.fail(409, e.getMessage()));
+            }
+            throw e;
         } catch (Exception e) {
             log.error("Payment callback failed: tradeId={}", tradeId, e);
             return ResponseEntity.status(500).body(
-                OrderHttpResponse.fail(500, "Payment callback failed: " + e.getMessage()));
+                OrderHttpResponse.fail(500, "Payment callback failed"));
         }
     }
 

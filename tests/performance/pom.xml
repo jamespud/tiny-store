@@ -70,6 +70,10 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
           <skipTests>${skipPerfTests}</skipTests>
+          <includes>
+            <include>**/*IT.java</include>
+          </includes>
+          <failIfNoTests>true</failIfNoTests>
           <systemPropertyVariables>
             <gateway.base.url>${gateway.base.url}</gateway.base.url>
             <perf.concurrency>${perf.concurrency}</perf.concurrency>

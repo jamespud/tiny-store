@@ -28,6 +28,9 @@ public class ReservationResult {
     @Builder.Default
     private List<String> conflictReservationIds = Collections.emptyList();
 
+    @Builder.Default
+    private List<String> lackSkuIds = Collections.emptyList();
+
     public static ReservationResult ok(List<ReservationRef> refs, InventoryReservationStatus status) {
         return ReservationResult.builder()
                 .success(true)
@@ -45,10 +48,15 @@ public class ReservationResult {
                 .build();
     }
 
-    public static ReservationResult fail(String message) {
+    public static ReservationResult fail(List<String> lackSkuIds, String message) {
         return ReservationResult.builder()
                 .success(false)
                 .message(message)
+                .lackSkuIds(lackSkuIds != null ? lackSkuIds : Collections.emptyList())
                 .build();
+    }
+
+    public static ReservationResult fail(String message) {
+        return fail(Collections.emptyList(), message);
     }
 }

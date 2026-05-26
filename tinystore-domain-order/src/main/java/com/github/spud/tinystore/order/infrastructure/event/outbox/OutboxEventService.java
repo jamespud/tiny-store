@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -35,6 +36,15 @@ public class OutboxEventService {
      * @return 保存成功返回 true
      */
     public boolean saveEvent(OrderDomainEvent event) {
+        return doSaveEvent(event);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean saveEventInNewTransaction(OrderDomainEvent event) {
+        return doSaveEvent(event);
+    }
+
+    private boolean doSaveEvent(OrderDomainEvent event) {
         try {
             if (event.getEventId() == null) {
                 event.setEventId(UUID.randomUUID().toString());

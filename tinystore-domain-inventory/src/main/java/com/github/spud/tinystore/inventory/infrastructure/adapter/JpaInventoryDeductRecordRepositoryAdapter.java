@@ -58,4 +58,19 @@ public class JpaInventoryDeductRecordRepositoryAdapter implements InventoryDeduc
             }
         }
     }
+
+    @Override
+    @Transactional
+    public void saveRedisRollbackFailed(String reservationId, String shopId, String skuId, String reason) {
+        InventoryDeductRecordEntity entity = new InventoryDeductRecordEntity()
+                .setOrderId(reservationId)
+                .setIdempotencyKey("redis-rollback-failed:" + reservationId)
+                .setShopId(shopId)
+                .setSkuId(skuId)
+                .setOccupyId(reservationId)
+                .setQuantity(0)
+                .setStatus("ROLLBACK_FAILED")
+                .setReleaseReason(reason);
+        jpaRepo.save(entity);
+    }
 }

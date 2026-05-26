@@ -18,7 +18,8 @@ import java.util.List;
 /**
  * 库存扣减应用服务（Compatibility Façade）
  * <p>
- * 当 inventory.reservation.canonical-enabled=true 时，此服务委派给 InventoryReservationAppService。
+ * 当 inventory.reservation.canonical-enabled=true 时，此服务委派给
+ * InventoryReservationAppService。
  * 当 flag=false 时，维持原有 InventoryDeductDomainService 行为（legacy V2 deduct 链路）。
  * <p>
  * 对外 contract 不变：/api/inventory/deduct 和 /api/inventory/release
@@ -36,7 +37,7 @@ public class InventoryDeductAppService {
     private boolean canonicalEnabled;
 
     public InventoryDeductAppService(InventoryDeductDomainService legacyDomainService,
-                                     InventoryReservationAppService canonicalService) {
+            InventoryReservationAppService canonicalService) {
         this.legacyDomainService = legacyDomainService;
         this.canonicalService = canonicalService;
     }
@@ -44,6 +45,9 @@ public class InventoryDeductAppService {
     public DeductResponse deduct(String idempotencyKey, DeductRequest request) {
         if (canonicalEnabled) {
             log.debug("deduct: routing to canonical reserve (canonical-enabled=true)");
+            if (request.getTradeId() == null || request.getTradeId().isBlank()) {
+                request.setTradeId(request.getOrderId());
+            }
             return canonicalService.reserve(idempotencyKey, request);
         }
         InventoryDeductCommand command = InventoryDeductCommand.builder()
@@ -92,12 +96,12 @@ public class InventoryDeductAppService {
             List<DeductResponse.OccupyPairDto> pairs = result.getOccupyPairs() == null
                     ? List.of()
                     : result.getOccupyPairs().stream()
-                    .map(p -> DeductResponse.OccupyPairDto.builder()
-                            .shopId(p.getShopId())
-                            .skuId(p.getSkuId())
-                            .occupyId(p.getOccupyId())
-                            .build())
-                    .toList();
+                            .map(p -> DeductResponse.OccupyPairDto.builder()
+                                    .shopId(p.getShopId())
+                                    .skuId(p.getSkuId())
+                                    .occupyId(p.getOccupyId())
+                                    .build())
+                            .toList();
             return DeductResponse.ok(pairs);
         }
         return DeductResponse.fail(result.getLackSkuIds(), result.getMessage());

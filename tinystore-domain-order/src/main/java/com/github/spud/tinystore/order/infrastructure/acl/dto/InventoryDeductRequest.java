@@ -16,6 +16,7 @@ import java.util.List;
 @Builder
 public class InventoryDeductRequest {
     private String orderId;
+    private String tradeId;
     private List<Item> items;
 
     @Data

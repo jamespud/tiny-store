@@ -23,7 +23,8 @@ import java.util.List;
 /**
  * Canonical inventory reservation application service.
  * <p>
- * This is the single canonical orchestration entry point for all reservation lifecycle operations.
+ * This is the single canonical orchestration entry point for all reservation
+ * lifecycle operations.
  * It owns reserve / confirm / release / expireExpiredReservations.
  * <p>
  * InventoryDeductAppService delegates here when canonical-enabled flag is on.
@@ -51,7 +52,7 @@ public class InventoryReservationAppService {
         InventoryReserveCommand command = InventoryReserveCommand.builder()
                 .idempotencyKey(idempotencyKey)
                 .orderId(request.getOrderId())
-                .tradeId(request.getOrderId())   // tradeId is not in DeductRequest; orderId used as fallback
+                .tradeId(request.getTradeId())
                 .traceId(null)
                 .expireAt(OffsetDateTime.now().plusMinutes(defaultExpiryMinutes))
                 .items(request.getItems().stream()
@@ -66,9 +67,13 @@ public class InventoryReservationAppService {
         ReservationResult result = domainService.reserve(command);
 
         if (!result.isSuccess()) {
-            List<String> lackSkus = result.getReservationRefs().stream()
-                    .map(ReservationRef::getSkuId).toList();
-            return DeductResponse.fail(lackSkus, result.getMessage());
+            return DeductResponse.fail(result.getLackSkuIds(), result.getMessage());
+        }
+
+        if (result.getReservationRefs() == null || result.getReservationRefs().isEmpty()) {
+            log.error("Canonical reserve returned success without reservation refs: tradeId={}, orderId={}",
+                    request.getTradeId(), request.getOrderId());
+            return DeductResponse.fail(List.of(), "RESERVATION_REFS_MISSING");
         }
 
         List<DeductResponse.OccupyPairDto> pairs = result.getReservationRefs().stream()
@@ -106,7 +111,8 @@ public class InventoryReservationAppService {
         ReservationResult result = domainService.confirm(command);
 
         if (!result.isSuccess()) {
-            return InventoryConfirmResponse.conflict(result.getConflictReservationIds(), result.getMessage());
+            return InventoryConfirmResponse.conflict(result.getConflictReservationIds(),
+                    result.getMessage());
         }
 
         List<InventoryConfirmResponse.ReservationRefDto> refs = result.getReservationRefs().stream()
