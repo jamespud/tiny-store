@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -113,3 +114,157 @@ This is the most architecturally significant subsystem. Key rules:
 **Adding a new domain endpoint:** Controller in `interfaces/rest/`, request/response DTOs in `interfaces/dto/`, application service in `application/service/`, domain logic in `domain/service/`. Follow the existing pattern of `@Validated` controllers with `Idempotency-Key` header support.
 
 **Working with feature flags:** Add `@Value` or `@ConditionalOnProperty` in the relevant component. Flag names follow `order.inventory.*` or `inventory.*` conventions. Default to `false` for new canonical features, `true` for legacy compatibility.
+=======
+```
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+```
+
+## Project Overview
+
+Tiny Store is a Java 21 + Spring Boot 3 multi-module monorepo e-commerce system demonstrating domain-driven design (DDD), event-driven architecture (EDA), and CQRS/ES patterns.
+
+## Key Technologies
+
+- **Java 17+** with Spring Boot 3.5.0
+- **Spring Cloud 2025.0.0** for microservices architecture
+- **Maven 3.8.x** for build and dependency management
+- **PostgreSQL** for persistence
+- **Kafka** for event streaming
+- **Redis** for caching and idempotency
+- **Testcontainers** + **Jqwik** for testing
+
+## Project Structure
+
+```
+/home/spud/proj/tiny-store/
+├── pom.xml                          # Parent Maven pom with module definitions
+├── tinystore-library-infrastructure/ # Shared infrastructure library
+├── tinystore-domain-auth/           # OAuth2/OIDC authentication service
+├── tinystore-domain-account/        # User account management
+├── tinystore-domain-product/        # Product catalog & SKU management
+├── tinystore-domain-promotion/      # Coupon & promotion management
+├── tinystore-domain-inventory/      # Inventory management
+├── tinystore-domain-order/          # Order management (ES+CQRS)
+├── tinystore-domain-payment/        # Payment management (ES+CQRS)
+├── tinystore-domain-gateway/        # API gateway
+└── README.MD                        # Project documentation
+```
+
+## Build & Development Commands
+
+### Compile Entire Project
+
+```bash
+mvn compile
+```
+
+### Compile with Specific Profile (Core Services Only)
+
+```bash
+mvn compile -P core-mainchain
+```
+
+### Run Tests
+
+```bash
+# Run all tests
+mvn test
+
+# Run tests in specific module
+mvn test -pl tinystore-domain-product
+
+# Run single test class
+mvn test -pl tinystore-domain-product -Dtest=ProductControllerTest
+
+# Run tests with coverage (if configured)
+mvn test -pl tinystore-domain-product jacoco:report
+```
+
+### Build JARs
+
+```bash
+mvn clean package
+
+# Skip tests
+mvn clean package -DskipTests
+```
+
+### Run a Service Locally
+
+```bash
+# Run product service
+cd tinystore-domain-product
+mvn spring-boot:run
+
+# Run with custom properties
+mvn spring-boot:run -Dspring-boot.run.profiles=local
+```
+
+## Domain Architecture
+
+### Core Domains & Key Features
+
+| Domain | Description | Key Features |
+|--------|-------------|--------------|
+| **Product** | Catalog management | Multi-spec SKU, pricing, audit visibility, batch queries |
+| **Order** | Order lifecycle | CQRS/ES, state machine, payment integration |
+| **Payment** | Payment processing | CQRS/ES, payment gateways, refund handling |
+| **Inventory** | Stock management | Reservation, TTL-based release |
+| **Promotion** | Discounts & coupons | Coupon issuance, promotion rules |
+| **Auth** | Authentication | OAuth2/OIDC, phone + OTP login |
+| **Account** | User profiles | User management, addresses |
+
+### Shared Infrastructure (`tinystore-library-infrastructure`)
+
+- Redis idempotency store
+- Kafka event publishing/consuming
+- Security configuration (OAuth2 resource server)
+- RPC clients for inter-service communication
+- Common DTOs and utilities
+
+## Key Design Patterns
+
+### CQRS/Event Sourcing (ES)
+
+Used in Order and Payment domains:
+- Write side: Aggregate roots + domain events
+- Read side: Projections built from event streams
+- Events stored in Kafka and PostgreSQL
+
+### State Machines
+
+Order domain uses Spring State Machine for lifecycle management.
+
+### Outbox Pattern
+
+Ensures reliable event publishing with transactional consistency.
+
+## API Documentation
+
+Springdoc OpenAPI (Swagger) available at:
+- `http://localhost:<port>/swagger-ui.html`
+- `http://localhost:<port>/v3/api-docs`
+
+## Testing Strategy
+
+- **Unit Tests**: JUnit 5 + AssertJ
+- **Property-based Tests**: Jqwik
+- **Integration Tests**: Testcontainers
+- **Contract Tests**: Spring Cloud Contract
+
+## Local Development
+
+### Prerequisites
+
+- Docker & Docker Compose
+- Java 17+
+- Maven 3.8.x
+
+### Local Setup
+
+1. Start infrastructure (PostgreSQL, Kafka, Redis) using Docker Compose
+2. Run each service using `mvn spring-boot:run`
+3. Access APIs via gateway or direct service endpoints
+>>>>>>> Stashed changes
