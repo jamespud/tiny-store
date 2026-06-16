@@ -40,13 +40,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 class OutboxCleanupSchedulerIT {
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17")
         .withDatabaseName("testdb")
         .withUsername("test")
         .withPassword("test");
 
     @Container
-    static GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine")
+    static GenericContainer<?> redis = new GenericContainer<>("redis:7.4.0")
         .withExposedPorts(6379);
 
     @DynamicPropertySource

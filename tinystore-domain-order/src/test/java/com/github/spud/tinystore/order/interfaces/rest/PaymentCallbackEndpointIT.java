@@ -102,8 +102,8 @@ class PaymentCallbackEndpointIT extends AbstractSpringBootOrderIT {
 
     @Test
     @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades/{tradeId}/pay/callback")
-    @DisplayName("POST /api/order/trades/{tradeId}/pay/callback - missing paymentIntentId returns 500")
-    void paymentCallback_missingPaymentIntentId_returns500() {
+    @DisplayName("POST /api/order/trades/{tradeId}/pay/callback - missing paymentIntentId returns 409")
+    void paymentCallback_missingPaymentIntentId_returns409() {
         // Given: trade exists
         TradeEntity trade = TradeEntity.builder()
             .tradeId("trade-pay-2")
@@ -135,7 +135,7 @@ class PaymentCallbackEndpointIT extends AbstractSpringBootOrderIT {
             String.class
         );
 
-        // Then: returns 500
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        // Then: returns 409
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     }
 }
