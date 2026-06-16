@@ -71,7 +71,7 @@ public class CheckoutAppService {
                               JpaFullReductionCampaignRepository fullReductionCampaignRepository,
                               JpaSeckillPriceRuleRepository seckillPriceRuleRepository,
                               JpaShippingRuleRepository shippingRuleRepository,
-                              @Value("${promotion.checkout.quote-ttl-minutes:10}") long quoteTtlMinutes) {
+                              @Value("${promotion.checkout.quote-ttl-minutes:15}") long quoteTtlMinutes) {
         this.idempotencyStorage = idempotencyStorage;
         this.objectMapper = objectMapper;
         this.checkoutQuoteRepository = checkoutQuoteRepository;
