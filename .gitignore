@@ -36,7 +36,6 @@ build/
 
 ### Assistant ###
 .tasks/
-CLAUDE.md
 PLAN.md
 PLAN-TEST.md
 
