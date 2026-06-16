@@ -77,6 +77,9 @@ public class TradeApplicationService {
     @Value("${order.inventory.use-canonical-reservation-api:false}")
     private boolean useCanonicalReservationApi;
 
+    @Value("${order.payment-timeout-seconds:900}")
+    private long paymentTimeoutSeconds;
+
     /**
      * 创建交易 Saga（半编排式）
      * 步骤：
@@ -375,7 +378,7 @@ public class TradeApplicationService {
             String paymentId = TradeIdGenerator.generatePaymentIntentId();
 
             // 计算支付超时时间（默认15分钟）
-            LocalDateTime expireAt = LocalDateTime.now().plusSeconds(900);
+            LocalDateTime expireAt = LocalDateTime.now().plusSeconds(paymentTimeoutSeconds);
 
             PaymentIntentEntity paymentIntent = PaymentIntentEntity.builder()
                     .paymentId(paymentId)

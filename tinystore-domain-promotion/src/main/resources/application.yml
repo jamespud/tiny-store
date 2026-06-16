@@ -52,8 +52,10 @@ tinystore:
         suffix: .DLT
 
 promotion:
+  checkout:
+    quote-ttl-minutes: 15
   coupon:
-    lock-timeout-minutes: 30
+    lock-timeout-minutes: 15
     receive:
       user-limit-per-minute: 10
   budget:

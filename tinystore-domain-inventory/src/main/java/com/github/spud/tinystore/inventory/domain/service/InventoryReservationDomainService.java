@@ -107,7 +107,7 @@ public class InventoryReservationDomainService {
 
         OffsetDateTime expireAt = command.getExpireAt() != null
                 ? command.getExpireAt()
-                : OffsetDateTime.now().plusMinutes(30);
+                : OffsetDateTime.now().plusMinutes(15);
 
         List<ReservationRef> successRefs = new ArrayList<>();
         List<OccupyPair> redisSuccessForRollback = new ArrayList<>();

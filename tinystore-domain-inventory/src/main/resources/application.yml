@@ -76,7 +76,7 @@ inventory:
       # Spring Duration format
       fixed-delay: ${INVENTORY_RESERVATION_EXPIRY_FIXED_DELAY:PT1M}
       # Default reservation TTL in minutes (used when caller does not supply expireAt)
-      default-minutes: ${INVENTORY_RESERVATION_EXPIRY_DEFAULT_MINUTES:30}
+      default-minutes: ${INVENTORY_RESERVATION_EXPIRY_DEFAULT_MINUTES:15}
     permit-all:
       enabled: ${TINYSTORE_SECURITY_PERMIT_ALL_ENABLED:false}
   kafka:
