@@ -77,7 +77,15 @@ public class JpaInventoryDeductRecordRepositoryAdapter implements InventoryDeduc
     @Override
     @Transactional
     public void saveRedisAdjustFailed(String shopId, String skuId, long delta, String reason) {
-        // Replaced in Task 5
-        throw new UnsupportedOperationException("saveRedisAdjustFailed not yet implemented (Task 5)");
+        InventoryDeductRecordEntity entity = new InventoryDeductRecordEntity()
+                .setOrderId("ADJUST")
+                .setIdempotencyKey("ADJUST:" + reason)
+                .setShopId(shopId)
+                .setSkuId(skuId)
+                .setOccupyId("ADJUST:" + shopId + ":" + skuId + ":" + System.nanoTime())
+                .setQuantity((int) delta)
+                .setStatus("ADJUST_REDIS_FAILED")
+                .setReleaseReason(reason);
+        jpaRepo.save(entity);
     }
 }
