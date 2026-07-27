@@ -29,4 +29,12 @@ public interface InventoryDeductGateway {
      * @return true=回滚成功或已回滚，false=回滚异常
      */
     boolean rollback(String shopId, String skuId, String occupyId);
+
+    /**
+     * Bump the Redis total cache by a signed delta (INCRBY), after ensuring the key
+     * is initialized from DB. Best-effort, called AFTER DB commit.
+     *
+     * @return true if Redis INCRBY succeeded, false on Redis failure
+     */
+    boolean addTotal(String shopId, String skuId, long delta);
 }

@@ -46,6 +46,12 @@ public class RedisInventoryDeductGateway implements InventoryDeductGateway {
         return redisManager.rollbackPreDeductV2(shopId, skuId, occupyId);
     }
 
+    @Override
+    public boolean addTotal(String shopId, String skuId, long delta) {
+        // Replaced in Task 5
+        throw new UnsupportedOperationException("addTotal not yet implemented (Task 5)");
+    }
+
     // ========================== 内部方法 ==========================
 
     /**
