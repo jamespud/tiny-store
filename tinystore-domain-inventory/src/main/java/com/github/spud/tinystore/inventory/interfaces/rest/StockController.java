@@ -80,16 +80,4 @@ public class StockController {
 	) {
 		return ResponseEntity.ok(stockAppService.release(idempotencyKey, request));
 	}
-
-	/**
-	 * @deprecated 仍用于退款场景，未来可考虑与新链路合并
-	 */
-	@Deprecated
-	@PostMapping("/restock")
-	public ResponseEntity<StockRestockResponse> restock(
-		@RequestHeader("Idempotency-Key") String idempotencyKey,
-		@RequestBody @Valid StockRestockRequest request
-	) {
-		return ResponseEntity.ok(stockAppService.restock(idempotencyKey, request));
-	}
 }

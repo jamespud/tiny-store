@@ -2,10 +2,8 @@ package com.github.spud.tinystore.inventory.application.service;
 
 import cn.hutool.core.lang.Pair;
 import com.github.spud.tinystore.infrastructure.tool.JsonUtils;
-import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.entity.InventoryAdjustmentEntity;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.entity.InventoryReservationEntity;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.entity.InventoryStockEntity;
-import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.repository.JpaInventoryAdjustmentRepository;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.repository.JpaInventoryReservationRepository;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.repository.JpaInventoryStockRepository;
 import com.github.spud.tinystore.inventory.infrastructure.producer.StockDeductProducer;
@@ -40,24 +38,20 @@ public class StockAppService {
     public static final String STATUS_COMMITTED = "COMMITTED";
     public static final String STATUS_RELEASED = "RELEASED";
     public static final String STATUS_EXPIRED = "EXPIRED";
-    public static final String ADJUST_REASON_RESTOCK_REFUND = "RESTOCK_REFUND";
-    
+
     private final JpaInventoryStockRepository stockRepository;
     private final JpaInventoryReservationRepository reservationRepository;
-    private final JpaInventoryAdjustmentRepository adjustmentRepository;
     private final InventoryRedisManager inventoryRedisManager;
     private final StringRedisTemplate redisTemplate;
     private final StockDeductProducer stockDeductProducer;
 
     public StockAppService(
             JpaInventoryStockRepository stockRepository,
-            JpaInventoryReservationRepository reservationRepository,
-            JpaInventoryAdjustmentRepository adjustmentRepository, InventoryRedisManager inventoryRedisManager,
+            JpaInventoryReservationRepository reservationRepository, InventoryRedisManager inventoryRedisManager,
             StringRedisTemplate redisTemplate,
             StockDeductProducer stockDeductProducer) {
         this.stockRepository = stockRepository;
         this.reservationRepository = reservationRepository;
-        this.adjustmentRepository = adjustmentRepository;
         this.inventoryRedisManager = inventoryRedisManager;
         this.redisTemplate = redisTemplate;
         this.stockDeductProducer = stockDeductProducer;
@@ -280,44 +274,6 @@ public class StockAppService {
             reservationRepository.save(reservation);
         }
         return StockReleaseResponse.ok("ok");
-    }
-
-    @Transactional
-    public StockRestockResponse restock(String idempotencyKey, StockRestockRequest request) {
-        Set<String> seenSkuIds = new HashSet<>();
-        for (StockRestockRequest.Line line : request.getItems()) {
-            if (!seenSkuIds.add(line.getSkuId())) {
-                return StockRestockResponse.fail("DUPLICATE_SKU_ID");
-            }
-        }
-
-        String refundId = request.getRefundId();
-        if (adjustmentRepository.existsByReasonAndReferenceId(ADJUST_REASON_RESTOCK_REFUND, refundId)) {
-            return StockRestockResponse.ok("ok");
-        }
-
-        StockRestockRequest.Line first = request.getItems().get(0);
-        long totalDelta = 0;
-        for (StockRestockRequest.Line line : request.getItems()) {
-            totalDelta += line.getQuantity();
-        }
-        adjustmentRepository.save(new InventoryAdjustmentEntity()
-                .setShopId(request.getShopId())
-                .setSkuId(first.getSkuId())
-                .setDeltaTotal(totalDelta)
-                .setReason(ADJUST_REASON_RESTOCK_REFUND)
-                .setReferenceId(refundId));
-
-        for (StockRestockRequest.Line line : request.getItems()) {
-            InventoryStockEntity stock = stockRepository.findByShopIdAndSkuIdForUpdate(request.getShopId(), line.getSkuId())
-                    .orElse(null);
-            if (stock == null) {
-                return StockRestockResponse.fail("STOCK_NOT_FOUND");
-            }
-            stock.setTotalQuantity(stock.getTotalQuantity() + line.getQuantity());
-            stockRepository.save(stock);
-        }
-        return StockRestockResponse.ok("ok");
     }
 
     @Transactional
