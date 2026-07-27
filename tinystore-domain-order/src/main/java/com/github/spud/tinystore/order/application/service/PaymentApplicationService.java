@@ -100,35 +100,42 @@ public class PaymentApplicationService {
                     "Can only refund PAID trades, current status: " + trade.getPayStatus());
             }
 
-            // 3. 获取所有子单，按 ShopOrder 聚合生成 restock items
+            // 3. 获取所有子单，按 ShopOrder 聚合生成 adjustment items
             List<ShopOrder> shopOrders = shopOrderRepository.findByTradeId(tradeId);
-            
-            // 按 shop 遍历调用 inventory restock
+
+            // 按 shop 遍历调用 inventory adjust (Canonical: reason=RESTOCK_REFUND, delta=+qty)
             for (ShopOrder shopOrder : shopOrders) {
-                // 聚合该 shop 的所有订单行为 restock items
-                List<InventoryRestockRequest.LineItem> restockItems = shopOrder.getOrderLines().stream()
-                    .map(orderLine -> InventoryRestockRequest.LineItem.builder()
+                List<InventoryAdjustRequest.Item> adjustItems = shopOrder.getOrderLines().stream()
+                    .map(orderLine -> InventoryAdjustRequest.Item.builder()
+                        .shopId(shopOrder.getShopId())
                         .skuId(orderLine.getSkuId())
-                        .quantity(orderLine.getQuantity())
+                        .delta((long) orderLine.getQuantity())   // +qty: refund restocks
                         .build())
                     .collect(Collectors.toList());
 
-                InventoryRestockRequest restockRequest = InventoryRestockRequest.builder()
-                    .shopId(shopOrder.getShopId())
+                InventoryAdjustRequest adjustRequest = InventoryAdjustRequest.builder()
+                    .reason("RESTOCK_REFUND")
+                    .referenceId(refundId)
                     .tradeId(tradeId)
-                    .refundId(refundId)
-                    .items(restockItems)
+                    .items(adjustItems)
                     .build();
-                
+
                 try {
-                    String shopIdempotencyKey = idempotencyKey + ":inv:res:" + shopOrder.getShopId();
-                    inventoryClient.restock(shopIdempotencyKey, restockRequest);
-                    log.info("Inventory restock succeeded: refundId={}, shopId={}, items={}", 
-                        refundId, shopOrder.getShopId(), restockItems.size());
+                    String shopIdempotencyKey = idempotencyKey + ":inv:adj:" + shopOrder.getShopId();
+                    InventoryAdjustResponse adjustResponse = inventoryClient.adjust(shopIdempotencyKey, adjustRequest);
+                    if (adjustResponse == null || !Boolean.TRUE.equals(adjustResponse.getSuccess())) {
+                        String msg = adjustResponse != null ? adjustResponse.getMessage() : "null response";
+                        throw new DomainConflictException("INVENTORY_ADJUST_FAILED",
+                            "Failed to adjust inventory for shop " + shopOrder.getShopId() + ": " + msg);
+                    }
+                    log.info("Inventory adjust succeeded: refundId={}, shopId={}, items={}",
+                        refundId, shopOrder.getShopId(), adjustItems.size());
+                } catch (DomainConflictException e) {
+                    throw e;
                 } catch (Exception e) {
-                    log.error("Inventory restock failed for refundId={}, shopId={}", refundId, shopOrder.getShopId(), e);
-                    throw new DomainConflictException("INVENTORY_RESTOCK_FAILED",
-                        "Failed to restock inventory for shop " + shopOrder.getShopId() + ": " + e.getMessage());
+                    log.error("Inventory adjust failed for refundId={}, shopId={}", refundId, shopOrder.getShopId(), e);
+                    throw new DomainConflictException("INVENTORY_ADJUST_FAILED",
+                        "Failed to adjust inventory for shop " + shopOrder.getShopId() + ": " + e.getMessage());
                 }
             }
 

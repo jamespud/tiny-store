@@ -50,4 +50,23 @@ public class JpaInventoryStockRepositoryAdapter implements InventoryStockReposit
         log.debug("restoreAdmission no-op (Redis-managed): shopId={}, skuId={}, qty={}",
                 shopId, skuId, quantity);
     }
+
+    @Override
+    public void adjustTotal(String shopId, String skuId, long delta) {
+        InventoryStockEntity stock = jpaRepo.findByShopIdAndSkuIdForUpdate(shopId, skuId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Stock record not found: shopId=" + shopId + ", skuId=" + skuId));
+
+        long newTotal = stock.getTotalQuantity() + delta;
+        if (newTotal < 0) {
+            throw new IllegalStateException(
+                    "Adjustment would make total_quantity negative: shopId=" + shopId +
+                    ", skuId=" + skuId + ", current=" + stock.getTotalQuantity() +
+                    ", delta=" + delta);
+        }
+        stock.setTotalQuantity(newTotal);
+        jpaRepo.save(stock);
+        log.debug("Adjusted stock: shopId={}, skuId={}, delta={}, newTotal={}",
+                shopId, skuId, delta, newTotal);
+    }
 }

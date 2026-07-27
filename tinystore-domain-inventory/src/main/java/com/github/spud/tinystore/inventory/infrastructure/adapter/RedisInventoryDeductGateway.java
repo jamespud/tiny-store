@@ -46,6 +46,36 @@ public class RedisInventoryDeductGateway implements InventoryDeductGateway {
         return redisManager.rollbackPreDeductV2(shopId, skuId, occupyId);
     }
 
+    @Override
+    public boolean addTotal(String shopId, String skuId, long delta) {
+        // Runs AFTER the DB tx committed, so DB total_quantity already includes this delta.
+        String totalKey = redisManager.getTotalKeyV2(shopId, skuId);
+        Boolean exists = redisTemplate.hasKey(totalKey);
+        if (!Boolean.TRUE.equals(exists)) {
+            // Key absent: initialize to authoritative DB total (already post-adjustment).
+            // Do NOT then INCRBY - that would double-count the delta.
+            long dbTotal = 0;
+            try {
+                Optional<InventoryStockEntity> stockOpt = stockRepository.findByShopIdAndSkuId(shopId, skuId);
+                if (stockOpt.isPresent()) {
+                    dbTotal = stockOpt.get().getTotalQuantity();
+                } else {
+                    log.warn("DB inventory_stock not found for addTotal init: shopId={}, skuId={}, using 0", shopId, skuId);
+                }
+            } catch (Exception e) {
+                log.error("Failed to load totalQuantity from DB for addTotal init: shopId={}, skuId={}", shopId, skuId, e);
+            }
+            Boolean set = redisTemplate.opsForValue().setIfAbsent(totalKey, String.valueOf(dbTotal));
+            if (Boolean.TRUE.equals(set)) {
+                log.info("Initialized Redis total key on adjust: {}={}", totalKey, dbTotal);
+                return true;
+            }
+            // Race: another caller set it concurrently. Fall through to INCRBY.
+        }
+        // Key existed (holds pre-adjustment value) - INCRBY delta to sync.
+        return redisManager.addTotalV2(shopId, skuId, delta);
+    }
+
     // ========================== 内部方法 ==========================
 
     /**
