@@ -50,4 +50,10 @@ public class JpaInventoryStockRepositoryAdapter implements InventoryStockReposit
         log.debug("restoreAdmission no-op (Redis-managed): shopId={}, skuId={}, qty={}",
                 shopId, skuId, quantity);
     }
+
+    @Override
+    public void adjustTotal(String shopId, String skuId, long delta) {
+        // Replaced in Task 5
+        throw new UnsupportedOperationException("adjustTotal not yet implemented (Task 5)");
+    }
 }

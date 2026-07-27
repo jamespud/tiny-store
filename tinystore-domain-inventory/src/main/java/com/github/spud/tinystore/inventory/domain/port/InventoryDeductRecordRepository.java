@@ -43,4 +43,12 @@ public interface InventoryDeductRecordRepository {
      * @param reason        失败原因描述（含错误类型）
      */
     void saveRedisRollbackFailed(String reservationId, String shopId, String skuId, String reason);
+
+    /**
+     * Persist an execution-log entry when Redis addTotal fails after a committed
+     * DB adjustment (adjustment has no reservationId, hence a dedicated method).
+     * Per failure-arbitration.md §2 principle 3: Redis compensation failures must
+     * write an execution log. DB state is already terminal; this is for ops audit.
+     */
+    void saveRedisAdjustFailed(String shopId, String skuId, long delta, String reason);
 }
