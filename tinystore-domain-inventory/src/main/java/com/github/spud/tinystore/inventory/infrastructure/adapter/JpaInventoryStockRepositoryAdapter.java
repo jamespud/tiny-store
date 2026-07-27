@@ -53,7 +53,20 @@ public class JpaInventoryStockRepositoryAdapter implements InventoryStockReposit
 
     @Override
     public void adjustTotal(String shopId, String skuId, long delta) {
-        // Replaced in Task 5
-        throw new UnsupportedOperationException("adjustTotal not yet implemented (Task 5)");
+        InventoryStockEntity stock = jpaRepo.findByShopIdAndSkuIdForUpdate(shopId, skuId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Stock record not found: shopId=" + shopId + ", skuId=" + skuId));
+
+        long newTotal = stock.getTotalQuantity() + delta;
+        if (newTotal < 0) {
+            throw new IllegalStateException(
+                    "Adjustment would make total_quantity negative: shopId=" + shopId +
+                    ", skuId=" + skuId + ", current=" + stock.getTotalQuantity() +
+                    ", delta=" + delta);
+        }
+        stock.setTotalQuantity(newTotal);
+        jpaRepo.save(stock);
+        log.debug("Adjusted stock: shopId={}, skuId={}, delta={}, newTotal={}",
+                shopId, skuId, delta, newTotal);
     }
 }

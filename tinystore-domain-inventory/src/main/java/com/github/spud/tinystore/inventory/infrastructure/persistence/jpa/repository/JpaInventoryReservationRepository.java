@@ -31,6 +31,12 @@ public interface JpaInventoryReservationRepository extends JpaRepository<Invento
 	@Query("select r.reservationId from InventoryReservationEntity r where r.status = 'PRE_DEDUCTED' and r.expireAt < :now")
 	List<String> findExpiredCandidateIds(@Param("now") OffsetDateTime now);
 
+	@Query("select coalesce(sum(r.quantity), 0) from InventoryReservationEntity r " +
+	       "where r.shopId = :shopId and r.skuId = :skuId and r.status = :status")
+	long sumQuantityByShopSkuStatus(@Param("shopId") String shopId,
+	                                @Param("skuId") String skuId,
+	                                @Param("status") String status);
+
 	@Modifying
 	@Query("update InventoryReservationEntity r set r.status = :targetStatus, r.confirmedAt = :confirmedAt, " +
 	       "r.releaseReason = :releaseReason " +
