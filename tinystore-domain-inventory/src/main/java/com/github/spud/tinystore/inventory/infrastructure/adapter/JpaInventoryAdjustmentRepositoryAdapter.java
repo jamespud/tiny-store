@@ -17,7 +17,7 @@ public class JpaInventoryAdjustmentRepositoryAdapter implements InventoryAdjustm
     @Override
     public boolean existsByReasonAndReferenceIdAndSku(String reason, String referenceId,
                                                      String shopId, String skuId) {
-        return jpaRepo.existsByReasonAndReferenceIdAndShopIdAndSku(reason, referenceId, shopId, skuId);
+        return jpaRepo.existsByReasonAndReferenceIdAndShopIdAndSkuId(reason, referenceId, shopId, skuId);
     }
 
     @Override

@@ -9,6 +9,6 @@ public interface JpaInventoryAdjustmentRepository extends JpaRepository<Inventor
 
 	long countByReasonAndReferenceId(String reason, String referenceId);
 
-	boolean existsByReasonAndReferenceIdAndShopIdAndSku(String reason, String referenceId,
+	boolean existsByReasonAndReferenceIdAndShopIdAndSkuId(String reason, String referenceId,
 	                                                    String shopId, String skuId);
 }
