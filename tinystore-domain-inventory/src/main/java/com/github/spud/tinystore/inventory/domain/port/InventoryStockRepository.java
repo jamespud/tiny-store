@@ -27,4 +27,13 @@ public interface InventoryStockRepository {
      * but is kept for future ledger snapshot compatibility.
      */
     void restoreAdmission(String shopId, String skuId, int quantity);
+
+    /**
+     * Adjust total_quantity by a signed delta (Canonical Adjustment pillar).
+     * delta > 0: total_quantity += delta (refund / replenish).
+     * delta < 0: total_quantity -= |delta|; CHECK(total>=0) backs this up;
+     *            throw IllegalStateException if insufficient.
+     * Pessimistic lock (findByShopIdAndSkuIdForUpdate) is used inside the adapter.
+     */
+    void adjustTotal(String shopId, String skuId, long delta);
 }

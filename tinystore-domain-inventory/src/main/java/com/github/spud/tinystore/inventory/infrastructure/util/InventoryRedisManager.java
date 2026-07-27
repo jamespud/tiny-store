@@ -568,6 +568,31 @@ public class InventoryRedisManager {
         return String.format(KEY_V2_TOTAL, shopId, skuId);
     }
 
+    /**
+     * V2：bump the total cache by a signed delta (INCRBY). Caller must ensure the key
+     * is initialized (see RedisInventoryDeductGateway.ensureTotalKeyInitialized).
+     */
+    public boolean addTotalV2(String shopId, String skuId, long delta) {
+        Assert.hasText(shopId, "shopId不能为空");
+        Assert.hasText(skuId, "skuId不能为空");
+        String totalKey = String.format(KEY_V2_TOTAL, shopId, skuId);
+        try {
+            redisTemplate.opsForValue().increment(totalKey, delta);
+            log.info("V2 addTotal: key={}, delta={}", totalKey, delta);
+            return true;
+        } catch (Exception e) {
+            log.error("V2 addTotal failed: key={}, delta={}", totalKey, delta, e);
+            return false;
+        }
+    }
+
+    /**
+     * V2：获取 deducted key 名（供对账读取使用）
+     */
+    public String getDeductedKeyV2(String shopId, String skuId) {
+        return String.format(KEY_V2_DEDUCTED, shopId, skuId);
+    }
+
     @Data
     @AllArgsConstructor
     @NoArgsConstructor

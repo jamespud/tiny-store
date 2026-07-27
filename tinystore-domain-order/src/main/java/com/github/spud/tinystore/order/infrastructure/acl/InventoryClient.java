@@ -30,14 +30,16 @@ public interface InventoryClient {
         @RequestHeader("Idempotency-Key") String idempotencyKey,
         @RequestBody InventoryReleaseRequestV2 request);
 
+    // ==================== Canonical Adjustment API (RFC-001) ====================
+
     /**
-     * 库存补货接口（退款时调用）
+     * Canonical: adjust inventory (signed delta). Refund = reason RESTOCK_REFUND, delta = +qty.
+     * Route: POST /api/inventory/adjustments
      */
-    @PostMapping("/api/inventory/restock")
-    InventoryRestockResponse restock(
+    @PostMapping("/api/inventory/adjustments")
+    InventoryAdjustResponse adjust(
         @RequestHeader("Idempotency-Key") String idempotencyKey,
-        @RequestBody InventoryRestockRequest request
-    );
+        @RequestBody InventoryAdjustRequest request);
 
     // ==================== Canonical Reservation API (RFC-001) ====================
 

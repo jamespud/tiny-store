@@ -9,7 +9,6 @@ import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.reposi
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.repository.JpaInventoryReservationRepository;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.repository.JpaInventoryStockRepository;
 import com.github.spud.tinystore.inventory.interfaces.dto.StockPreOccupyRequest;
-import com.github.spud.tinystore.inventory.interfaces.dto.StockRestockRequest;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -140,43 +139,5 @@ class StockAppServiceIT {
 
 		InventoryStockEntity stock = stockRepository.findByShopIdAndSkuId("T1", "SKU2").orElseThrow();
 		assertThat(stock.getReservedQuantity()).isEqualTo(0);
-	}
-
-	@Test
-	void restock_isIdempotentPerRefundId() {
-		stockRepository.save(new InventoryStockEntity()
-				.setShopId("T1")
-				.setSkuId("SKU1")
-				.setTotalQuantity(10)
-				.setReservedQuantity(0));
-		stockRepository.save(new InventoryStockEntity()
-				.setShopId("T1")
-				.setSkuId("SKU2")
-				.setTotalQuantity(20)
-				.setReservedQuantity(0));
-
-		StockRestockRequest req = new StockRestockRequest();
-		req.setShopId("T1");
-		req.setTradeId("O3");
-		req.setRefundId("R1");
-		StockRestockRequest.Line i1 = new StockRestockRequest.Line();
-		i1.setSkuId("SKU1");
-		i1.setQuantity(2);
-		StockRestockRequest.Line i2 = new StockRestockRequest.Line();
-		i2.setSkuId("SKU2");
-		i2.setQuantity(3);
-		req.setItems(List.of(i1, i2));
-
-		var r1 = stockAppService.restock(UUID.randomUUID().toString(), req);
-		var r2 = stockAppService.restock(UUID.randomUUID().toString(), req);
-		assertThat(r1.isSuccess()).isTrue();
-		assertThat(r2.isSuccess()).isTrue();
-
-		InventoryStockEntity s1 = stockRepository.findByShopIdAndSkuId("T1", "SKU1").orElseThrow();
-		InventoryStockEntity s2 = stockRepository.findByShopIdAndSkuId("T1", "SKU2").orElseThrow();
-		assertThat(s1.getTotalQuantity()).isEqualTo(12);
-		assertThat(s2.getTotalQuantity()).isEqualTo(23);
-		assertThat(adjustmentRepository.countByReasonAndReferenceId(StockAppService.ADJUST_REASON_RESTOCK_REFUND, "R1"))
-				.isEqualTo(1);
 	}
 }
