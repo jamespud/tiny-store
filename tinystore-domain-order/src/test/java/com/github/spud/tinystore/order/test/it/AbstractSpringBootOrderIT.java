@@ -114,12 +114,12 @@ public abstract class AbstractSpringBootOrderIT extends AbstractOrderIT {
             .build();
         when(inventoryClient.releaseV2(any(), any())).thenReturn(releaseResponseV2);
 
-        // Inventory Client - restock 默认成功
-        InventoryRestockResponse inventoryRestockResponse = InventoryRestockResponse.builder()
+        // Inventory Client - adjust (Canonical refund restock) 默认成功
+        InventoryAdjustResponse inventoryAdjustResponse = InventoryAdjustResponse.builder()
             .success(true)
-            .message("Inventory restock successful")
+            .message("Inventory adjust successful")
             .build();
-        when(inventoryClient.restock(any(), any())).thenReturn(inventoryRestockResponse);
+        when(inventoryClient.adjust(any(), any())).thenReturn(inventoryAdjustResponse);
     }
 
     /**
