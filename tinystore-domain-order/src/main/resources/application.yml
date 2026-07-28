@@ -74,3 +74,12 @@ order:
 
 server:
   port: 28080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
