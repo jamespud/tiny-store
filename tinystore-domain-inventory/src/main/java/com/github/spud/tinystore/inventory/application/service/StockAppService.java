@@ -6,7 +6,6 @@ import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.entity
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.entity.InventoryStockEntity;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.repository.JpaInventoryReservationRepository;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.repository.JpaInventoryStockRepository;
-import com.github.spud.tinystore.inventory.infrastructure.producer.StockDeductProducer;
 import com.github.spud.tinystore.inventory.infrastructure.util.InventoryRedisManager;
 import com.github.spud.tinystore.inventory.interfaces.dto.*;
 import lombok.AllArgsConstructor;
@@ -43,18 +42,15 @@ public class StockAppService {
     private final JpaInventoryReservationRepository reservationRepository;
     private final InventoryRedisManager inventoryRedisManager;
     private final StringRedisTemplate redisTemplate;
-    private final StockDeductProducer stockDeductProducer;
 
     public StockAppService(
             JpaInventoryStockRepository stockRepository,
             JpaInventoryReservationRepository reservationRepository, InventoryRedisManager inventoryRedisManager,
-            StringRedisTemplate redisTemplate,
-            StockDeductProducer stockDeductProducer) {
+            StringRedisTemplate redisTemplate) {
         this.stockRepository = stockRepository;
         this.reservationRepository = reservationRepository;
         this.inventoryRedisManager = inventoryRedisManager;
         this.redisTemplate = redisTemplate;
-        this.stockDeductProducer = stockDeductProducer;
     }
 
     public StockPreOccupyResponse reserve(String idempotencyKey, StockReserveRequest request) {
@@ -98,12 +94,6 @@ public class StockAppService {
                 inventoryRedisManager.rollbackPreDeduct(result.getSkuId(), result.getReserveId());
             }
             return StockPreOccupyResponse.fail(new ArrayList<>(lackSkuMap.keySet()), "STOCK_LACK");
-        }
-        
-        // TODO: 写入kafka
-        boolean produced = stockDeductProducer.produce(successes);
-        if (!produced) {
-            // TODO: 处理发送失败
         }
 
         List<String> list = successes.stream()
