@@ -13,7 +13,9 @@ import com.github.spud.tinystore.inventory.interfaces.dto.InventoryConfirmReques
 import com.github.spud.tinystore.inventory.interfaces.dto.InventoryConfirmResponse;
 import com.github.spud.tinystore.inventory.interfaces.dto.InventoryReleaseRequest;
 import com.github.spud.tinystore.inventory.interfaces.dto.InventoryReleaseResponse;
+import com.github.spud.tinystore.interfaces.aspect.LogConstant;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -49,41 +51,46 @@ public class InventoryReservationAppService {
      * Maps DeductRequest → InventoryReserveCommand for compatibility.
      */
     public DeductResponse reserve(String idempotencyKey, DeductRequest request) {
-        InventoryReserveCommand command = InventoryReserveCommand.builder()
-                .idempotencyKey(idempotencyKey)
-                .orderId(request.getOrderId())
-                .tradeId(request.getTradeId())
-                .traceId(null)
-                .expireAt(OffsetDateTime.now().plusMinutes(defaultExpiryMinutes))
-                .items(request.getItems().stream()
-                        .map(item -> InventoryReserveCommand.Item.builder()
-                                .shopId(item.getShopId())
-                                .skuId(item.getSkuId())
-                                .quantity(item.getQuantity())
-                                .build())
-                        .toList())
-                .build();
+        MDC.put("orderId", request.getOrderId());
+        try {
+            InventoryReserveCommand command = InventoryReserveCommand.builder()
+                    .idempotencyKey(idempotencyKey)
+                    .orderId(request.getOrderId())
+                    .tradeId(request.getTradeId())
+                    .traceId(MDC.get(LogConstant.MDC_LOG_ID))
+                    .expireAt(OffsetDateTime.now().plusMinutes(defaultExpiryMinutes))
+                    .items(request.getItems().stream()
+                            .map(item -> InventoryReserveCommand.Item.builder()
+                                    .shopId(item.getShopId())
+                                    .skuId(item.getSkuId())
+                                    .quantity(item.getQuantity())
+                                    .build())
+                            .toList())
+                    .build();
 
-        ReservationResult result = domainService.reserve(command);
+            ReservationResult result = domainService.reserve(command);
 
-        if (!result.isSuccess()) {
-            return DeductResponse.fail(result.getLackSkuIds(), result.getMessage());
+            if (!result.isSuccess()) {
+                return DeductResponse.fail(result.getLackSkuIds(), result.getMessage());
+            }
+
+            if (result.getReservationRefs() == null || result.getReservationRefs().isEmpty()) {
+                log.error("Canonical reserve returned success without reservation refs: tradeId={}, orderId={}",
+                        request.getTradeId(), request.getOrderId());
+                return DeductResponse.fail(List.of(), "RESERVATION_REFS_MISSING");
+            }
+
+            List<DeductResponse.OccupyPairDto> pairs = result.getReservationRefs().stream()
+                    .map(ref -> DeductResponse.OccupyPairDto.builder()
+                            .shopId(ref.getShopId())
+                            .skuId(ref.getSkuId())
+                            .occupyId(ref.getReservationId())
+                            .build())
+                    .toList();
+            return DeductResponse.ok(pairs);
+        } finally {
+            MDC.remove("orderId");
         }
-
-        if (result.getReservationRefs() == null || result.getReservationRefs().isEmpty()) {
-            log.error("Canonical reserve returned success without reservation refs: tradeId={}, orderId={}",
-                    request.getTradeId(), request.getOrderId());
-            return DeductResponse.fail(List.of(), "RESERVATION_REFS_MISSING");
-        }
-
-        List<DeductResponse.OccupyPairDto> pairs = result.getReservationRefs().stream()
-                .map(ref -> DeductResponse.OccupyPairDto.builder()
-                        .shopId(ref.getShopId())
-                        .skuId(ref.getSkuId())
-                        .occupyId(ref.getReservationId())
-                        .build())
-                .toList();
-        return DeductResponse.ok(pairs);
     }
 
     // ========================== Confirm ==========================
@@ -93,36 +100,43 @@ public class InventoryReservationAppService {
      * Idempotency key must be derived from paymentId by the caller.
      */
     public InventoryConfirmResponse confirm(String idempotencyKey, InventoryConfirmRequest request) {
-        InventoryConfirmCommand command = InventoryConfirmCommand.builder()
-                .idempotencyKey(idempotencyKey)
-                .paymentId(request.getPaymentId())
-                .tradeId(request.getTradeId())
-                .orderId(request.getOrderId())
-                .traceId(request.getTraceId())
-                .occupyPairs(request.getOccupyPairs().stream()
-                        .map(p -> OccupyPair.builder()
-                                .shopId(p.getShopId())
-                                .skuId(p.getSkuId())
-                                .occupyId(p.getOccupyId())
-                                .build())
-                        .toList())
-                .build();
+        MDC.put("orderId", request.getOrderId());
+        MDC.put("paymentId", request.getPaymentId());
+        try {
+            InventoryConfirmCommand command = InventoryConfirmCommand.builder()
+                    .idempotencyKey(idempotencyKey)
+                    .paymentId(request.getPaymentId())
+                    .tradeId(request.getTradeId())
+                    .orderId(request.getOrderId())
+                    .traceId(request.getTraceId())
+                    .occupyPairs(request.getOccupyPairs().stream()
+                            .map(p -> OccupyPair.builder()
+                                    .shopId(p.getShopId())
+                                    .skuId(p.getSkuId())
+                                    .occupyId(p.getOccupyId())
+                                    .build())
+                            .toList())
+                    .build();
 
-        ReservationResult result = domainService.confirm(command);
+            ReservationResult result = domainService.confirm(command);
 
-        if (!result.isSuccess()) {
-            return InventoryConfirmResponse.conflict(result.getConflictReservationIds(),
-                    result.getMessage());
+            if (!result.isSuccess()) {
+                return InventoryConfirmResponse.conflict(result.getConflictReservationIds(),
+                        result.getMessage());
+            }
+
+            List<InventoryConfirmResponse.ReservationRefDto> refs = result.getReservationRefs().stream()
+                    .map(ref -> InventoryConfirmResponse.ReservationRefDto.builder()
+                            .shopId(ref.getShopId())
+                            .skuId(ref.getSkuId())
+                            .reservationId(ref.getReservationId())
+                            .build())
+                    .toList();
+            return InventoryConfirmResponse.ok(refs);
+        } finally {
+            MDC.remove("orderId");
+            MDC.remove("paymentId");
         }
-
-        List<InventoryConfirmResponse.ReservationRefDto> refs = result.getReservationRefs().stream()
-                .map(ref -> InventoryConfirmResponse.ReservationRefDto.builder()
-                        .shopId(ref.getShopId())
-                        .skuId(ref.getSkuId())
-                        .reservationId(ref.getReservationId())
-                        .build())
-                .toList();
-        return InventoryConfirmResponse.ok(refs);
     }
 
     // ========================== Release ==========================
@@ -131,25 +145,30 @@ public class InventoryReservationAppService {
      * Release reservations on order cancellation.
      */
     public InventoryReleaseResponse release(String idempotencyKey, InventoryReleaseRequest request) {
-        InventoryReleaseCommand command = InventoryReleaseCommand.builder()
-                .idempotencyKey(idempotencyKey)
-                .orderId(request.getOrderId())
-                .reason(request.getReason())
-                .occupyPairs(request.getOccupyPairs().stream()
-                        .map(p -> OccupyPair.builder()
-                                .shopId(p.getShopId())
-                                .skuId(p.getSkuId())
-                                .occupyId(p.getOccupyId())
-                                .build())
-                        .toList())
-                .build();
+        MDC.put("orderId", request.getOrderId());
+        try {
+            InventoryReleaseCommand command = InventoryReleaseCommand.builder()
+                    .idempotencyKey(idempotencyKey)
+                    .orderId(request.getOrderId())
+                    .reason(request.getReason())
+                    .occupyPairs(request.getOccupyPairs().stream()
+                            .map(p -> OccupyPair.builder()
+                                    .shopId(p.getShopId())
+                                    .skuId(p.getSkuId())
+                                    .occupyId(p.getOccupyId())
+                                    .build())
+                            .toList())
+                    .build();
 
-        ReservationResult result = domainService.release(command);
+            ReservationResult result = domainService.release(command);
 
-        return InventoryReleaseResponse.builder()
-                .success(result.isSuccess())
-                .message(result.getMessage())
-                .build();
+            return InventoryReleaseResponse.builder()
+                    .success(result.isSuccess())
+                    .message(result.getMessage())
+                    .build();
+        } finally {
+            MDC.remove("orderId");
+        }
     }
 
     // ========================== Expire ==========================

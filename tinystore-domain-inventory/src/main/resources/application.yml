@@ -103,7 +103,14 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
+  # Spring Boot's @ConditionalOnEnabledMetricsExport for prometheus reads
+  # management.<backend>.metrics.export.enabled (backend before "metrics.export").
+  # Explicit enable so the PrometheusMeterRegistry + /actuator/prometheus are created.
+  prometheus:
+    metrics:
+      export:
+        enabled: true
   endpoint:
     health:
       show-details: always
