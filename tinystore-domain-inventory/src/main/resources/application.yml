@@ -79,6 +79,12 @@ inventory:
       default-minutes: ${INVENTORY_RESERVATION_EXPIRY_DEFAULT_MINUTES:15}
     permit-all:
       enabled: ${TINYSTORE_SECURITY_PERMIT_ALL_ENABLED:false}
+
+  reconciliation:
+    # Enable/disable the periodic reconcile job
+    enabled: ${INVENTORY_RECONCILIATION_ENABLED:true}
+    # Spring Duration format; default 10 minutes
+    fixed-delay: ${INVENTORY_RECONCILIATION_FIXED_DELAY:PT10M}
   kafka:
     consumer:
       retry:
