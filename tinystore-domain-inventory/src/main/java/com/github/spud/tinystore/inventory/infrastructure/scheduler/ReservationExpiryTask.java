@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.inventory.infrastructure.scheduler;
 
 import com.github.spud.tinystore.inventory.application.service.InventoryReservationAppService;
+import com.github.spud.tinystore.inventory.domain.port.InventoryMetricsPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,15 +24,19 @@ public class ReservationExpiryTask {
 	private static final Logger log = LoggerFactory.getLogger(ReservationExpiryTask.class);
 
 	private final InventoryReservationAppService reservationAppService;
+	private final InventoryMetricsPort metricsPort;
 
-	public ReservationExpiryTask(InventoryReservationAppService reservationAppService) {
+	public ReservationExpiryTask(InventoryReservationAppService reservationAppService,
+	                             InventoryMetricsPort metricsPort) {
 		this.reservationAppService = reservationAppService;
+		this.metricsPort = metricsPort;
 	}
 
 	@Scheduled(fixedDelayString = "${inventory.reservation.expiry.fixed-delay:PT1M}")
 	public void expireQuotes() {
 		int expired = reservationAppService.expireExpiredReservations();
 		if (expired > 0) {
+			metricsPort.expired(expired);
 			log.info("Expired {} PRE_DEDUCTED reservations", expired);
 		}
 	}
