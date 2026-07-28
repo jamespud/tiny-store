@@ -7,6 +7,7 @@ import com.github.spud.tinystore.inventory.domain.value.AdjustmentResult;
 import com.github.spud.tinystore.inventory.interfaces.dto.InventoryAdjustRequest;
 import com.github.spud.tinystore.inventory.interfaces.dto.InventoryAdjustResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -20,32 +21,37 @@ public class InventoryAdjustmentAppService {
     }
 
     public InventoryAdjustResponse adjust(String idempotencyKey, InventoryAdjustRequest request) {
-        InventoryAdjustCommand command = InventoryAdjustCommand.builder()
-                .idempotencyKey(idempotencyKey)
-                .reason(AdjustmentReason.fromCode(request.getReason()))
-                .referenceId(request.getReferenceId())
-                .tradeId(request.getTradeId())
-                .items(request.getItems().stream()
-                        .map(i -> InventoryAdjustCommand.Item.builder()
-                                .shopId(i.getShopId()).skuId(i.getSkuId()).delta(i.getDelta()).build())
-                        .toList())
-                .build();
-
-        AdjustmentResult result;
+        MDC.put("orderId", request.getTradeId());
         try {
-            result = domainService.adjust(command);
-        } catch (IllegalStateException e) {
-            // e.g. negative delta would make total < 0
-            log.warn("Adjustment rejected: {}", e.getMessage());
-            return InventoryAdjustResponse.fail(e.getMessage());
-        }
+            InventoryAdjustCommand command = InventoryAdjustCommand.builder()
+                    .idempotencyKey(idempotencyKey)
+                    .reason(AdjustmentReason.fromCode(request.getReason()))
+                    .referenceId(request.getReferenceId())
+                    .tradeId(request.getTradeId())
+                    .items(request.getItems().stream()
+                            .map(i -> InventoryAdjustCommand.Item.builder()
+                                    .shopId(i.getShopId()).skuId(i.getSkuId()).delta(i.getDelta()).build())
+                            .toList())
+                    .build();
 
-        if (!result.isSuccess()) {
-            return InventoryAdjustResponse.fail(result.getMessage());
-        }
+            AdjustmentResult result;
+            try {
+                result = domainService.adjust(command);
+            } catch (IllegalStateException e) {
+                // e.g. negative delta would make total < 0
+                log.warn("Adjustment rejected: {}", e.getMessage());
+                return InventoryAdjustResponse.fail(e.getMessage());
+            }
 
-        // Redis best-effort AFTER the DB tx committed (adjust() is @Transactional; on return tx is committed).
-        domainService.compensateRedisAfterCommit(result);
-        return InventoryAdjustResponse.ok();
+            if (!result.isSuccess()) {
+                return InventoryAdjustResponse.fail(result.getMessage());
+            }
+
+            // Redis best-effort AFTER the DB tx committed (adjust() is @Transactional; on return tx is committed).
+            domainService.compensateRedisAfterCommit(result);
+            return InventoryAdjustResponse.ok();
+        } finally {
+            MDC.remove("orderId");
+        }
     }
 }
