@@ -7,6 +7,7 @@ import com.github.spud.tinystore.inventory.domain.enums.InventoryReservationStat
 import com.github.spud.tinystore.inventory.domain.port.IdempotencyRepository;
 import com.github.spud.tinystore.inventory.domain.port.InventoryDeductGateway;
 import com.github.spud.tinystore.inventory.domain.port.InventoryDeductRecordRepository;
+import com.github.spud.tinystore.inventory.domain.port.InventoryMetricsPort;
 import com.github.spud.tinystore.inventory.domain.port.InventoryReservationRepository;
 import com.github.spud.tinystore.inventory.domain.port.InventoryStockRepository;
 import com.github.spud.tinystore.inventory.domain.value.OccupyPair;
@@ -54,18 +55,21 @@ public class InventoryReservationDomainService {
     private final InventoryDeductGateway deductGateway;
     private final IdempotencyRepository idempotencyRepository;
     private final InventoryDeductRecordRepository deductRecordRepository;
+    private final InventoryMetricsPort metricsPort;
 
     public InventoryReservationDomainService(
             InventoryReservationRepository reservationRepository,
             InventoryStockRepository stockRepository,
             InventoryDeductGateway deductGateway,
             IdempotencyRepository idempotencyRepository,
-            InventoryDeductRecordRepository deductRecordRepository) {
+            InventoryDeductRecordRepository deductRecordRepository,
+            InventoryMetricsPort metricsPort) {
         this.reservationRepository = reservationRepository;
         this.stockRepository = stockRepository;
         this.deductGateway = deductGateway;
         this.idempotencyRepository = idempotencyRepository;
         this.deductRecordRepository = deductRecordRepository;
+        this.metricsPort = metricsPort;
     }
 
     // ======================================================
@@ -93,6 +97,7 @@ public class InventoryReservationDomainService {
                         command.getIdempotencyKey());
                 return ReservationResult.fail("IDEMPOTENT_REPLAY_MISSING_REFS");
             }
+            metricsPort.reserveSuccess();
             return ReservationResult.ok(replayedRefs, InventoryReservationStatus.PRE_DEDUCTED);
         }
 
@@ -101,6 +106,7 @@ public class InventoryReservationDomainService {
         for (InventoryReserveCommand.Item item : command.getItems()) {
             String key = item.getShopId() + ":" + item.getSkuId();
             if (!seen.add(key)) {
+                metricsPort.reserveFail();
                 return ReservationResult.fail(List.of(item.getSkuId()), "DUPLICATE_SKU: " + item.getSkuId());
             }
         }
@@ -120,6 +126,7 @@ public class InventoryReservationDomainService {
             if (occupyId.isEmpty()) {
                 // Rollback all already-admitted items
                 rollbackRedisAll(redisSuccessForRollback);
+                metricsPort.reserveFail();
                 return ReservationResult.fail(List.of(item.getSkuId()), "STOCK_LACK: " + item.getSkuId());
             }
 
@@ -142,6 +149,7 @@ public class InventoryReservationDomainService {
                 deductGateway.rollback(item.getShopId(), item.getSkuId(), reservationId);
                 // Rollback previously succeeded items
                 rollbackRedisAll(redisSuccessForRollback);
+                metricsPort.reserveFail();
                 // Throw to trigger @Transactional rollback for all previously saved
                 // reservations (all-or-nothing)
                 throw new IllegalStateException("DB_WRITE_FAILED for reservationId=" + reservationId, e);
@@ -160,6 +168,7 @@ public class InventoryReservationDomainService {
             log.warn("Failed to mark reserve idempotency: key={}", command.getIdempotencyKey(), e);
         }
 
+        metricsPort.reserveSuccess();
         return ReservationResult.ok(successRefs, InventoryReservationStatus.PRE_DEDUCTED);
     }
 
@@ -249,6 +258,7 @@ public class InventoryReservationDomainService {
 
         // If any conflicts found in pre-check, abort the entire confirm
         if (!conflictIds.isEmpty()) {
+            metricsPort.confirmConflict();
             return ReservationResult.conflict(conflictIds, "RESERVATION_CONFLICT");
         }
 
@@ -281,6 +291,7 @@ public class InventoryReservationDomainService {
         // If any race conflicts found, return conflict — no writes have been performed,
         // safe to return normally.
         if (!raceConflictIds.isEmpty()) {
+            metricsPort.confirmConflict();
             return ReservationResult.conflict(raceConflictIds, "RESERVATION_CONFLICT_RACE");
         }
 
@@ -618,6 +629,7 @@ public class InventoryReservationDomainService {
     // ======================================================
 
     private void writeRedisRollbackFailedLog(String reservationId, String shopId, String skuId, String reason) {
+        metricsPort.redisRollbackFailed();
         try {
             deductRecordRepository.saveRedisRollbackFailed(reservationId, shopId, skuId, reason);
         } catch (Exception ex) {
