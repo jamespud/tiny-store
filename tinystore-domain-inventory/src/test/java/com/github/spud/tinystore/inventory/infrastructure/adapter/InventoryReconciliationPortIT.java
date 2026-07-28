@@ -86,35 +86,38 @@ class InventoryReconciliationPortIT {
     }
 
     @Test
-    @DisplayName("snapshot_admissionUnderCounted_flagsOversellRisk")
-    void snapshot_admissionUnderCounted_flagsOversellRisk() {
+    @DisplayName("snapshot_deductedTooLow_flagsOversellRisk")
+    void snapshot_deductedTooLow_flagsOversellRisk() {
         seedStock(100);
         seedReservation("PRE_DEDUCTED", 5);     // DB has 5 in-flight
         redisTemplate.opsForValue().set("inventory:total:" + SHOP + ":sku-1", "100");
         redisTemplate.opsForValue().set("inventory:deducted:" + SHOP + ":sku-1", "2"); // Redis thinks only 2 deducted
         ReconciliationSnapshot s = reconciliationPort.snapshot(SHOP, "sku-1");
-        assertThat(s.isAdmissionUnderCounted()).isTrue();   // OVERSELL RISK
-        assertThat(s.isTotalDesync()).isFalse();
+        assertThat(s.isDeductedTooLow()).isTrue();   // OVERSELL RISK
+        assertThat(s.isOversellRisk()).isTrue();
+        assertThat(s.isTotalTooHigh()).isFalse();
     }
 
     @Test
-    @DisplayName("snapshot_totalDesync_flagsWhenRedisTotalHigherThanDb")
-    void snapshot_totalDesync_flagsWhenRedisTotalHigherThanDb() {
+    @DisplayName("snapshot_totalTooHigh_flagsOversellRisk")
+    void snapshot_totalTooHigh_flagsOversellRisk() {
         seedStock(100);
         redisTemplate.opsForValue().set("inventory:total:" + SHOP + ":sku-1", "150"); // Redis inflated -> oversell risk
         ReconciliationSnapshot s = reconciliationPort.snapshot(SHOP, "sku-1");
-        assertThat(s.isTotalDesync()).isTrue();
+        assertThat(s.isTotalTooHigh()).isTrue();
+        assertThat(s.isOversellRisk()).isTrue();
     }
 
     @Test
-    @DisplayName("snapshot_admissionOverCounted_flagsLostSalesRisk")
-    void snapshot_admissionOverCounted_flagsLostSalesRisk() {
+    @DisplayName("snapshot_deductedTooHigh_flagsLostSalesRisk")
+    void snapshot_deductedTooHigh_flagsLostSalesRisk() {
         seedStock(100);
         seedReservation("PRE_DEDUCTED", 2);
         redisTemplate.opsForValue().set("inventory:total:" + SHOP + ":sku-1", "100");
         redisTemplate.opsForValue().set("inventory:deducted:" + SHOP + ":sku-1", "9"); // Redis over-counted
         ReconciliationSnapshot s = reconciliationPort.snapshot(SHOP, "sku-1");
-        assertThat(s.isAdmissionOverCounted()).isTrue();
+        assertThat(s.isDeductedTooHigh()).isTrue();
+        assertThat(s.isLostSalesRisk()).isTrue();
     }
 
     @Test
@@ -125,9 +128,27 @@ class InventoryReconciliationPortIT {
         redisTemplate.opsForValue().set("inventory:total:" + SHOP + ":sku-1", "100");
         redisTemplate.opsForValue().set("inventory:deducted:" + SHOP + ":sku-1", "5");
         ReconciliationSnapshot s = reconciliationPort.snapshot(SHOP, "sku-1");
-        assertThat(s.isTotalDesync()).isFalse();
-        assertThat(s.isAdmissionUnderCounted()).isFalse();
-        assertThat(s.isAdmissionOverCounted()).isFalse();
+        assertThat(s.isRedisInSync()).isTrue();
+        assertThat(s.isOversellRisk()).isFalse();
+        assertThat(s.isLostSalesRisk()).isFalse();
         assertThat(s.isNegativeAvailable()).isFalse();
+    }
+
+    @Test
+    @DisplayName("snapshot_confirmedPresent_correctRedisValues_inSync_noFalseDesync")
+    void snapshot_confirmedPresent_correctRedisValues_inSync_noFalseDesync() {
+        // 100 initial, 5 confirmed: DB total=95, confirmed=5, preDeducted=0.
+        // Redis total=100 (confirm does not decrement), deducted=5 (confirm does not decrement).
+        // Correct in-sync state. Old logic falsely flagged desync (100!=95, 5>0).
+        seedStock(95);
+        seedReservation("CONFIRMED", 5);
+        redisTemplate.opsForValue().set("inventory:total:" + SHOP + ":sku-1", "100");
+        redisTemplate.opsForValue().set("inventory:deducted:" + SHOP + ":sku-1", "5");
+        ReconciliationSnapshot s = reconciliationPort.snapshot(SHOP, "sku-1");
+        assertThat(s.getTargetTotal()).isEqualTo(100);
+        assertThat(s.getTargetDeducted()).isEqualTo(5);
+        assertThat(s.isRedisInSync()).isTrue();
+        assertThat(s.isOversellRisk()).isFalse();
+        assertThat(s.isLostSalesRisk()).isFalse();
     }
 }
