@@ -4,6 +4,7 @@ import com.github.spud.tinystore.inventory.domain.command.InventoryAdjustCommand
 import com.github.spud.tinystore.inventory.domain.port.InventoryAdjustmentRepository;
 import com.github.spud.tinystore.inventory.domain.port.InventoryDeductGateway;
 import com.github.spud.tinystore.inventory.domain.port.InventoryDeductRecordRepository;
+import com.github.spud.tinystore.inventory.domain.port.InventoryMetricsPort;
 import com.github.spud.tinystore.inventory.domain.port.InventoryStockRepository;
 import com.github.spud.tinystore.inventory.domain.value.AdjustmentResult;
 import lombok.extern.slf4j.Slf4j;
@@ -39,15 +40,18 @@ public class InventoryAdjustmentDomainService {
     private final InventoryStockRepository stockRepository;
     private final InventoryDeductGateway deductGateway;
     private final InventoryDeductRecordRepository deductRecordRepository;
+    private final InventoryMetricsPort metricsPort;
 
     public InventoryAdjustmentDomainService(InventoryAdjustmentRepository adjustmentRepository,
                                             InventoryStockRepository stockRepository,
                                             InventoryDeductGateway deductGateway,
-                                            InventoryDeductRecordRepository deductRecordRepository) {
+                                            InventoryDeductRecordRepository deductRecordRepository,
+                                            InventoryMetricsPort metricsPort) {
         this.adjustmentRepository = adjustmentRepository;
         this.stockRepository = stockRepository;
         this.deductGateway = deductGateway;
         this.deductRecordRepository = deductRecordRepository;
+        this.metricsPort = metricsPort;
     }
 
     @Transactional
@@ -55,6 +59,7 @@ public class InventoryAdjustmentDomainService {
         Set<String> seen = new HashSet<>();
         for (InventoryAdjustCommand.Item item : command.getItems()) {
             if (!seen.add(item.getShopId() + ":" + item.getSkuId())) {
+                metricsPort.reserveFail();
                 return AdjustmentResult.fail("DUPLICATE_SKU: " + item.getSkuId());
             }
         }
@@ -80,6 +85,7 @@ public class InventoryAdjustmentDomainService {
             newlyAdjusted.add(AdjustmentResult.AdjustedItem.builder()
                     .shopId(item.getShopId()).skuId(item.getSkuId()).delta(item.getDelta()).build());
         }
+        metricsPort.adjustSuccess();
         return AdjustmentResult.ok(newlyAdjusted);
     }
 
@@ -111,6 +117,7 @@ public class InventoryAdjustmentDomainService {
     }
 
     private void writeRedisAdjustFailedLog(String shopId, String skuId, long delta, String reason) {
+        metricsPort.redisRollbackFailed();
         try {
             deductRecordRepository.saveRedisAdjustFailed(shopId, skuId, delta, reason);
         } catch (Exception ex) {

@@ -60,6 +60,9 @@ class InventoryReservationDomainServiceTest {
     @Mock
     private InventoryDeductRecordRepository deductRecordRepository;
 
+    @Mock
+    private com.github.spud.tinystore.inventory.domain.port.InventoryMetricsPort metricsPort;
+
     @InjectMocks
     private InventoryReservationDomainService domainService;
 

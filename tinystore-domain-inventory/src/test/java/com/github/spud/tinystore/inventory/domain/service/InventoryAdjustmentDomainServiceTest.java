@@ -29,6 +29,7 @@ class InventoryAdjustmentDomainServiceTest {
     @Mock private InventoryStockRepository stockRepository;
     @Mock private InventoryDeductGateway deductGateway;
     @Mock private InventoryDeductRecordRepository deductRecordRepository;
+    @Mock private com.github.spud.tinystore.inventory.domain.port.InventoryMetricsPort metricsPort;
 
     @InjectMocks private InventoryAdjustmentDomainService domainService;
 
