@@ -26,6 +26,7 @@ class InventoryReconcileJobTest {
     @Mock private InventoryReconciliationPort reconciliationPort;
     @Mock private InventoryDeductGateway deductGateway;
     @Mock private JpaInventoryReconcileLogRepository logRepository;
+    @Mock private com.github.spud.tinystore.inventory.domain.port.InventoryMetricsPort metricsPort;
 
     @InjectMocks private InventoryReconcileJob job;
 

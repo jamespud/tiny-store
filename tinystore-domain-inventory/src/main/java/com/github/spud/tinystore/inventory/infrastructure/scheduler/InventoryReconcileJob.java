@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.inventory.infrastructure.scheduler;
 
 import com.github.spud.tinystore.inventory.domain.port.InventoryDeductGateway;
+import com.github.spud.tinystore.inventory.domain.port.InventoryMetricsPort;
 import com.github.spud.tinystore.inventory.domain.port.InventoryReconciliationPort;
 import com.github.spud.tinystore.inventory.domain.value.ReconciliationSnapshot;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.entity.InventoryReconcileLogEntity;
@@ -32,15 +33,18 @@ public class InventoryReconcileJob {
     private final InventoryReconciliationPort reconciliationPort;
     private final InventoryDeductGateway deductGateway;
     private final JpaInventoryReconcileLogRepository logRepository;
+    private final InventoryMetricsPort metricsPort;
 
     public InventoryReconcileJob(JpaInventoryStockRepository stockRepository,
                                  InventoryReconciliationPort reconciliationPort,
                                  InventoryDeductGateway deductGateway,
-                                 JpaInventoryReconcileLogRepository logRepository) {
+                                 JpaInventoryReconcileLogRepository logRepository,
+                                 InventoryMetricsPort metricsPort) {
         this.stockRepository = stockRepository;
         this.reconciliationPort = reconciliationPort;
         this.deductGateway = deductGateway;
         this.logRepository = logRepository;
+        this.metricsPort = metricsPort;
     }
 
     @Scheduled(fixedDelayString = "${inventory.reconciliation.fixed-delay:PT10M}")
@@ -66,11 +70,13 @@ public class InventoryReconcileJob {
         ReconciliationSnapshot snap = reconciliationPort.snapshot(shopId, skuId);
 
         if (snap.isDbOversold()) {
+            metricsPort.reconcileAlert();
             saveLog(shopId, skuId, snap, "ALERT_DB_OVERSOLD", null);
             return true;
         }
         if (snap.isNegativeAvailable()) {
             // Inconsistent state (deducted > total); conservative repair would worsen over-reject. Alert only.
+            metricsPort.reconcileAlert();
             saveLog(shopId, skuId, snap, "ALERT_NEGATIVE_AVAILABLE", null);
             return true;
         }
@@ -85,11 +91,13 @@ public class InventoryReconcileJob {
             repaired.add("DEDUCTED");
         }
         if (!repaired.isEmpty()) {
+            metricsPort.reconcileRepaired();
             saveLog(shopId, skuId, snap, "REPAIRED_OVERSELL", String.join(",", repaired));
             return true;
         }
 
         if (snap.isLostSalesRisk()) {
+            metricsPort.reconcileAlert();
             saveLog(shopId, skuId, snap, "ALERT_LOST_SALES", null);
             return true;
         }
