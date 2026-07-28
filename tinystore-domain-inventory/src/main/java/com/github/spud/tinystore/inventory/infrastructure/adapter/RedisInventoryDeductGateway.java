@@ -76,6 +76,16 @@ public class RedisInventoryDeductGateway implements InventoryDeductGateway {
         return redisManager.addTotalV2(shopId, skuId, delta);
     }
 
+    @Override
+    public boolean decreaseTotal(String shopId, String skuId, long amount) {
+        return redisManager.decreaseTotalV2(shopId, skuId, amount);
+    }
+
+    @Override
+    public boolean increaseDeducted(String shopId, String skuId, long amount) {
+        return redisManager.increaseDeductedV2(shopId, skuId, amount);
+    }
+
     // ========================== 内部方法 ==========================
 
     /**

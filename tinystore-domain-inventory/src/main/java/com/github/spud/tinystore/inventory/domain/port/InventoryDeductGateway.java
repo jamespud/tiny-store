@@ -37,4 +37,18 @@ public interface InventoryDeductGateway {
      * @return true if Redis INCRBY succeeded, false on Redis failure
      */
     boolean addTotal(String shopId, String skuId, long delta);
+
+    /**
+     * DECRBY Redis total by amount (reconcile repair, conservative direction).
+     * Additive: does not clobber concurrent addTotal INCR.
+     * @return true if Redis DECRBY succeeded, false on Redis failure
+     */
+    boolean decreaseTotal(String shopId, String skuId, long amount);
+
+    /**
+     * INCRBY Redis deducted by amount (reconcile repair, conservative direction).
+     * Additive: does not clobber concurrent preDeduct INCR.
+     * @return true if Redis INCRBY succeeded, false on Redis failure
+     */
+    boolean increaseDeducted(String shopId, String skuId, long amount);
 }

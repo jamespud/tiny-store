@@ -593,6 +593,42 @@ public class InventoryRedisManager {
         return String.format(KEY_V2_DEDUCTED, shopId, skuId);
     }
 
+    /**
+     * V2：DECRBY total by amount (reconcile repair, additive). amount must be > 0.
+     */
+    public boolean decreaseTotalV2(String shopId, String skuId, long amount) {
+        Assert.hasText(shopId, "shopId不能为空");
+        Assert.hasText(skuId, "skuId不能为空");
+        Assert.isTrue(amount > 0, "amount必须大于0");
+        String totalKey = String.format(KEY_V2_TOTAL, shopId, skuId);
+        try {
+            redisTemplate.opsForValue().increment(totalKey, -amount);
+            log.info("V2 decreaseTotal: key={}, amount={}", totalKey, amount);
+            return true;
+        } catch (Exception e) {
+            log.error("V2 decreaseTotal failed: key={}, amount={}", totalKey, amount, e);
+            return false;
+        }
+    }
+
+    /**
+     * V2：INCRBY deducted by amount (reconcile repair, additive). amount must be > 0.
+     */
+    public boolean increaseDeductedV2(String shopId, String skuId, long amount) {
+        Assert.hasText(shopId, "shopId不能为空");
+        Assert.hasText(skuId, "skuId不能为空");
+        Assert.isTrue(amount > 0, "amount必须大于0");
+        String deductedKey = String.format(KEY_V2_DEDUCTED, shopId, skuId);
+        try {
+            redisTemplate.opsForValue().increment(deductedKey, amount);
+            log.info("V2 increaseDeducted: key={}, amount={}", deductedKey, amount);
+            return true;
+        } catch (Exception e) {
+            log.error("V2 increaseDeducted failed: key={}, amount={}", deductedKey, amount, e);
+            return false;
+        }
+    }
+
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
