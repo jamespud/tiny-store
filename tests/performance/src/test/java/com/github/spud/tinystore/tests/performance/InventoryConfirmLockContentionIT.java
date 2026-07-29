@@ -42,7 +42,8 @@ class InventoryConfirmLockContentionIT {
 
     @BeforeEach
     void setUp() {
-        gatewayBaseUrl = System.getProperty("gateway.base.url", "http://localhost:8080");
+        // Hit the inventory service directly (not via gateway): see InventoryOversellBoundaryIT.
+        gatewayBaseUrl = System.getProperty("inventory.base.url", "http://localhost:13000");
         pgUrl = System.getProperty("pg.url", "jdbc:postgresql://localhost:5433/tinystore");
         pgUser = System.getProperty("pg.user", "postgres");
         pgPassword = System.getProperty("pg.password", "postgres");
@@ -65,15 +66,17 @@ class InventoryConfirmLockContentionIT {
         pgClient.insertStock(shopId, skuId, n);
         log.info("Confirm lock-contention: N={}, sku={}", n, skuId);
 
-        // Setup: N sequential reserves -> collect occupyIds
+        // Setup: N sequential reserves -> collect occupyIds.
+        // NOTE: orderId becomes the Redis biz_id -> occupyId/reservation_id ("orderId_ts_amt").
+        // reservation_id column is VARCHAR(64), so keep orderId short (< 46 chars).
         List<String> occupyIds = new ArrayList<>();
         for (int i = 0; i < n; i++) {
-            String tradeId = "confirm-setup-" + UUID.randomUUID();
+            String shortId = "cs-" + i + "-" + UUID.randomUUID().toString().substring(0, 8);
             Map<String, Object> body = Map.of(
-                "tradeId", tradeId, "orderId", tradeId,
+                "tradeId", shortId, "orderId", shortId,
                 "items", List.of(Map.of("shopId", shopId, "skuId", skuId, "quantity", 1)));
-            HttpResponse<String> resp = gatewayClient.reserveInventory(tradeId, body);
-            assertThat(resp.statusCode()).as("setup reserve %d should succeed", i).isEqualTo(200);
+            HttpResponse<String> resp = gatewayClient.reserveInventory(shortId, body);
+            assertThat(resp.statusCode()).as("setup reserve %d should succeed (status), body=%s", i, resp.body()).isEqualTo(200);
             Map<String, Object> parsed = gatewayClient.parseResponse(resp.body());
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> pairs = (List<Map<String, Object>>) parsed.get("occupyPairs");
