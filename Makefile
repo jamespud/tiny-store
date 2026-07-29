@@ -372,13 +372,13 @@ load-matrix: build ## Run full load matrix (oversell/idempotency/confirm/k6 at 4
 	done; \
 	for C in 500 1000 5000 10000; do \
 		echo "===== OVERSELL C=$$C ====="; \
-		$(MAVEN) -pl tests/performance test -Pperf -Dtest=InventoryOversellBoundaryIT -Dperf.concurrency=$$C -Dgateway.base.url=http://localhost:8080 -Dpg.url=jdbc:postgresql://localhost:5433/tinystore || exit 1; \
+		$(MAVEN) -pl tests/performance test -Pperf -Dtest=InventoryOversellBoundaryIT -Dperf.concurrency=$$C -Dinventory.base.url=http://localhost:13000 -Dpg.url=jdbc:postgresql://localhost:5433/tinystore || exit 1; \
 		echo "===== IDEMPOTENCY C=$$C ====="; \
 		$(MAVEN) -pl tests/performance test -Pperf -Dtest=OrderCreateIdempotencyConsistencyIT -Dperf.concurrency=$$C -Dgateway.base.url=http://localhost:8080 -Dpg.url=jdbc:postgresql://localhost:5433/tinystore || exit 1; \
 	done; \
 	for N in 500 1000; do \
 		echo "===== CONFIRM-LOCK N=$$N ====="; \
-		$(MAVEN) -pl tests/performance test -Pperf -Dtest=InventoryConfirmLockContentionIT -Dperf.confirm.concurrency=$$N -Dgateway.base.url=http://localhost:8080 -Dpg.url=jdbc:postgresql://localhost:5433/tinystore || exit 1; \
+		$(MAVEN) -pl tests/performance test -Pperf -Dtest=InventoryConfirmLockContentionIT -Dperf.confirm.concurrency=$$N -Dinventory.base.url=http://localhost:13000 -Dpg.url=jdbc:postgresql://localhost:5433/tinystore || exit 1; \
 	done; \
 	echo "===== k6 MATRIX ====="; \
 	bash perf/k6/run_matrix.sh || true; \
