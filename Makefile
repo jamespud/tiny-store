@@ -357,3 +357,29 @@ load: build ## Run k6 load tests (stress test with p95/p99 latency metrics)
 	echo "Running k6 load tests..."; \
 	cd perf/k6 && k6 run order_create.js || exit 1; \
 	echo "Load tests completed successfully"
+
+load-matrix: build ## Run full load matrix (oversell/idempotency/confirm/k6 at 4 levels)
+	@echo "Starting test environment for load matrix..."
+	@set -e; \
+	root_dir=$$(pwd); \
+	cleanup() { echo "Cleaning up..."; cd "$$root_dir"; docker compose -f $(COMPOSE_TEST) down -v; }; \
+	trap cleanup EXIT; \
+	docker compose -f $(COMPOSE_TEST) up -d --build; \
+	echo "Waiting for gateway (max 120s)..."; \
+	for i in $$(seq 1 24); do \
+		curl -sf --max-time 3 http://localhost:8080/actuator/health > /dev/null 2>&1 && { echo "Gateway healthy after $$((i*5))s"; break; }; \
+		sleep 5; \
+	done; \
+	for C in 500 1000 5000 10000; do \
+		echo "===== OVERSELL C=$$C ====="; \
+		$(MAVEN) -pl tests/performance test -Pperf -Dtest=InventoryOversellBoundaryIT -Dperf.concurrency=$$C -Dinventory.base.url=http://localhost:13000 -Dpg.url=jdbc:postgresql://localhost:5433/tinystore || exit 1; \
+		echo "===== IDEMPOTENCY C=$$C ====="; \
+		$(MAVEN) -pl tests/performance test -Pperf -Dtest=OrderCreateIdempotencyConsistencyIT -Dperf.concurrency=$$C -Dgateway.base.url=http://localhost:8080 -Dpg.url=jdbc:postgresql://localhost:5433/tinystore || exit 1; \
+	done; \
+	for N in 500 1000; do \
+		echo "===== CONFIRM-LOCK N=$$N ====="; \
+		$(MAVEN) -pl tests/performance test -Pperf -Dtest=InventoryConfirmLockContentionIT -Dperf.confirm.concurrency=$$N -Dinventory.base.url=http://localhost:13000 -Dpg.url=jdbc:postgresql://localhost:5433/tinystore || exit 1; \
+	done; \
+	echo "===== k6 MATRIX ====="; \
+	bash perf/k6/run_matrix.sh || true; \
+	echo "Load matrix complete - collect outputs into docs/performance/load-report-2026-07-28.md"
