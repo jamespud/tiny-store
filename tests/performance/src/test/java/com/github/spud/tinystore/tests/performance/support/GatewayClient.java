@@ -26,20 +26,32 @@ public class GatewayClient {
     }
 
     public HttpResponse<String> createTrade(String tradeId, String idempotencyKey, Map<String, Object> body) {
+        return post("/api/order/trades", idempotencyKey, body);
+    }
+
+    public HttpResponse<String> reserveInventory(String idempotencyKey, Map<String, Object> body) {
+        return post("/api/inventory/reservations/reserve", idempotencyKey, body);
+    }
+
+    public HttpResponse<String> confirmReservation(String idempotencyKey, Map<String, Object> body) {
+        return post("/api/inventory/reservations/confirm", idempotencyKey, body);
+    }
+
+    private HttpResponse<String> post(String path, String idempotencyKey, Map<String, Object> body) {
         try {
             String json = mapper.writeValueAsString(body);
             HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/api/order/trades"))
+                .uri(URI.create(baseUrl + path))
                 .header("Content-Type", "application/json")
                 .header("Idempotency-Key", idempotencyKey)
-                .header("X-Trace-ID", "perf-test-" + tradeId)
+                .header("X-Trace-ID", "perf-test-" + idempotencyKey)
                 .timeout(Duration.ofSeconds(30))
                 .POST(HttpRequest.BodyPublishers.ofString(json))
                 .build();
 
             return client.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (Exception e) {
-            throw new RuntimeException("Failed to create trade: " + tradeId, e);
+            throw new RuntimeException("Failed to POST " + path, e);
         }
     }
 
