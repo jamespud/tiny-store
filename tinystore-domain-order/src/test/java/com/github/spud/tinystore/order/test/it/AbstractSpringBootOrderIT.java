@@ -86,8 +86,8 @@ public abstract class AbstractSpringBootOrderIT extends AbstractOrderIT {
             .build();
         when(promotionClient.commit(any(), any())).thenReturn(commitResponse);
 
-        // Inventory Client - deduct (V2) 默认成功
-        when(inventoryClient.deduct(anyString(), any(InventoryDeductRequest.class))).thenAnswer(invocation -> {
+        // Inventory Client - reserveCanonical 默认成功
+        when(inventoryClient.reserveCanonical(anyString(), any(InventoryDeductRequest.class))).thenAnswer(invocation -> {
             InventoryDeductRequest request = invocation.getArgument(1, InventoryDeductRequest.class);
             List<InventoryDeductResponse.OccupyPairDto> occupyPairs = request != null && request.getItems() != null
                 ? request.getItems().stream()
@@ -107,12 +107,12 @@ public abstract class AbstractSpringBootOrderIT extends AbstractOrderIT {
                 .build();
         });
 
-        // Inventory Client - releaseV2 默认成功
+        // Inventory Client - releaseCanonical 默认成功
         InventoryReleaseResponseV2 releaseResponseV2 = InventoryReleaseResponseV2.builder()
             .success(true)
             .message("ReleaseV2 successful")
             .build();
-        when(inventoryClient.releaseV2(any(), any())).thenReturn(releaseResponseV2);
+        when(inventoryClient.releaseCanonical(any(), any())).thenReturn(releaseResponseV2);
 
         // Inventory Client - adjust (Canonical refund restock) 默认成功
         InventoryAdjustResponse inventoryAdjustResponse = InventoryAdjustResponse.builder()

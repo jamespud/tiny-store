@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.spud.tinystore.order.application.command.CancelTradeCommand;
 import com.github.spud.tinystore.order.application.command.CreateTradeCommand;
 import com.github.spud.tinystore.order.application.command.PaymentSucceededCommand;
-import com.github.spud.tinystore.order.domain.enums.InventoryProjectionVersion;
 import com.github.spud.tinystore.order.domain.enums.InventoryStatus;
 import com.github.spud.tinystore.order.domain.enums.OrderStatus;
 import com.github.spud.tinystore.order.domain.enums.PayStatus;
@@ -12,7 +11,6 @@ import com.github.spud.tinystore.order.domain.enums.PromotionStatus;
 import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
 import com.github.spud.tinystore.order.domain.event.OrderEventType;
 import com.github.spud.tinystore.order.domain.exception.DomainConflictException;
-import com.github.spud.tinystore.order.domain.model.InventoryOccupyPair;
 import com.github.spud.tinystore.order.domain.model.InventoryReservationRef;
 import com.github.spud.tinystore.order.domain.model.OrderLine;
 import com.github.spud.tinystore.order.domain.model.ShopOrder;
@@ -68,14 +66,6 @@ public class TradeApplicationService {
 
     @Autowired
     private ObjectMapper objectMapper;
-
-    /**
-     * When true, use canonical reservation API (POST /api/inventory/reservations/*)
-     * instead of legacy deduct.
-     * Controls order-side routing per RFC-001 Rollout C.
-     */
-    @Value("${order.inventory.use-canonical-reservation-api:false}")
-    private boolean useCanonicalReservationApi;
 
     @Value("${order.payment-timeout-seconds:900}")
     private long paymentTimeoutSeconds;
@@ -248,13 +238,8 @@ public class TradeApplicationService {
                 String shopIdempotencyKey = idempotencyKey + ":inv:deduct:" + shopId;
                 InventoryDeductResponse deductResponse;
                 try {
-                    if (useCanonicalReservationApi) {
-                        deductResponse = inventoryClient.reserveCanonical(shopIdempotencyKey,
-                                deductRequest);
-                    } else {
-                        deductResponse = inventoryClient.deduct(shopIdempotencyKey,
-                                deductRequest);
-                    }
+                    deductResponse = inventoryClient.reserveCanonical(shopIdempotencyKey,
+                            deductRequest);
                     if (deductResponse == null
                             || !Boolean.TRUE.equals(deductResponse.getSuccess())) {
                         String msg = deductResponse != null ? deductResponse.getMessage()
@@ -265,6 +250,8 @@ public class TradeApplicationService {
                     }
                     log.info("Inventory reserve succeeded for shop {}: occupyPairs={}",
                             shopId, deductResponse.getOccupyPairs());
+                } catch (DomainConflictException e) {
+                    throw e;
                 } catch (Exception e) {
                     log.error("Inventory reserve failed for shop: {}", shopId, e);
                     throw new DomainConflictException("INVENTORY_DEDUCT_FAILED",
@@ -276,62 +263,32 @@ public class TradeApplicationService {
                         .getOccupyPairs() != null
                                 ? deductResponse.getOccupyPairs()
                                 : List.of();
-                if (useCanonicalReservationApi && occupyPairs.isEmpty()) {
+                if (occupyPairs.isEmpty()) {
                     throw new DomainConflictException("INVENTORY_DEDUCT_FAILED",
                             "Inventory reserve returned empty reservation refs for shop: "
                                     + shopId);
                 }
 
-                ShopOrder updatedShopOrder;
-                if (useCanonicalReservationApi) {
-                    // Canonical path: store reservationRefs with VERSION_2
-                    List<InventoryReservationRef> reservationRefs = occupyPairs.stream()
-                            .map(dto -> new InventoryReservationRef(dto.getShopId(),
-                                    dto.getSkuId(), dto.getOccupyId()))
-                            .collect(Collectors.toList());
-                    updatedShopOrder = ShopOrder.builder()
-                            .id(shopOrder.getId())
-                            .orderId(shopOrder.getOrderId())
-                            .tradeId(shopOrder.getTradeId())
-                            .shopId(shopOrder.getShopId())
-                            .sellerId(shopOrder.getSellerId())
-                            .orderStatus(shopOrder.getOrderStatus())
-                            .inventoryStatus(shopOrder.getInventoryStatus())
-                            .promotionStatus(shopOrder.getPromotionStatus())
-                            .totalAmountCents(shopOrder.getTotalAmountCents())
-                            .orderLines(shopOrder.getOrderLines())
-                            .inventoryProjectionVersion(
-                                    InventoryProjectionVersion.VERSION_2)
-                            .inventoryReservationRefs(reservationRefs)
-                            .createdAt(shopOrder.getCreatedAt())
-                            .build();
-                    log.info("ShopOrder updated with reservationRefs (canonical): orderId={}, refs={}",
-                            shopOrder.getOrderId(), reservationRefs);
-                } else {
-                    // Legacy path: store occupyPairs with VERSION_1
-                    List<InventoryOccupyPair> occupyPairModels = occupyPairs.stream()
-                            .map(dto -> new InventoryOccupyPair(dto.getShopId(),
-                                    dto.getSkuId(), dto.getOccupyId()))
-                            .collect(Collectors.toList());
-                    updatedShopOrder = ShopOrder.builder()
-                            .id(shopOrder.getId())
-                            .orderId(shopOrder.getOrderId())
-                            .tradeId(shopOrder.getTradeId())
-                            .shopId(shopOrder.getShopId())
-                            .sellerId(shopOrder.getSellerId())
-                            .orderStatus(shopOrder.getOrderStatus())
-                            .inventoryStatus(shopOrder.getInventoryStatus())
-                            .promotionStatus(shopOrder.getPromotionStatus())
-                            .totalAmountCents(shopOrder.getTotalAmountCents())
-                            .orderLines(shopOrder.getOrderLines())
-                            .inventoryOccupyPairs(occupyPairModels)
-                            .createdAt(shopOrder.getCreatedAt())
-                            .updatedAt(shopOrder.getUpdatedAt())
-                            .acceptedAt(shopOrder.getAcceptedAt())
-                            .build();
-                    log.info("ShopOrder updated with occupyPairs: orderId={}, occupyPairs={}",
-                            shopOrder.getOrderId(), occupyPairModels);
-                }
+                List<InventoryReservationRef> reservationRefs = occupyPairs.stream()
+                        .map(dto -> new InventoryReservationRef(dto.getShopId(),
+                                dto.getSkuId(), dto.getOccupyId()))
+                        .collect(Collectors.toList());
+                ShopOrder updatedShopOrder = ShopOrder.builder()
+                        .id(shopOrder.getId())
+                        .orderId(shopOrder.getOrderId())
+                        .tradeId(shopOrder.getTradeId())
+                        .shopId(shopOrder.getShopId())
+                        .sellerId(shopOrder.getSellerId())
+                        .orderStatus(shopOrder.getOrderStatus())
+                        .inventoryStatus(shopOrder.getInventoryStatus())
+                        .promotionStatus(shopOrder.getPromotionStatus())
+                        .totalAmountCents(shopOrder.getTotalAmountCents())
+                        .orderLines(shopOrder.getOrderLines())
+                        .inventoryReservationRefs(reservationRefs)
+                        .createdAt(shopOrder.getCreatedAt())
+                        .build();
+                log.info("ShopOrder updated with reservationRefs (canonical): orderId={}, refs={}",
+                        shopOrder.getOrderId(), reservationRefs);
                 updatedOrders.add(updatedShopOrder);
             }
 
@@ -518,52 +475,28 @@ public class TradeApplicationService {
 
     private void releaseReservedInventoryForCreateTradeCompensation(String idempotencyKey,
             ShopOrder shopOrder) {
-        if (InventoryProjectionVersion.VERSION_2.equals(shopOrder.getInventoryProjectionVersion())
-                && shopOrder.getInventoryReservationRefs() != null
-                && !shopOrder.getInventoryReservationRefs().isEmpty()) {
-            List<InventoryReleaseRequestV2.OccupyPairDto> relPairs = shopOrder.getInventoryReservationRefs()
-                    .stream()
-                    .map(r -> InventoryReleaseRequestV2.OccupyPairDto.builder()
-                            .shopId(r.getShopId()).skuId(r.getSkuId())
-                            .occupyId(r.getReservationId()).build())
-                    .collect(Collectors.toList());
-            InventoryReleaseResponseV2 releaseResponse = inventoryClient.releaseCanonical(
-                    idempotencyKey + ":inv:comp:" + shopOrder.getShopId(),
-                    InventoryReleaseRequestV2.builder()
-                            .orderId(shopOrder.getOrderId())
-                            .reason("INVENTORY_RESERVE_COMPENSATION")
-                            .occupyPairs(relPairs)
-                            .build());
-            ensureInventoryCompensationReleased(releaseResponse, shopOrder.getOrderId(),
-                    shopOrder.getShopId());
-            log.info("Compensated canonical inventory reserve: orderId={}, shopId={}",
-                    shopOrder.getOrderId(), shopOrder.getShopId());
-            return;
+        if (shopOrder.getInventoryReservationRefs() == null
+                || shopOrder.getInventoryReservationRefs().isEmpty()) {
+            throw new IllegalStateException("Missing inventory reservation refs for create compensation, orderId="
+                    + shopOrder.getOrderId());
         }
-
-        if (shopOrder.getInventoryOccupyPairs() != null && !shopOrder.getInventoryOccupyPairs().isEmpty()) {
-            List<InventoryReleaseRequestV2.OccupyPairDto> relPairs = shopOrder.getInventoryOccupyPairs()
-                    .stream()
-                    .map(p -> InventoryReleaseRequestV2.OccupyPairDto.builder()
-                            .shopId(p.getShopId()).skuId(p.getSkuId())
-                            .occupyId(p.getOccupyId()).build())
-                    .collect(Collectors.toList());
-            InventoryReleaseResponseV2 releaseResponse = inventoryClient.releaseV2(
-                    idempotencyKey + ":inv:comp:" + shopOrder.getShopId(),
-                    InventoryReleaseRequestV2.builder()
-                            .orderId(shopOrder.getOrderId())
-                            .reason("INVENTORY_DEDUCT_COMPENSATION")
-                            .occupyPairs(relPairs)
-                            .build());
-            ensureInventoryCompensationReleased(releaseResponse, shopOrder.getOrderId(),
-                    shopOrder.getShopId());
-            log.info("Compensated legacy inventory reserve: orderId={}, shopId={}",
-                    shopOrder.getOrderId(), shopOrder.getShopId());
-            return;
-        }
-
-        throw new IllegalStateException("Missing inventory occupy info for create compensation, orderId="
-                + shopOrder.getOrderId());
+        List<InventoryReleaseRequestV2.OccupyPairDto> relPairs = shopOrder.getInventoryReservationRefs()
+                .stream()
+                .map(r -> InventoryReleaseRequestV2.OccupyPairDto.builder()
+                        .shopId(r.getShopId()).skuId(r.getSkuId())
+                        .occupyId(r.getReservationId()).build())
+                .collect(Collectors.toList());
+        InventoryReleaseResponseV2 releaseResponse = inventoryClient.releaseCanonical(
+                idempotencyKey + ":inv:comp:" + shopOrder.getShopId(),
+                InventoryReleaseRequestV2.builder()
+                        .orderId(shopOrder.getOrderId())
+                        .reason("INVENTORY_RESERVE_COMPENSATION")
+                        .occupyPairs(relPairs)
+                        .build());
+        ensureInventoryCompensationReleased(releaseResponse, shopOrder.getOrderId(),
+                shopOrder.getShopId());
+        log.info("Compensated canonical inventory reserve: orderId={}, shopId={}",
+                shopOrder.getOrderId(), shopOrder.getShopId());
     }
 
     private void ensureInventoryCompensationReleased(InventoryReleaseResponseV2 releaseResponse,
@@ -706,57 +639,31 @@ public class TradeApplicationService {
             String tradeId,
             ShopOrder shopOrder) {
         try {
-            if (InventoryProjectionVersion.VERSION_2.equals(shopOrder.getInventoryProjectionVersion())
-                    && shopOrder.getInventoryReservationRefs() != null
-                    && !shopOrder.getInventoryReservationRefs().isEmpty()) {
-                List<InventoryReleaseRequestV2.OccupyPairDto> relPairs = shopOrder
-                        .getInventoryReservationRefs().stream()
-                        .map(r -> InventoryReleaseRequestV2.OccupyPairDto.builder()
-                                .shopId(r.getShopId()).skuId(r.getSkuId())
-                                .occupyId(r.getReservationId()).build())
-                        .collect(Collectors.toList());
-                InventoryReleaseRequestV2 releaseRequest = InventoryReleaseRequestV2.builder()
-                        .orderId(shopOrder.getOrderId())
-                        .reason(command.getReason())
-                        .occupyPairs(relPairs)
-                        .build();
-                String shopKey = idempotencyKey + ":inv:rel:" + shopOrder.getShopId();
-                InventoryReleaseResponseV2 releaseResponse = inventoryClient.releaseCanonical(shopKey,
-                        releaseRequest);
-                ensureCancelInventoryReleased(releaseResponse, tradeId, shopOrder.getOrderId(),
-                        shopOrder.getShopId());
-                log.info("Canonical inventory released for cancelled shopOrder: orderId={}, shopId={}, refs={}",
-                        shopOrder.getOrderId(), shopOrder.getShopId(), relPairs.size());
-                return;
+            if (shopOrder.getInventoryReservationRefs() == null
+                    || shopOrder.getInventoryReservationRefs().isEmpty()) {
+                throw new DomainConflictException(
+                        "INVENTORY_RELEASE_CONFLICT",
+                        "Missing inventory reservation refs during cancel for trade: " + tradeId
+                                + ", orderId=" + shopOrder.getOrderId());
             }
-
-            if (shopOrder.getInventoryOccupyPairs() != null
-                    && !shopOrder.getInventoryOccupyPairs().isEmpty()) {
-                List<InventoryReleaseRequestV2.OccupyPairDto> relPairs = shopOrder
-                        .getInventoryOccupyPairs().stream()
-                        .map(p -> InventoryReleaseRequestV2.OccupyPairDto.builder()
-                                .shopId(p.getShopId()).skuId(p.getSkuId())
-                                .occupyId(p.getOccupyId()).build())
-                        .collect(Collectors.toList());
-                InventoryReleaseRequestV2 releaseRequestV2 = InventoryReleaseRequestV2.builder()
-                        .orderId(shopOrder.getOrderId())
-                        .reason(command.getReason())
-                        .occupyPairs(relPairs)
-                        .build();
-                String shopIdempotencyKey = idempotencyKey + ":inv:rel:" + shopOrder.getShopId();
-                InventoryReleaseResponseV2 releaseResponse = inventoryClient
-                        .releaseV2(shopIdempotencyKey, releaseRequestV2);
-                ensureCancelInventoryReleased(releaseResponse, tradeId, shopOrder.getOrderId(),
-                        shopOrder.getShopId());
-                log.info("Inventory V2 released for cancelled shopOrder: orderId={}, shopId={}, occupyPairs={}",
-                        shopOrder.getOrderId(), shopOrder.getShopId(),
-                        shopOrder.getInventoryOccupyPairs());
-                return;
-            }
-
-            throw new DomainConflictException(
-                    "INVENTORY_RELEASE_CONFLICT",
-                    "Inventory release conflict during cancel for trade: " + tradeId);
+            List<InventoryReleaseRequestV2.OccupyPairDto> relPairs = shopOrder
+                    .getInventoryReservationRefs().stream()
+                    .map(r -> InventoryReleaseRequestV2.OccupyPairDto.builder()
+                            .shopId(r.getShopId()).skuId(r.getSkuId())
+                            .occupyId(r.getReservationId()).build())
+                    .collect(Collectors.toList());
+            InventoryReleaseRequestV2 releaseRequest = InventoryReleaseRequestV2.builder()
+                    .orderId(shopOrder.getOrderId())
+                    .reason(command.getReason())
+                    .occupyPairs(relPairs)
+                    .build();
+            String shopKey = idempotencyKey + ":inv:rel:" + shopOrder.getShopId();
+            InventoryReleaseResponseV2 releaseResponse = inventoryClient.releaseCanonical(shopKey,
+                    releaseRequest);
+            ensureCancelInventoryReleased(releaseResponse, tradeId, shopOrder.getOrderId(),
+                    shopOrder.getShopId());
+            log.info("Canonical inventory released for cancelled shopOrder: orderId={}, shopId={}, refs={}",
+                    shopOrder.getOrderId(), shopOrder.getShopId(), relPairs.size());
         } catch (DomainConflictException e) {
             throw e;
         } catch (Exception e) {
@@ -817,58 +724,48 @@ public class TradeApplicationService {
             }
 
             List<ShopOrder> shopOrders = shopOrderRepository.findByTradeId(trade.getTradeId());
-            // 同步确认：VERSION_2 canonical 路径调用 inventory confirm；VERSION_1 跳过
+            // 同步确认：调用 inventory confirm（canonical 路径）
             long paidAtEpochMs = System.currentTimeMillis();
             for (ShopOrder shopOrder : shopOrders) {
-                if (InventoryProjectionVersion.VERSION_2
-                        .equals(shopOrder.getInventoryProjectionVersion())) {
-                    if (shopOrder.getInventoryReservationRefs() == null
-                            || shopOrder.getInventoryReservationRefs().isEmpty()) {
-                        throw new IllegalStateException(
-                                "Missing inventory reservation refs for version 2 shopOrder: "
-                                        + shopOrder.getOrderId());
-                    }
-                    List<InventoryConfirmRequest.OccupyPairDto> confirmPairs = shopOrder
-                            .getInventoryReservationRefs().stream()
-                            .map(r -> InventoryConfirmRequest.OccupyPairDto.builder()
-                                    .shopId(r.getShopId()).skuId(r.getSkuId())
-                                    .occupyId(r.getReservationId()).build())
-                            .collect(Collectors.toList());
-                    InventoryConfirmRequest confirmRequest = InventoryConfirmRequest.builder()
-                            .paymentId(command.getPaymentId())
-                            .tradeId(command.getTradeId())
-                            .orderId(shopOrder.getOrderId())
-                            .traceId(command.getTraceId())
-                            .occupyPairs(confirmPairs)
-                            .build();
-                    String confirmKey = command.getPaymentId() + ":inv:confirm:"
-                            + shopOrder.getShopId();
-                    InventoryConfirmResponse confirmResp = inventoryClient
-                            .confirmReservation(confirmKey, confirmRequest);
-                    if (confirmResp == null) {
-                        throw new IllegalStateException(
-                                "Inventory confirm returned null response for orderId: "
-                                        + shopOrder.getOrderId());
-                    }
-                    if (!confirmResp.isSuccess()) {
-                        publishInventoryConfirmConflictEvent(command, shopOrder, confirmPairs,
-                                confirmResp);
-                        throw new DomainConflictException("INVENTORY_CONFIRM_CONFLICT",
-                                "Inventory confirm conflict for orderId: "
-                                        + shopOrder.getOrderId()
-                                        + ", conflicts="
-                                        + confirmResp.getConflictReservationIds());
-                    }
-                    log.info("Inventory canonical confirm succeeded for shopOrder: orderId={}, shopId={}",
-                            shopOrder.getOrderId(), shopOrder.getShopId());
-                } else {
-                    log.info(
-                            "VERSION_1 legacy path, skip inventory confirm for shopOrder: orderId={}, shopId={}, refs={}",
-                            shopOrder.getOrderId(), shopOrder.getShopId(),
-                            shopOrder.getInventoryOccupyPairs() != null
-                                    ? shopOrder.getInventoryOccupyPairs().size()
-                                    : 0);
+                if (shopOrder.getInventoryReservationRefs() == null
+                        || shopOrder.getInventoryReservationRefs().isEmpty()) {
+                    throw new IllegalStateException(
+                            "Missing inventory reservation refs for shopOrder: "
+                                    + shopOrder.getOrderId());
                 }
+                List<InventoryConfirmRequest.OccupyPairDto> confirmPairs = shopOrder
+                        .getInventoryReservationRefs().stream()
+                        .map(r -> InventoryConfirmRequest.OccupyPairDto.builder()
+                                .shopId(r.getShopId()).skuId(r.getSkuId())
+                                .occupyId(r.getReservationId()).build())
+                        .collect(Collectors.toList());
+                InventoryConfirmRequest confirmRequest = InventoryConfirmRequest.builder()
+                        .paymentId(command.getPaymentId())
+                        .tradeId(command.getTradeId())
+                        .orderId(shopOrder.getOrderId())
+                        .traceId(command.getTraceId())
+                        .occupyPairs(confirmPairs)
+                        .build();
+                String confirmKey = command.getPaymentId() + ":inv:confirm:"
+                        + shopOrder.getShopId();
+                InventoryConfirmResponse confirmResp = inventoryClient
+                        .confirmReservation(confirmKey, confirmRequest);
+                if (confirmResp == null) {
+                    throw new IllegalStateException(
+                            "Inventory confirm returned null response for orderId: "
+                                    + shopOrder.getOrderId());
+                }
+                if (!confirmResp.isSuccess()) {
+                    publishInventoryConfirmConflictEvent(command, shopOrder, confirmPairs,
+                            confirmResp);
+                    throw new DomainConflictException("INVENTORY_CONFIRM_CONFLICT",
+                            "Inventory confirm conflict for orderId: "
+                                    + shopOrder.getOrderId()
+                                    + ", conflicts="
+                                    + confirmResp.getConflictReservationIds());
+                }
+                log.info("Inventory canonical confirm succeeded for shopOrder: orderId={}, shopId={}",
+                        shopOrder.getOrderId(), shopOrder.getShopId());
             }
 
             // 所有 confirm 成功后，才允许推进 paid 投影与事件
@@ -885,9 +782,7 @@ public class TradeApplicationService {
                         .orderStatus(OrderStatus.PENDING_SHIP)
                         .inventoryStatus(InventoryStatus.CONFIRMED.getCode())
                         .promotionStatus(shopOrder.getPromotionStatus())
-                        .inventoryProjectionVersion(shopOrder.getInventoryProjectionVersion())
                         .inventoryReservationRefs(shopOrder.getInventoryReservationRefs())
-                        .inventoryOccupyPairs(shopOrder.getInventoryOccupyPairs())
                         .totalAmountCents(shopOrder.getTotalAmountCents())
                         .orderLines(shopOrder.getOrderLines())
                         .createdAt(shopOrder.getCreatedAt())
