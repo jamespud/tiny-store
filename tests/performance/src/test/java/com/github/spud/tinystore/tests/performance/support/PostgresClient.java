@@ -71,6 +71,28 @@ public class PostgresClient implements AutoCloseable {
         return executeCount(sql, tradeIdPrefix + "%");
     }
 
+    public void insertStock(String shopId, String skuId, long totalQuantity) {
+        String sql = "INSERT INTO tinystore_inventory.inventory_stock " +
+                     "(shop_id, sku_id, total_quantity, reserved_quantity, version, created_at, updated_at) " +
+                     "VALUES (?, ?, ?, 0, 0, NOW(), NOW())";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, shopId);
+            ps.setString(2, skuId);
+            ps.setLong(3, totalQuantity);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to insert stock", e);
+        }
+    }
+
+    public long countDeadlocks() {
+        return executeCount("SELECT deadlocks FROM pg_stat_database WHERE datname = current_database()");
+    }
+
+    public long countLockWaiters() {
+        return executeCount("SELECT count(*) FROM pg_stat_activity WHERE wait_event = 'Lock'");
+    }
+
     private long executeCount(String sql, String... params) {
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             for (int i = 0; i < params.length; i++) {
