@@ -40,7 +40,9 @@ class InventoryOversellBoundaryIT {
 
     @BeforeEach
     void setUp() {
-        gatewayBaseUrl = System.getProperty("gateway.base.url", "http://localhost:8080");
+        // Hit the inventory service directly (not via gateway): the gateway's
+        // /api/inventory/** route strips /api, which mismatches the controller path.
+        gatewayBaseUrl = System.getProperty("inventory.base.url", "http://localhost:13000");
         pgUrl = System.getProperty("pg.url", "jdbc:postgresql://localhost:5433/tinystore");
         pgUser = System.getProperty("pg.user", "postgres");
         pgPassword = System.getProperty("pg.password", "postgres");
@@ -105,7 +107,17 @@ class InventoryOversellBoundaryIT {
             .as("PRE_DEDUCTED count must equal stock S (no oversell): concurrency=%d stock=%d", concurrency, stock)
             .isEqualTo(stock);
 
-        long successCount = responses.values().stream().filter(r -> r.statusCode() == 200).count();
+        // The controller returns HTTP 200 for both success and STOCK_LACK (success:false in body);
+        // count actual admissions by parsing the body.
+        long successCount = responses.values().stream()
+            .filter(r -> r.statusCode() == 200)
+            .filter(r -> {
+                try {
+                    Map<String, Object> parsed = gatewayClient.parseResponse(r.body());
+                    return Boolean.TRUE.equals(parsed.get("success"));
+                } catch (Exception e) { return false; }
+            })
+            .count();
         long failCount = concurrency - successCount;
         assertThat(successCount).as("Successful admissions must equal stock").isEqualTo(stock);
         assertThat(successCount + failCount).as("All requests accounted for").isEqualTo(concurrency);
