@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.spud.tinystore.order.application.command.CreateTradeCommand;
 import com.github.spud.tinystore.order.application.command.CancelTradeCommand;
 import com.github.spud.tinystore.order.application.command.PaymentSucceededCommand;
-import com.github.spud.tinystore.order.domain.enums.InventoryProjectionVersion;
 import com.github.spud.tinystore.order.domain.enums.InventoryStatus;
 import com.github.spud.tinystore.order.domain.enums.OrderStatus;
 import com.github.spud.tinystore.order.domain.enums.PayStatus;
@@ -12,7 +11,6 @@ import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
 import com.github.spud.tinystore.order.domain.event.OrderEventType;
 import com.github.spud.tinystore.order.domain.exception.DomainConflictException;
 import com.github.spud.tinystore.order.domain.model.InventoryReservationRef;
-import com.github.spud.tinystore.order.domain.model.InventoryOccupyPair;
 import com.github.spud.tinystore.order.domain.model.ShopOrder;
 import com.github.spud.tinystore.order.domain.model.Trade;
 import com.github.spud.tinystore.order.domain.repository.ShopOrderRepository;
@@ -92,7 +90,6 @@ class TradeApplicationServicePaymentFlowTest {
         ReflectionTestUtils.setField(tradeApplicationService, "promotionClient", promotionClient);
         ReflectionTestUtils.setField(tradeApplicationService, "inventoryClient", inventoryClient);
         ReflectionTestUtils.setField(tradeApplicationService, "objectMapper", new ObjectMapper());
-        ReflectionTestUtils.setField(tradeApplicationService, "useCanonicalReservationApi", true);
     }
 
     @Test
@@ -222,90 +219,6 @@ class TradeApplicationServicePaymentFlowTest {
             .containsExactlyInAnyOrder(OrderEventType.TRADE_PAID, OrderEventType.ORDER_PAID);
 
         verify(outboxEventService, never()).saveEventInNewTransaction(any());
-    }
-
-    @Test
-    @DisplayName("onPaymentSucceeded - version1 order still projects inventory status to CONFIRMED")
-    void onPaymentSucceeded_version1Order_shouldProjectConfirmedInventoryStatus() throws Exception {
-        PaymentIntentEntity paymentIntent = paymentIntent("pay-003", "trade-003", 3000L, "CREATED");
-        Trade trade = trade("trade-003", 3000L);
-        ShopOrder shopOrder = version1ShopOrder("order-003", "trade-003", "shop-003", "sku-003", "occ-003");
-
-        when(paymentIntentJpaRepository.findByPaymentId("pay-003")).thenReturn(Optional.of(paymentIntent));
-        when(tradeRepository.findByTradeId("trade-003")).thenReturn(Optional.of(trade));
-        when(shopOrderRepository.findByTradeId("trade-003")).thenReturn(List.of(shopOrder));
-        when(tradeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(shopOrderRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(paymentIntentJpaRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(outboxEventService.saveEvent(any())).thenReturn(true);
-
-        PaymentSucceededCommand command = PaymentSucceededCommand.builder()
-            .paymentId("pay-003")
-            .tradeId("trade-003")
-            .paidAmountCents(3000L)
-            .traceId("trace-003")
-            .build();
-
-        tradeApplicationService.onPaymentSucceeded("idem-pay-003", command);
-
-        verify(inventoryClient, never()).confirmReservation(anyString(), any());
-
-        ArgumentCaptor<ShopOrder> shopOrderCaptor = ArgumentCaptor.forClass(ShopOrder.class);
-        verify(shopOrderRepository).save(shopOrderCaptor.capture());
-        assertThat(shopOrderCaptor.getValue().getOrderStatus()).isEqualTo(OrderStatus.PENDING_SHIP);
-        assertThat(shopOrderCaptor.getValue().getInventoryStatus()).isEqualTo(InventoryStatus.CONFIRMED.getCode());
-    }
-
-    @Test
-    @DisplayName("createTrade - version1 projection still writes canonical PRE_DEDUCTED status")
-    void createTrade_version1Projection_shouldWriteCanonicalInventoryStatus() throws Exception {
-        ReflectionTestUtils.setField(tradeApplicationService, "useCanonicalReservationApi", false);
-
-        when(idempotencyService.tryAcquire(anyString(), anyString(), anyString())).thenReturn(true);
-        when(promotionClient.quote(anyString(), any())).thenReturn(okQuoteResponse(1000L));
-        when(promotionClient.commit(anyString(), any())).thenReturn(null);
-        when(inventoryClient.deduct(anyString(), any())).thenReturn(InventoryDeductResponse.builder()
-            .success(true)
-            .occupyPairs(List.of(InventoryDeductResponse.OccupyPairDto.builder()
-                .shopId("shop-004")
-                .skuId("sku-004")
-                .occupyId("occ-004")
-                .build()))
-            .build());
-        when(tradeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(shopOrderRepository.saveAll(any())).thenReturn(true);
-        when(paymentIntentJpaRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(outboxEventService.saveEvent(any())).thenReturn(true);
-
-        CreateTradeCommand command = CreateTradeCommand.builder()
-            .tradeId("trade-004")
-            .buyerId("buyer-004")
-            .buyerNick("buyer-004")
-            .addressId("addr-004")
-            .traceId("trace-004")
-            .orderLines(List.of(CreateTradeCommand.OrderLineCommand.builder()
-                .skuId("sku-004")
-                .productId("prod-004")
-                .productName("Product 004")
-                .shopId("shop-004")
-                .sellerId("seller-004")
-                .quantity(1)
-                .priceCents(1000L)
-                .weightGrams(0L)
-                .build()))
-            .build();
-
-        tradeApplicationService.createTrade("idem-create-004", command);
-
-        @SuppressWarnings("rawtypes")
-        ArgumentCaptor<List> savedOrdersCaptor = ArgumentCaptor.forClass(List.class);
-        verify(shopOrderRepository).saveAll(savedOrdersCaptor.capture());
-        @SuppressWarnings("unchecked")
-        List<ShopOrder> savedOrders = (List<ShopOrder>) savedOrdersCaptor.getValue();
-        assertThat(savedOrders).hasSize(1);
-        assertThat(savedOrders.get(0).getInventoryProjectionVersion()).isEqualTo(InventoryProjectionVersion.VERSION_1);
-        assertThat(savedOrders.get(0).getInventoryStatus()).isEqualTo(InventoryStatus.PRE_DEDUCTED.getCode());
-        verify(inventoryClient, never()).reserveCanonical(anyString(), any());
     }
 
     @Test
@@ -525,7 +438,6 @@ class TradeApplicationServicePaymentFlowTest {
             .sellerId("seller-shop-007")
             .orderStatus(OrderStatus.PENDING_PAY)
             .inventoryStatus(InventoryStatus.PRE_DEDUCTED.getCode())
-            .inventoryProjectionVersion(InventoryProjectionVersion.VERSION_2)
             .inventoryReservationRefs(List.of())
             .orderLines(List.of())
             .createdAt(LocalDateTime.now())
@@ -544,44 +456,13 @@ class TradeApplicationServicePaymentFlowTest {
 
         assertThatThrownBy(() -> tradeApplicationService.cancelTrade("idem-cancel-007", command))
             .isInstanceOf(DomainConflictException.class)
-            .hasMessageContaining("Inventory release conflict during cancel");
+            .hasMessageContaining("Missing inventory reservation refs during cancel");
 
         verify(shopOrderRepository, never()).save(any());
         verify(tradeRepository, never()).save(any());
         verify(outboxEventService, never()).saveEvent(any());
         assertThat(savedInventoryStatuses).isEmpty();
         verify(inventoryClient, never()).releaseCanonical(anyString(), any());
-        verify(inventoryClient, never()).releaseV2(anyString(), any());
-    }
-
-    @Test
-    @DisplayName("cancelTrade - legacy logical release failure throws and stops cancellation")
-    void cancelTrade_legacyLogicalReleaseFailure_shouldThrowAndStopCancellation() throws Exception {
-        Trade trade = trade("trade-007b", 1500L);
-        ShopOrder shopOrder = version1ShopOrder("order-007b", "trade-007b", "shop-007b", "sku-007b", "occ-007b");
-
-        when(tradeRepository.findByTradeId("trade-007b")).thenReturn(Optional.of(trade));
-        when(shopOrderRepository.findByTradeId("trade-007b")).thenReturn(List.of(shopOrder));
-        when(inventoryClient.releaseV2(anyString(), any())).thenReturn(InventoryReleaseResponseV2.builder()
-            .success(false)
-            .message("legacy release rejected")
-            .build());
-
-        CancelTradeCommand command = CancelTradeCommand.builder()
-            .tradeId("trade-007b")
-            .reason("buyer-cancelled")
-            .traceId("trace-007b")
-            .build();
-
-        assertThatThrownBy(() -> tradeApplicationService.cancelTrade("idem-cancel-007b", command))
-            .isInstanceOf(DomainConflictException.class)
-            .hasMessageContaining("Inventory release conflict during cancel")
-            .hasMessageContaining("legacy release rejected");
-
-        verify(shopOrderRepository, never()).save(any());
-        verify(tradeRepository, never()).save(any());
-        verify(outboxEventService, never()).saveEvent(any());
-        verify(inventoryClient).releaseV2(anyString(), any());
     }
 
     @Test
@@ -635,7 +516,6 @@ class TradeApplicationServicePaymentFlowTest {
             .sellerId("seller-shop-009")
             .orderStatus(OrderStatus.PENDING_PAY)
             .inventoryStatus(InventoryStatus.PRE_DEDUCTED.getCode())
-            .inventoryProjectionVersion(InventoryProjectionVersion.VERSION_2)
             .inventoryReservationRefs(List.of())
             .orderLines(List.of())
             .createdAt(LocalDateTime.now())
@@ -755,29 +635,7 @@ class TradeApplicationServicePaymentFlowTest {
             .sellerId("seller-" + shopId)
             .orderStatus(OrderStatus.PENDING_PAY)
             .inventoryStatus(InventoryStatus.PRE_DEDUCTED.getCode())
-            .inventoryProjectionVersion(InventoryProjectionVersion.VERSION_2)
             .inventoryReservationRefs(List.of(new InventoryReservationRef(shopId, skuId, reservationId)))
-            .orderLines(List.of())
-            .createdAt(LocalDateTime.now())
-            .updatedAt(LocalDateTime.now())
-            .build();
-    }
-
-    private ShopOrder version1ShopOrder(String orderId,
-                                        String tradeId,
-                                        String shopId,
-                                        String skuId,
-                                        String occupyId) {
-        return ShopOrder.builder()
-            .id(2L)
-            .orderId(orderId)
-            .tradeId(tradeId)
-            .shopId(shopId)
-            .sellerId("seller-" + shopId)
-            .orderStatus(OrderStatus.PENDING_PAY)
-            .inventoryStatus("LOCKED")
-            .inventoryProjectionVersion(InventoryProjectionVersion.VERSION_1)
-            .inventoryOccupyPairs(List.of(new InventoryOccupyPair(shopId, skuId, occupyId)))
             .orderLines(List.of())
             .createdAt(LocalDateTime.now())
             .updatedAt(LocalDateTime.now())

@@ -60,16 +60,10 @@ tinystore:
       enabled: ${TINYSTORE_SECURITY_RESOURCESERVER_ENABLED:false}
 
 # ============================================================
-# Inventory Feature Flags (RFC-001 Canonical Reservation)
+# Inventory Configuration
 # ============================================================
 inventory:
-  # Batch-3: Set to false to shut down legacy /api/inventory/stock/* endpoints
-  legacy-stock-api-enabled: ${INVENTORY_LEGACY_STOCK_API_ENABLED:true}
-
   reservation:
-    # When true, InventoryDeductAppService routes to canonical InventoryReservationAppService
-    canonical-enabled: ${INVENTORY_RESERVATION_CANONICAL_ENABLED:false}
-
     expiry:
       # Enable/disable the reservation expiry scheduler
       enabled: ${INVENTORY_RESERVATION_EXPIRY_ENABLED:true}

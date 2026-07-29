@@ -36,7 +36,6 @@ public class TradeDetailData {
         private String sellerId;
         private String orderStatus;
         private String inventoryStatus;
-        private Integer inventoryProjectionVersion;
         private String createdAt;
         private List<OrderLineDetail> orderLines;
         private List<PackageDetail> packages;

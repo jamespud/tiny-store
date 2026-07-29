@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 /**
  * Canonical inventory reservation reference value object (shopId + skuId + reservationId).
  * <p>
- * Replaces {@link InventoryOccupyPair} in version 2 orders.
+ * Used in version 2 orders (canonical reservation path).
  * Note: reservationId == occupyId from the V2 deduct path.
  */
 @Data
