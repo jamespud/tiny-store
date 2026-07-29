@@ -370,6 +370,8 @@ load-matrix: build ## Run full load matrix (oversell/idempotency/confirm/k6 at 4
 		curl -sf --max-time 3 http://localhost:8080/actuator/health > /dev/null 2>&1 && { echo "Gateway healthy after $$((i*5))s"; break; }; \
 		sleep 5; \
 	done; \
+	echo "Waiting 30s for Nacos service registration (order -> inventory via Feign)..."; \
+	sleep 30; \
 	for C in 500 1000 5000 10000; do \
 		echo "===== OVERSELL C=$$C ====="; \
 		$(MAVEN) -pl tests/performance test -Pperf -Dtest=InventoryOversellBoundaryIT -Dperf.concurrency=$$C -Dinventory.base.url=http://localhost:13000 -Dpg.url=jdbc:postgresql://localhost:5433/tinystore || exit 1; \
