@@ -51,4 +51,22 @@ public interface InventoryClient {
     InventoryReleaseResponseV2 releaseCanonical(
         @RequestHeader("Idempotency-Key") String idempotencyKey,
         @RequestBody InventoryReleaseRequestV2 request);
+
+    /**
+     * Redis preDeduct only (sync, for async reserve split). Returns reservationId without DB write.
+     * Route: POST /api/inventory/reservations/pre-deduct
+     */
+    @PostMapping("/api/inventory/reservations/pre-deduct")
+    InventoryDeductResponse preDeductRedisOnly(
+        @RequestHeader("Idempotency-Key") String idempotencyKey,
+        @RequestBody InventoryDeductRequest request);
+
+    /**
+     * Redis rollback only (for createTrade compensation). No DB.
+     * Route: POST /api/inventory/reservations/rollback
+     */
+    @PostMapping("/api/inventory/reservations/rollback")
+    InventoryDeductResponse rollbackRedis(
+        @RequestHeader("Idempotency-Key") String idempotencyKey,
+        @RequestBody java.util.Map<String, String> body);
 }

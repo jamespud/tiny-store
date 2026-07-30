@@ -103,40 +103,31 @@ public class PaymentApplicationService {
             // 3. 获取所有子单，按 ShopOrder 聚合生成 adjustment items
             List<ShopOrder> shopOrders = shopOrderRepository.findByTradeId(tradeId);
 
-            // 按 shop 遍历调用 inventory adjust (Canonical: reason=RESTOCK_REFUND, delta=+qty)
+            // 按 shop 写 Outbox INVENTORY_ADJUST 事件 (async, replaces sync Feign adjust)
             for (ShopOrder shopOrder : shopOrders) {
-                List<InventoryAdjustRequest.Item> adjustItems = shopOrder.getOrderLines().stream()
-                    .map(orderLine -> InventoryAdjustRequest.Item.builder()
-                        .shopId(shopOrder.getShopId())
-                        .skuId(orderLine.getSkuId())
-                        .delta((long) orderLine.getQuantity())   // +qty: refund restocks
-                        .build())
+                List<Map<String, Object>> adjustItems = shopOrder.getOrderLines().stream()
+                    .map(orderLine -> Map.<String, Object>of(
+                        "shopId", shopOrder.getShopId(),
+                        "skuId", orderLine.getSkuId(),
+                        "delta", (long) orderLine.getQuantity()))
                     .collect(Collectors.toList());
 
-                InventoryAdjustRequest adjustRequest = InventoryAdjustRequest.builder()
-                    .reason("RESTOCK_REFUND")
-                    .referenceId(refundId)
-                    .tradeId(tradeId)
-                    .items(adjustItems)
+                OrderDomainEvent adjustEvent = OrderDomainEvent.builder()
+                    .eventId(UUID.randomUUID().toString())
+                    .eventType(OrderEventType.INVENTORY_ADJUST)
+                    .aggregateType("INVENTORY")
+                    .aggregateId(refundId + ":" + shopOrder.getShopId())
+                    .occurredAt(LocalDateTime.now())
+                    .traceId(traceId)
+                    .payloadJson(objectMapper.writeValueAsString(Map.of(
+                            "tradeId", tradeId,
+                            "refundId", refundId,
+                            "reason", "RESTOCK_REFUND",
+                            "items", adjustItems)))
                     .build();
-
-                try {
-                    String shopIdempotencyKey = idempotencyKey + ":inv:adj:" + shopOrder.getShopId();
-                    InventoryAdjustResponse adjustResponse = inventoryClient.adjust(shopIdempotencyKey, adjustRequest);
-                    if (adjustResponse == null || !Boolean.TRUE.equals(adjustResponse.getSuccess())) {
-                        String msg = adjustResponse != null ? adjustResponse.getMessage() : "null response";
-                        throw new DomainConflictException("INVENTORY_ADJUST_FAILED",
-                            "Failed to adjust inventory for shop " + shopOrder.getShopId() + ": " + msg);
-                    }
-                    log.info("Inventory adjust succeeded: refundId={}, shopId={}, items={}",
-                        refundId, shopOrder.getShopId(), adjustItems.size());
-                } catch (DomainConflictException e) {
-                    throw e;
-                } catch (Exception e) {
-                    log.error("Inventory adjust failed for refundId={}, shopId={}", refundId, shopOrder.getShopId(), e);
-                    throw new DomainConflictException("INVENTORY_ADJUST_FAILED",
-                        "Failed to adjust inventory for shop " + shopOrder.getShopId() + ": " + e.getMessage());
-                }
+                outboxEventService.saveEvent(adjustEvent);
+                log.info("Inventory adjust event written (async): refundId={}, shopId={}",
+                    refundId, shopOrder.getShopId());
             }
 
             // 4. 调用促销释放
