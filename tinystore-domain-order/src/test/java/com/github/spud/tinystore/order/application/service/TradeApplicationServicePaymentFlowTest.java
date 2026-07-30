@@ -19,8 +19,6 @@ import com.github.spud.tinystore.order.infrastructure.acl.InventoryClient;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient;
 import com.github.spud.tinystore.order.infrastructure.acl.dto.InventoryDeductResponse;
 import com.github.spud.tinystore.order.infrastructure.acl.dto.PromotionQuoteResponse;
-import com.github.spud.tinystore.order.infrastructure.acl.dto.InventoryConfirmResponse;
-import com.github.spud.tinystore.order.infrastructure.acl.dto.InventoryReleaseResponseV2;
 import com.github.spud.tinystore.order.infrastructure.acl.dto.PromotionReleaseResponse;
 import com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService;
 import com.github.spud.tinystore.order.infrastructure.idempotency.IdempotencyService;
@@ -147,8 +145,9 @@ class TradeApplicationServicePaymentFlowTest {
         when(promotionClient.quote(anyString(), any())).thenReturn(okQuoteResponse(1000L));
         when(inventoryClient.preDeductRedisOnly(anyString(), any()))
             .thenReturn(reserveSuccessResponse("shop-009", "sku-009", "res-009"));
-        when(inventoryClient.releaseCanonical(anyString(), any())).thenReturn(InventoryReleaseResponseV2.builder()
+        when(inventoryClient.rollbackRedis(anyString(), any())).thenReturn(InventoryDeductResponse.builder()
             .success(true)
+            .message("ok")
             .build());
         when(promotionClient.release(anyString(), any())).thenReturn(PromotionReleaseResponse.builder()
             .success(true)
@@ -161,7 +160,7 @@ class TradeApplicationServicePaymentFlowTest {
             .isInstanceOf(DomainConflictException.class)
             .hasMessageContaining("Promotion commit failed");
 
-        verify(inventoryClient).releaseCanonical(anyString(), any());
+        verify(inventoryClient).rollbackRedis(anyString(), any());
         verify(promotionClient).release(anyString(), any());
         verify(tradeRepository, never()).save(any());
         verify(shopOrderRepository, never()).saveAll(any());
@@ -176,8 +175,9 @@ class TradeApplicationServicePaymentFlowTest {
         when(promotionClient.commit(anyString(), any())).thenReturn(null);
         when(inventoryClient.preDeductRedisOnly(anyString(), any()))
             .thenReturn(reserveSuccessResponse("shop-010", "sku-010", "res-010"));
-        when(inventoryClient.releaseCanonical(anyString(), any())).thenReturn(InventoryReleaseResponseV2.builder()
+        when(inventoryClient.rollbackRedis(anyString(), any())).thenReturn(InventoryDeductResponse.builder()
             .success(true)
+            .message("ok")
             .build());
         when(promotionClient.release(anyString(), any())).thenReturn(PromotionReleaseResponse.builder()
             .success(true)
@@ -190,7 +190,7 @@ class TradeApplicationServicePaymentFlowTest {
             .isInstanceOf(DomainConflictException.class)
             .satisfies(ex -> assertThat(((DomainConflictException) ex).getErrorCode()).isEqualTo("ORDER_SAVE_FAILED"));
 
-        verify(inventoryClient).releaseCanonical(anyString(), any());
+        verify(inventoryClient).rollbackRedis(anyString(), any());
         verify(promotionClient).release(anyString(), any());
         verify(paymentIntentJpaRepository, never()).save(any());
         // INVENTORY_RESERVE_DB outbox events are written before saveAll fails (same tx, will rollback);
@@ -202,16 +202,13 @@ class TradeApplicationServicePaymentFlowTest {
     }
 
     @Test
-    @DisplayName("createTrade - compensation logical release failure surfaces compensation error")
-    void createTrade_compensationLogicalReleaseFailure_shouldSurfaceCompensationError() throws Exception {
+    @DisplayName("createTrade - compensation calls rollbackRedis even when it throws (exception swallowed)")
+    void createTrade_compensationCallsRollbackRedis_evenWhenItThrows() throws Exception {
         when(idempotencyService.tryAcquire(anyString(), anyString(), anyString())).thenReturn(true);
         when(promotionClient.quote(anyString(), any())).thenReturn(okQuoteResponse(1200L));
         when(inventoryClient.preDeductRedisOnly(anyString(), any()))
             .thenReturn(reserveSuccessResponse("shop-011", "sku-011", "res-011"));
-        when(inventoryClient.releaseCanonical(anyString(), any())).thenReturn(InventoryReleaseResponseV2.builder()
-            .success(false)
-            .message("release rejected")
-            .build());
+        when(inventoryClient.rollbackRedis(anyString(), any())).thenThrow(new RuntimeException("release rejected"));
         when(promotionClient.release(anyString(), any())).thenReturn(PromotionReleaseResponse.builder()
             .success(true)
             .build());
@@ -221,11 +218,11 @@ class TradeApplicationServicePaymentFlowTest {
         assertThatThrownBy(() -> tradeApplicationService.createTrade("idem-create-011",
             createTradeCommand("trade-011", "shop-011", "sku-011", 1200L)))
             .isInstanceOf(DomainConflictException.class)
-            .hasMessageContaining("release rejected")
+            .hasMessageContaining("Promotion commit failed")
             .satisfies(ex -> assertThat(((DomainConflictException) ex).getErrorCode())
-                .isEqualTo("CREATE_TRADE_COMPENSATION_FAILED"));
+                .isEqualTo("PROMOTION_COMMIT_FAILED"));
 
-        verify(inventoryClient).releaseCanonical(anyString(), any());
+        verify(inventoryClient).rollbackRedis(anyString(), any());
         verify(promotionClient).release(anyString(), any());
     }
 
@@ -252,7 +249,7 @@ class TradeApplicationServicePaymentFlowTest {
         verify(paymentIntentJpaRepository, never()).save(any());
         verify(outboxEventService, never()).saveEvent(any());
         verify(promotionClient).release(anyString(), any());
-        verify(inventoryClient, never()).releaseCanonical(anyString(), any());
+        verify(inventoryClient, never()).rollbackRedis(anyString(), any());
     }
 
     @Test
@@ -270,9 +267,6 @@ class TradeApplicationServicePaymentFlowTest {
             savedInventoryStatuses.add(savedOrder.getInventoryStatus());
             return savedOrder;
         });
-        when(inventoryClient.releaseCanonical(anyString(), any())).thenReturn(InventoryReleaseResponseV2.builder()
-            .success(true)
-            .build());
         when(outboxEventService.saveEvent(any())).thenReturn(true);
 
         CancelTradeCommand command = CancelTradeCommand.builder()
@@ -288,7 +282,7 @@ class TradeApplicationServicePaymentFlowTest {
         assertThat(shopOrderCaptor.getValue().getOrderStatus()).isEqualTo(OrderStatus.CLOSED);
         assertThat(shopOrderCaptor.getValue().getInventoryStatus()).isEqualTo(InventoryStatus.RELEASED.getCode());
         assertThat(savedInventoryStatuses).containsExactly(InventoryStatus.RELEASED.getCode());
-        verify(inventoryClient).releaseCanonical(anyString(), any());
+        verify(outboxEventService).saveEvent(argThat(e -> e.getEventType() == OrderEventType.INVENTORY_RELEASE));
     }
 
     @Test
@@ -301,7 +295,7 @@ class TradeApplicationServicePaymentFlowTest {
         when(tradeRepository.findByTradeId("trade-006")).thenReturn(Optional.of(trade));
         when(shopOrderRepository.findByTradeId("trade-006")).thenReturn(List.of(shopOrder));
         doThrow(new RuntimeException("release failed"))
-            .when(inventoryClient).releaseCanonical(anyString(), any());
+            .when(outboxEventService).saveEvent(argThat(e -> e.getEventType() == OrderEventType.INVENTORY_RELEASE));
 
         CancelTradeCommand command = CancelTradeCommand.builder()
             .tradeId("trade-006")
@@ -315,9 +309,12 @@ class TradeApplicationServicePaymentFlowTest {
 
         verify(shopOrderRepository, never()).save(any());
         verify(tradeRepository, never()).save(any());
-        verify(outboxEventService, never()).saveEvent(any());
         assertThat(savedInventoryStatuses).isEmpty();
-        verify(inventoryClient).releaseCanonical(anyString(), any());
+        verify(outboxEventService).saveEvent(argThat(e -> e.getEventType() == OrderEventType.INVENTORY_RELEASE));
+        // TRADE_CLOSED / ORDER_CLOSED events should NOT be written after release failure
+        verify(outboxEventService, never()).saveEvent(argThat(
+            e -> e.getEventType() == OrderEventType.TRADE_CLOSED
+                || e.getEventType() == OrderEventType.ORDER_CLOSED));
     }
 
     @Test
@@ -328,10 +325,8 @@ class TradeApplicationServicePaymentFlowTest {
 
         when(tradeRepository.findByTradeId("trade-006b")).thenReturn(Optional.of(trade));
         when(shopOrderRepository.findByTradeId("trade-006b")).thenReturn(List.of(shopOrder));
-        when(inventoryClient.releaseCanonical(anyString(), any())).thenReturn(InventoryReleaseResponseV2.builder()
-            .success(false)
-            .message("release rejected")
-            .build());
+        doThrow(new RuntimeException("release rejected"))
+            .when(outboxEventService).saveEvent(argThat(e -> e.getEventType() == OrderEventType.INVENTORY_RELEASE));
 
         CancelTradeCommand command = CancelTradeCommand.builder()
             .tradeId("trade-006b")
@@ -341,13 +336,15 @@ class TradeApplicationServicePaymentFlowTest {
 
         assertThatThrownBy(() -> tradeApplicationService.cancelTrade("idem-cancel-006b", command))
             .isInstanceOf(DomainConflictException.class)
-            .hasMessageContaining("Inventory release conflict during cancel")
-            .hasMessageContaining("release rejected");
+            .hasMessageContaining("Inventory release conflict during cancel");
 
         verify(shopOrderRepository, never()).save(any());
         verify(tradeRepository, never()).save(any());
-        verify(outboxEventService, never()).saveEvent(any());
-        verify(inventoryClient).releaseCanonical(anyString(), any());
+        verify(outboxEventService).saveEvent(argThat(e -> e.getEventType() == OrderEventType.INVENTORY_RELEASE));
+        // TRADE_CLOSED / ORDER_CLOSED events should NOT be written after release failure
+        verify(outboxEventService, never()).saveEvent(argThat(
+            e -> e.getEventType() == OrderEventType.TRADE_CLOSED
+                || e.getEventType() == OrderEventType.ORDER_CLOSED));
     }
 
     @Test
@@ -380,13 +377,12 @@ class TradeApplicationServicePaymentFlowTest {
 
         assertThatThrownBy(() -> tradeApplicationService.cancelTrade("idem-cancel-007", command))
             .isInstanceOf(DomainConflictException.class)
-            .hasMessageContaining("Missing inventory reservation refs during cancel");
+            .hasMessageContaining("Inventory release conflict during cancel");
 
         verify(shopOrderRepository, never()).save(any());
         verify(tradeRepository, never()).save(any());
         verify(outboxEventService, never()).saveEvent(any());
         assertThat(savedInventoryStatuses).isEmpty();
-        verify(inventoryClient, never()).releaseCanonical(anyString(), any());
     }
 
     @Test
@@ -400,15 +396,12 @@ class TradeApplicationServicePaymentFlowTest {
         when(tradeRepository.findByTradeId("trade-008")).thenReturn(Optional.of(trade));
         when(shopOrderRepository.findByTradeId("trade-008")).thenReturn(List.of(firstShopOrder, secondShopOrder));
         doAnswer(invocation -> {
-            Object request = invocation.getArgument(1);
-            String requestText = String.valueOf(request);
-            if (requestText.contains("order-008-2")) {
+            OrderDomainEvent event = invocation.getArgument(0);
+            if ("order-008-2".equals(event.getAggregateId())) {
                 throw new RuntimeException("release failed second shop");
             }
-            return InventoryReleaseResponseV2.builder()
-                .success(true)
-                .build();
-        }).when(inventoryClient).releaseCanonical(anyString(), any());
+            return true;
+        }).when(outboxEventService).saveEvent(any());
 
         CancelTradeCommand command = CancelTradeCommand.builder()
             .tradeId("trade-008")
@@ -420,10 +413,13 @@ class TradeApplicationServicePaymentFlowTest {
             .isInstanceOf(DomainConflictException.class)
             .hasMessageContaining("Inventory release conflict during cancel");
 
-        verify(inventoryClient, times(2)).releaseCanonical(anyString(), any());
+        verify(outboxEventService, times(2)).saveEvent(any());
         verify(shopOrderRepository, never()).save(any());
         verify(tradeRepository, never()).save(any());
-        verify(outboxEventService, never()).saveEvent(any());
+        // TRADE_CLOSED / ORDER_CLOSED events should NOT be written after release failure
+        verify(outboxEventService, never()).saveEvent(argThat(
+            e -> e.getEventType() == OrderEventType.TRADE_CLOSED
+                || e.getEventType() == OrderEventType.ORDER_CLOSED));
         assertThat(savedInventoryStatuses).isEmpty();
     }
 
