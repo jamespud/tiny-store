@@ -94,80 +94,6 @@ class TradeApplicationServicePaymentFlowTest {
     }
 
     @Test
-    @DisplayName("onPaymentSucceeded - confirm conflict publishes conflict event and skips paid projection")
-    void onPaymentSucceeded_confirmConflict_publishesConflictEventAndSkipsPaidProjection() throws Exception {
-        PaymentIntentEntity paymentIntent = paymentIntent("pay-001", "trade-001", 1000L, "CREATED");
-        Trade trade = trade("trade-001", 1000L);
-        ShopOrder shopOrder = version2ShopOrder("order-001", "trade-001", "shop-001", "sku-001", "res-001");
-
-        when(paymentIntentJpaRepository.findByPaymentId("pay-001")).thenReturn(Optional.of(paymentIntent));
-        when(tradeRepository.findByTradeId("trade-001")).thenReturn(Optional.of(trade));
-        when(shopOrderRepository.findByTradeId("trade-001")).thenReturn(List.of(shopOrder));
-        when(inventoryClient.confirmReservation(anyString(), any())).thenReturn(InventoryConfirmResponse.builder()
-            .success(false)
-            .message("reservation already released")
-            .conflictReservationIds(List.of("res-001"))
-            .build());
-        when(outboxEventService.saveEventInNewTransaction(any())).thenReturn(true);
-
-        PaymentSucceededCommand command = PaymentSucceededCommand.builder()
-            .paymentId("pay-001")
-            .tradeId("trade-001")
-            .paidAmountCents(1000L)
-            .traceId("trace-001")
-            .build();
-
-        assertThatThrownBy(() -> tradeApplicationService.onPaymentSucceeded("idem-pay-001", command))
-            .isInstanceOf(DomainConflictException.class)
-            .hasMessageContaining("Inventory confirm conflict");
-
-        verify(tradeRepository, never()).save(any());
-        verify(shopOrderRepository, never()).save(any());
-        verify(paymentIntentJpaRepository, never()).save(any());
-        verify(outboxEventService, never()).saveEvent(any());
-
-        ArgumentCaptor<OrderDomainEvent> conflictCaptor = ArgumentCaptor.forClass(OrderDomainEvent.class);
-        verify(outboxEventService).saveEventInNewTransaction(conflictCaptor.capture());
-        assertThat(conflictCaptor.getValue().getEventType()).isEqualTo(OrderEventType.INVENTORY_CONFIRM_CONFLICT);
-        assertThat(conflictCaptor.getValue().getPayloadJson()).contains("trade-001", "order-001", "res-001");
-    }
-
-    @Test
-    @DisplayName("onPaymentSucceeded - conflict event persistence failure stops flow")
-    void onPaymentSucceeded_confirmConflictEventPersistFailure_shouldThrowAndSkipPaidProjection() throws Exception {
-        PaymentIntentEntity paymentIntent = paymentIntent("pay-001b", "trade-001b", 1000L, "CREATED");
-        Trade trade = trade("trade-001b", 1000L);
-        ShopOrder shopOrder = version2ShopOrder("order-001b", "trade-001b", "shop-001b", "sku-001b", "res-001b");
-
-        when(paymentIntentJpaRepository.findByPaymentId("pay-001b")).thenReturn(Optional.of(paymentIntent));
-        when(tradeRepository.findByTradeId("trade-001b")).thenReturn(Optional.of(trade));
-        when(shopOrderRepository.findByTradeId("trade-001b")).thenReturn(List.of(shopOrder));
-        when(inventoryClient.confirmReservation(anyString(), any())).thenReturn(InventoryConfirmResponse.builder()
-            .success(false)
-            .message("reservation already released")
-            .conflictReservationIds(List.of("res-001b"))
-            .build());
-        when(outboxEventService.saveEventInNewTransaction(any())).thenReturn(false);
-
-        PaymentSucceededCommand command = PaymentSucceededCommand.builder()
-            .paymentId("pay-001b")
-            .tradeId("trade-001b")
-            .paidAmountCents(1000L)
-            .traceId("trace-001b")
-            .build();
-
-        assertThatThrownBy(() -> tradeApplicationService.onPaymentSucceeded("idem-pay-001b", command))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("Failed to persist INVENTORY_CONFIRM_CONFLICT event");
-
-        verify(tradeRepository, never()).save(any());
-        verify(shopOrderRepository, never()).save(any());
-        verify(paymentIntentJpaRepository, never()).save(any());
-        verify(outboxEventService, never()).saveEvent(any());
-        verify(outboxEventService).saveEventInNewTransaction(any());
-    }
-
-    @Test
     @DisplayName("onPaymentSucceeded - confirm success marks paid and emits paid events")
     void onPaymentSucceeded_confirmSuccess_marksPaidAndEmitsEvents() throws Exception {
         PaymentIntentEntity paymentIntent = paymentIntent("pay-002", "trade-002", 2000L, "CREATED");
@@ -177,14 +103,6 @@ class TradeApplicationServicePaymentFlowTest {
         when(paymentIntentJpaRepository.findByPaymentId("pay-002")).thenReturn(Optional.of(paymentIntent));
         when(tradeRepository.findByTradeId("trade-002")).thenReturn(Optional.of(trade));
         when(shopOrderRepository.findByTradeId("trade-002")).thenReturn(List.of(shopOrder));
-        when(inventoryClient.confirmReservation(anyString(), any())).thenReturn(InventoryConfirmResponse.builder()
-            .success(true)
-            .confirmedRefs(List.of(InventoryConfirmResponse.ConfirmedRef.builder()
-                .shopId("shop-002")
-                .skuId("sku-002")
-                .reservationId("res-002")
-                .build()))
-            .build());
         when(tradeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(shopOrderRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(paymentIntentJpaRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -214,10 +132,10 @@ class TradeApplicationServicePaymentFlowTest {
         assertThat(paymentIntentCaptor.getValue().getPaidAt()).isNotNull();
 
         ArgumentCaptor<OrderDomainEvent> outboxCaptor = ArgumentCaptor.forClass(OrderDomainEvent.class);
-        verify(outboxEventService, times(2)).saveEvent(outboxCaptor.capture());
+        verify(outboxEventService, times(3)).saveEvent(outboxCaptor.capture());
         assertThat(outboxCaptor.getAllValues())
             .extracting(OrderDomainEvent::getEventType)
-            .containsExactlyInAnyOrder(OrderEventType.TRADE_PAID, OrderEventType.ORDER_PAID);
+            .containsExactlyInAnyOrder(OrderEventType.INVENTORY_CONFIRM, OrderEventType.TRADE_PAID, OrderEventType.ORDER_PAID);
 
         verify(outboxEventService, never()).saveEventInNewTransaction(any());
     }

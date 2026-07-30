@@ -772,32 +772,26 @@ public class TradeApplicationService {
                                 .shopId(r.getShopId()).skuId(r.getSkuId())
                                 .occupyId(r.getReservationId()).build())
                         .collect(Collectors.toList());
-                InventoryConfirmRequest confirmRequest = InventoryConfirmRequest.builder()
-                        .paymentId(command.getPaymentId())
-                        .tradeId(command.getTradeId())
-                        .orderId(shopOrder.getOrderId())
+
+                // Async confirm: write Outbox INVENTORY_CONFIRM event (replaces sync Feign confirmReservation)
+                OrderDomainEvent confirmEvent = OrderDomainEvent.builder()
+                        .eventId(UUID.randomUUID().toString())
+                        .eventType(OrderEventType.INVENTORY_CONFIRM)
+                        .aggregateType("INVENTORY")
+                        .aggregateId(shopOrder.getOrderId())
+                        .occurredAt(LocalDateTime.now())
                         .traceId(command.getTraceId())
-                        .occupyPairs(confirmPairs)
+                        .payloadJson(objectMapper.writeValueAsString(Map.of(
+                                "paymentId", command.getPaymentId(),
+                                "tradeId", command.getTradeId(),
+                                "orderId", shopOrder.getOrderId(),
+                                "occupyPairs", shopOrder.getInventoryReservationRefs().stream()
+                                        .map(r -> Map.of("shopId", r.getShopId(), "skuId", r.getSkuId(),
+                                                "occupyId", r.getReservationId()))
+                                        .collect(Collectors.toList()))))
                         .build();
-                String confirmKey = command.getPaymentId() + ":inv:confirm:"
-                        + shopOrder.getShopId();
-                InventoryConfirmResponse confirmResp = inventoryClient
-                        .confirmReservation(confirmKey, confirmRequest);
-                if (confirmResp == null) {
-                    throw new IllegalStateException(
-                            "Inventory confirm returned null response for orderId: "
-                                    + shopOrder.getOrderId());
-                }
-                if (!confirmResp.isSuccess()) {
-                    publishInventoryConfirmConflictEvent(command, shopOrder, confirmPairs,
-                            confirmResp);
-                    throw new DomainConflictException("INVENTORY_CONFIRM_CONFLICT",
-                            "Inventory confirm conflict for orderId: "
-                                    + shopOrder.getOrderId()
-                                    + ", conflicts="
-                                    + confirmResp.getConflictReservationIds());
-                }
-                log.info("Inventory canonical confirm succeeded for shopOrder: orderId={}, shopId={}",
+                outboxEventService.saveEvent(confirmEvent);
+                log.info("Inventory confirm event written (async): orderId={}, shopId={}",
                         shopOrder.getOrderId(), shopOrder.getShopId());
             }
 
