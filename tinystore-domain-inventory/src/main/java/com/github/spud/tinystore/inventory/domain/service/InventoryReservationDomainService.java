@@ -533,6 +533,68 @@ public class InventoryReservationDomainService {
         return ReservationResult.ok(releasedRefs, InventoryReservationStatus.RELEASED);
     }
 
+
+    // ======================================================
+    // RESERVE REDIS-ONLY (async split: sync Redis + async DB)
+    // ======================================================
+
+    /**
+     * Redis preDeduct only (sync, for async reserve split). Returns reservationId.
+     * Does NOT write DB. The caller writes an Outbox event; the consumer calls saveReservation().
+     */
+    public ReservationResult reserveRedisOnly(InventoryReserveCommand command) {
+        Set<String> seen = new HashSet<>();
+        for (InventoryReserveCommand.Item item : command.getItems()) {
+            if (!seen.add(item.getShopId() + ":" + item.getSkuId())) {
+                metricsPort.reserveFail();
+                return ReservationResult.fail("DUPLICATE_SKU: " + item.getSkuId());
+            }
+        }
+
+        OffsetDateTime expireAt = command.getExpireAt() != null
+                ? command.getExpireAt() : OffsetDateTime.now().plusMinutes(15);
+
+        List<ReservationRef> successRefs = new ArrayList<>();
+        List<OccupyPair> redisSuccessForRollback = new ArrayList<>();
+
+        for (InventoryReserveCommand.Item item : command.getItems()) {
+            Optional<String> occupyId = deductGateway.preDeduct(
+                    item.getShopId(), item.getSkuId(), item.getQuantity(), command.getOrderId());
+
+            if (occupyId.isEmpty()) {
+                rollbackRedisAll(redisSuccessForRollback);
+                metricsPort.reserveFail();
+                return ReservationResult.fail(List.of(item.getSkuId()), "STOCK_LACK: " + item.getSkuId());
+            }
+
+            String reservationId = occupyId.get();
+            redisSuccessForRollback.add(OccupyPair.builder()
+                    .shopId(item.getShopId()).skuId(item.getSkuId()).occupyId(reservationId).build());
+            successRefs.add(ReservationRef.builder()
+                    .shopId(item.getShopId()).skuId(item.getSkuId()).reservationId(reservationId).build());
+        }
+
+        metricsPort.reserveSuccess();
+        return ReservationResult.ok(successRefs, InventoryReservationStatus.PRE_DEDUCTED);
+    }
+
+    /**
+     * DB saveReservation only (async, called by Kafka consumer). No Redis.
+     */
+    public void saveReservation(String reservationId, String shopId, String skuId,
+                            int quantity, String tradeId, String orderId,
+                            String operationId, OffsetDateTime expireAt) {
+        reservationRepository.saveReservation(reservationId, shopId, skuId,
+                quantity, tradeId, orderId, operationId, expireAt);
+    }
+
+    /**
+     * Redis rollback only (for createTrade compensation). No DB.
+     */
+    public boolean rollbackRedis(String shopId, String skuId, String reservationId) {
+        return deductGateway.rollback(shopId, skuId, reservationId);
+    }
+
     // ======================================================
     // EXPIRE: PRE_DEDUCTED → EXPIRED (terminal, scheduler only)
     // ======================================================

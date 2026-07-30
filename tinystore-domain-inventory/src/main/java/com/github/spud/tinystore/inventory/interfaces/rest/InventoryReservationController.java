@@ -81,4 +81,33 @@ public class InventoryReservationController {
         InventoryReleaseResponse response = appService.release(idempotencyKey, request);
         return ResponseEntity.ok(response);
     }
+
+    /**
+     * Redis preDeduct only (sync, for async reserve split). Returns reservationId without DB write.
+     */
+    @PostMapping("/pre-deduct")
+    public ResponseEntity<DeductResponse> preDeduct(
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody @Valid DeductRequest request) {
+        if (request.getTradeId() == null || request.getTradeId().isBlank()) {
+            return ResponseEntity.badRequest().body(DeductResponse.fail(List.of(), "tradeId 不能为空"));
+        }
+        return ResponseEntity.ok(appService.preDeductRedisOnly(idempotencyKey, request));
+    }
+
+    /**
+     * Redis rollback only (for createTrade compensation). No DB.
+     */
+    @PostMapping("/rollback")
+    public ResponseEntity<DeductResponse> rollback(
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody java.util.Map<String, String> body) {
+        String shopId = body.get("shopId");
+        String skuId = body.get("skuId");
+        String reservationId = body.get("reservationId");
+        boolean ok = appService.rollbackRedis(shopId, skuId, reservationId);
+        DeductResponse response = DeductResponse.builder()
+                .success(ok).message(ok ? "ok" : "rollback failed").build();
+        return ResponseEntity.ok(response);
+    }
 }

@@ -850,4 +850,75 @@ class InventoryReservationDomainServiceTest {
         verify(reservationRepository, never()).transitionStatus(
                 eq(RESERVATION_ID), any(), any(), any(), any());
     }
+
+    // ========================== reserveRedisOnly ==========================
+
+    @Test
+    @DisplayName("reserveRedisOnly_singleItem_returnsReservationIdWithoutDbWrite")
+    void reserveRedisOnly_singleItem_returnsReservationIdWithoutDbWrite() {
+        InventoryReserveCommand command = InventoryReserveCommand.builder()
+                .idempotencyKey(IDEMPOTENCY_KEY).orderId(ORDER_ID).tradeId(TRADE_ID)
+                .expireAt(OffsetDateTime.now().plusMinutes(30))
+                .items(List.of(InventoryReserveCommand.Item.builder()
+                        .shopId(SHOP_ID).skuId(SKU_ID).quantity(2).build()))
+                .build();
+        when(deductGateway.preDeduct(SHOP_ID, SKU_ID, 2, ORDER_ID))
+                .thenReturn(Optional.of(RESERVATION_ID));
+
+        ReservationResult result = domainService.reserveRedisOnly(command);
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getReservationRefs()).hasSize(1);
+        assertThat(result.getReservationRefs().get(0).getReservationId()).isEqualTo(RESERVATION_ID);
+        verify(reservationRepository, never()).saveReservation(any(), any(), any(), anyInt(), any(), any(), any(), any());
+        verify(idempotencyRepository, never()).bindDeductOrderIdIfAbsent(any(), any());
+    }
+
+    @Test
+    @DisplayName("reserveRedisOnly_stockLack_rollsBackRedisAndFails")
+    void reserveRedisOnly_stockLack_rollsBackRedisAndFails() {
+        InventoryReserveCommand command = InventoryReserveCommand.builder()
+                .idempotencyKey(IDEMPOTENCY_KEY).orderId(ORDER_ID).tradeId(TRADE_ID)
+                .expireAt(OffsetDateTime.now().plusMinutes(30))
+                .items(List.of(InventoryReserveCommand.Item.builder()
+                        .shopId(SHOP_ID).skuId(SKU_ID).quantity(1).build()))
+                .build();
+        when(deductGateway.preDeduct(SHOP_ID, SKU_ID, 1, ORDER_ID))
+                .thenReturn(Optional.empty());
+
+        ReservationResult result = domainService.reserveRedisOnly(command);
+
+        assertThat(result.isSuccess()).isFalse();
+        assertThat(result.getMessage()).contains("STOCK_LACK");
+        verify(reservationRepository, never()).saveReservation(any(), any(), any(), anyInt(), any(), any(), any(), any());
+    }
+
+    // ========================== saveReservation ==========================
+
+    @Test
+    @DisplayName("saveReservation_writesDbOnly_noRedis")
+    void saveReservation_writesDbOnly_noRedis() {
+        OffsetDateTime expireAt = OffsetDateTime.now().plusMinutes(30);
+        domainService.saveReservation(RESERVATION_ID, SHOP_ID, SKU_ID, 2, TRADE_ID, ORDER_ID,
+                IDEMPOTENCY_KEY, expireAt);
+
+        verify(reservationRepository).saveReservation(eq(RESERVATION_ID), eq(SHOP_ID), eq(SKU_ID),
+                eq(2), eq(TRADE_ID), eq(ORDER_ID), eq(IDEMPOTENCY_KEY), eq(expireAt));
+        verify(deductGateway, never()).preDeduct(any(), any(), anyInt(), any());
+    }
+
+    // ========================== rollbackRedis ==========================
+
+    @Test
+    @DisplayName("rollbackRedis_callsGatewayRollback_noDb")
+    void rollbackRedis_callsGatewayRollback_noDb() {
+        when(deductGateway.rollback(SHOP_ID, SKU_ID, RESERVATION_ID)).thenReturn(true);
+
+        boolean ok = domainService.rollbackRedis(SHOP_ID, SKU_ID, RESERVATION_ID);
+
+        assertThat(ok).isTrue();
+        verify(deductGateway).rollback(SHOP_ID, SKU_ID, RESERVATION_ID);
+        verify(reservationRepository, never()).saveReservation(any(), any(), any(), anyInt(), any(), any(), any(), any());
+        verify(reservationRepository, never()).transitionStatus(any(), any(), any(), any(), any());
+    }
 }
