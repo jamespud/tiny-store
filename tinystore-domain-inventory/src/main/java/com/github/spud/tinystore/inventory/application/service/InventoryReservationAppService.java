@@ -171,6 +171,54 @@ public class InventoryReservationAppService {
         }
     }
 
+    // ========================== Pre-Deduct (Redis only, async split) ==========================
+
+    /**
+     * Redis preDeduct only (sync, for async reserve). Returns reservationId without DB write.
+     */
+    public DeductResponse preDeductRedisOnly(String idempotencyKey, DeductRequest request) {
+        MDC.put("orderId", request.getOrderId());
+        try {
+            InventoryReserveCommand command = InventoryReserveCommand.builder()
+                    .idempotencyKey(idempotencyKey)
+                    .orderId(request.getOrderId())
+                    .tradeId(request.getTradeId())
+                    .traceId(MDC.get(LogConstant.MDC_LOG_ID))
+                    .expireAt(OffsetDateTime.now().plusMinutes(defaultExpiryMinutes))
+                    .items(request.getItems().stream()
+                            .map(item -> InventoryReserveCommand.Item.builder()
+                                    .shopId(item.getShopId()).skuId(item.getSkuId()).quantity(item.getQuantity()).build())
+                            .toList())
+                    .build();
+
+            ReservationResult result = domainService.reserveRedisOnly(command);
+
+            if (!result.isSuccess()) {
+                return DeductResponse.fail(result.getLackSkuIds(), result.getMessage());
+            }
+            if (result.getReservationRefs() == null || result.getReservationRefs().isEmpty()) {
+                log.error("preDeductRedisOnly returned success without refs: tradeId={}, orderId={}",
+                        request.getTradeId(), request.getOrderId());
+                return DeductResponse.fail(List.of(), "RESERVATION_REFS_MISSING");
+            }
+
+            List<DeductResponse.OccupyPairDto> pairs = result.getReservationRefs().stream()
+                    .map(ref -> DeductResponse.OccupyPairDto.builder()
+                            .shopId(ref.getShopId()).skuId(ref.getSkuId()).occupyId(ref.getReservationId()).build())
+                    .toList();
+            return DeductResponse.ok(pairs);
+        } finally {
+            MDC.remove("orderId");
+        }
+    }
+
+    /**
+     * Redis rollback only (for createTrade compensation). No DB.
+     */
+    public boolean rollbackRedis(String shopId, String skuId, String reservationId) {
+        return domainService.rollbackRedis(shopId, skuId, reservationId);
+    }
+
     // ========================== Expire ==========================
 
     /**
