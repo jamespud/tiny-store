@@ -28,6 +28,15 @@ import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository
 import com.github.spud.tinystore.order.interfaces.dto.response.CreateTradeData;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -238,7 +247,7 @@ public class TradeApplicationService {
                 String shopIdempotencyKey = idempotencyKey + ":inv:deduct:" + shopId;
                 InventoryDeductResponse deductResponse;
                 try {
-                    deductResponse = inventoryClient.reserveCanonical(shopIdempotencyKey,
+                    deductResponse = inventoryClient.preDeductRedisOnly(shopIdempotencyKey,
                             deductRequest);
                     if (deductResponse == null
                             || !Boolean.TRUE.equals(deductResponse.getSuccess())) {
@@ -289,6 +298,30 @@ public class TradeApplicationService {
                         .build();
                 log.info("ShopOrder updated with reservationRefs (canonical): orderId={}, refs={}",
                         shopOrder.getOrderId(), reservationRefs);
+
+                // Write Outbox INVENTORY_RESERVE_DB events (async DB saveReservation via Kafka)
+                for (int i = 0; i < reservationRefs.size(); i++) {
+                    InventoryReservationRef ref = reservationRefs.get(i);
+                    CreateTradeCommand.OrderLineCommand reserveItem = lines.get(i);
+                    OrderDomainEvent reserveDbEvent = OrderDomainEvent.builder()
+                            .eventId(UUID.randomUUID().toString())
+                            .eventType(OrderEventType.INVENTORY_RESERVE_DB)
+                            .aggregateType("INVENTORY")
+                            .aggregateId(ref.getReservationId())
+                            .occurredAt(LocalDateTime.now())
+                            .traceId(command.getTraceId())
+                            .payloadJson(objectMapper.writeValueAsString(Map.of(
+                                    "reservationId", ref.getReservationId(),
+                                    "shopId", ref.getShopId(),
+                                    "skuId", ref.getSkuId(),
+                                    "quantity", reserveItem.getQuantity(),
+                                    "tradeId", tradeId,
+                                    "orderId", shopOrder.getOrderId(),
+                                    "expireAt", OffsetDateTime.now().plusMinutes(15).toString())))
+                            .build();
+                    outboxEventService.saveEvent(reserveDbEvent);
+                }
+
                 updatedOrders.add(updatedShopOrder);
             }
 

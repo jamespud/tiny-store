@@ -45,6 +45,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -226,7 +227,7 @@ class TradeApplicationServicePaymentFlowTest {
     void createTrade_promotionCommitFailure_shouldCompensateReservedInventoryAndPromotion() throws Exception {
         when(idempotencyService.tryAcquire(anyString(), anyString(), anyString())).thenReturn(true);
         when(promotionClient.quote(anyString(), any())).thenReturn(okQuoteResponse(1000L));
-        when(inventoryClient.reserveCanonical(anyString(), any()))
+        when(inventoryClient.preDeductRedisOnly(anyString(), any()))
             .thenReturn(reserveSuccessResponse("shop-009", "sku-009", "res-009"));
         when(inventoryClient.releaseCanonical(anyString(), any())).thenReturn(InventoryReleaseResponseV2.builder()
             .success(true)
@@ -255,7 +256,7 @@ class TradeApplicationServicePaymentFlowTest {
         when(idempotencyService.tryAcquire(anyString(), anyString(), anyString())).thenReturn(true);
         when(promotionClient.quote(anyString(), any())).thenReturn(okQuoteResponse(1100L));
         when(promotionClient.commit(anyString(), any())).thenReturn(null);
-        when(inventoryClient.reserveCanonical(anyString(), any()))
+        when(inventoryClient.preDeductRedisOnly(anyString(), any()))
             .thenReturn(reserveSuccessResponse("shop-010", "sku-010", "res-010"));
         when(inventoryClient.releaseCanonical(anyString(), any())).thenReturn(InventoryReleaseResponseV2.builder()
             .success(true)
@@ -274,7 +275,12 @@ class TradeApplicationServicePaymentFlowTest {
         verify(inventoryClient).releaseCanonical(anyString(), any());
         verify(promotionClient).release(anyString(), any());
         verify(paymentIntentJpaRepository, never()).save(any());
-        verify(outboxEventService, never()).saveEvent(any());
+        // INVENTORY_RESERVE_DB outbox events are written before saveAll fails (same tx, will rollback);
+        // but TRADE_CREATED events should NOT be written (they come after saveAll)
+        verify(outboxEventService, never()).saveEvent(argThat(
+            (OrderDomainEvent e) -> e.getEventType() == OrderEventType.TRADE_CREATED
+                || e.getEventType() == OrderEventType.ORDER_CREATED
+                || e.getEventType() == OrderEventType.PAYMENT_INTENT_CREATED));
     }
 
     @Test
@@ -282,7 +288,7 @@ class TradeApplicationServicePaymentFlowTest {
     void createTrade_compensationLogicalReleaseFailure_shouldSurfaceCompensationError() throws Exception {
         when(idempotencyService.tryAcquire(anyString(), anyString(), anyString())).thenReturn(true);
         when(promotionClient.quote(anyString(), any())).thenReturn(okQuoteResponse(1200L));
-        when(inventoryClient.reserveCanonical(anyString(), any()))
+        when(inventoryClient.preDeductRedisOnly(anyString(), any()))
             .thenReturn(reserveSuccessResponse("shop-011", "sku-011", "res-011"));
         when(inventoryClient.releaseCanonical(anyString(), any())).thenReturn(InventoryReleaseResponseV2.builder()
             .success(false)
@@ -310,7 +316,7 @@ class TradeApplicationServicePaymentFlowTest {
     void createTrade_canonicalEmptyRefs_shouldThrowAndStopPersistence() throws Exception {
         when(idempotencyService.tryAcquire(anyString(), anyString(), anyString())).thenReturn(true);
         when(promotionClient.quote(anyString(), any())).thenReturn(okQuoteResponse(1300L));
-        when(inventoryClient.reserveCanonical(anyString(), any())).thenReturn(InventoryDeductResponse.builder()
+        when(inventoryClient.preDeductRedisOnly(anyString(), any())).thenReturn(InventoryDeductResponse.builder()
             .success(true)
             .occupyPairs(List.of())
             .build());
