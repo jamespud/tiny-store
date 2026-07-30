@@ -86,8 +86,8 @@ public abstract class AbstractSpringBootOrderIT extends AbstractOrderIT {
             .build();
         when(promotionClient.commit(any(), any())).thenReturn(commitResponse);
 
-        // Inventory Client - reserveCanonical 默认成功
-        when(inventoryClient.reserveCanonical(anyString(), any(InventoryDeductRequest.class))).thenAnswer(invocation -> {
+        // Inventory Client - preDeductRedisOnly 默认成功
+        when(inventoryClient.preDeductRedisOnly(anyString(), any(InventoryDeductRequest.class))).thenAnswer(invocation -> {
             InventoryDeductRequest request = invocation.getArgument(1, InventoryDeductRequest.class);
             List<InventoryDeductResponse.OccupyPairDto> occupyPairs = request != null && request.getItems() != null
                 ? request.getItems().stream()
