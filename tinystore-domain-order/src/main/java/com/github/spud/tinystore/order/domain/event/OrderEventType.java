@@ -19,7 +19,11 @@ public enum OrderEventType {
     AFTER_SALE_APPLIED("AFTER_SALE_APPLIED", "售后申请"),
     AFTER_SALE_APPROVED("AFTER_SALE_APPROVED", "售后已批准"),
     REFUND_REQUESTED("REFUND_REQUESTED", "退款请求"),
-    REFUND_SUCCEEDED("REFUND_SUCCEEDED", "退款成功");
+    REFUND_SUCCEEDED("REFUND_SUCCEEDED", "退款成功"),
+    INVENTORY_RESERVE_DB("INVENTORY_RESERVE_DB", "库存预扣DB落地"),
+    INVENTORY_CONFIRM("INVENTORY_CONFIRM", "库存确认"),
+    INVENTORY_RELEASE("INVENTORY_RELEASE", "库存释放"),
+    INVENTORY_ADJUST("INVENTORY_ADJUST", "库存调整");
 
     private final String code;
     private final String displayName;
