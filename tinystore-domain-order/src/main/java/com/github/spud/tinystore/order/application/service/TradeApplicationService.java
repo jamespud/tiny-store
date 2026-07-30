@@ -513,33 +513,20 @@ public class TradeApplicationService {
             throw new IllegalStateException("Missing inventory reservation refs for create compensation, orderId="
                     + shopOrder.getOrderId());
         }
-        List<InventoryReleaseRequestV2.OccupyPairDto> relPairs = shopOrder.getInventoryReservationRefs()
-                .stream()
-                .map(r -> InventoryReleaseRequestV2.OccupyPairDto.builder()
-                        .shopId(r.getShopId()).skuId(r.getSkuId())
-                        .occupyId(r.getReservationId()).build())
-                .collect(Collectors.toList());
-        InventoryReleaseResponseV2 releaseResponse = inventoryClient.releaseCanonical(
-                idempotencyKey + ":inv:comp:" + shopOrder.getShopId(),
-                InventoryReleaseRequestV2.builder()
-                        .orderId(shopOrder.getOrderId())
-                        .reason("INVENTORY_RESERVE_COMPENSATION")
-                        .occupyPairs(relPairs)
-                        .build());
-        ensureInventoryCompensationReleased(releaseResponse, shopOrder.getOrderId(),
-                shopOrder.getShopId());
-        log.info("Compensated canonical inventory reserve: orderId={}, shopId={}",
-                shopOrder.getOrderId(), shopOrder.getShopId());
-    }
-
-    private void ensureInventoryCompensationReleased(InventoryReleaseResponseV2 releaseResponse,
-            String orderId,
-            String shopId) {
-        if (releaseResponse == null || !releaseResponse.getSuccess()) {
-            String message = releaseResponse != null ? releaseResponse.getMessage() : "null response";
-            throw new IllegalStateException("Inventory compensation release failed for orderId="
-                    + orderId + ", shopId=" + shopId + ", message=" + message);
+        // Sync Redis rollback for createTrade compensation (error path, not hot path)
+        for (InventoryReservationRef ref : shopOrder.getInventoryReservationRefs()) {
+            try {
+                inventoryClient.rollbackRedis(
+                        idempotencyKey + ":inv:rollback:" + shopOrder.getShopId(),
+                        Map.of("shopId", ref.getShopId(), "skuId", ref.getSkuId(),
+                                "reservationId", ref.getReservationId()));
+            } catch (Exception e) {
+                log.error("Redis rollback failed during compensation: orderId={}, reservationId={}",
+                        shopOrder.getOrderId(), ref.getReservationId(), e);
+            }
         }
+        log.info("Compensated inventory reserve (Redis rollback): orderId={}, shopId={}",
+                shopOrder.getOrderId(), shopOrder.getShopId());
     }
 
     private void releasePromotionForCreateTradeCompensation(String idempotencyKey,
@@ -679,47 +666,32 @@ public class TradeApplicationService {
                         "Missing inventory reservation refs during cancel for trade: " + tradeId
                                 + ", orderId=" + shopOrder.getOrderId());
             }
-            List<InventoryReleaseRequestV2.OccupyPairDto> relPairs = shopOrder
-                    .getInventoryReservationRefs().stream()
-                    .map(r -> InventoryReleaseRequestV2.OccupyPairDto.builder()
-                            .shopId(r.getShopId()).skuId(r.getSkuId())
-                            .occupyId(r.getReservationId()).build())
-                    .collect(Collectors.toList());
-            InventoryReleaseRequestV2 releaseRequest = InventoryReleaseRequestV2.builder()
-                    .orderId(shopOrder.getOrderId())
-                    .reason(command.getReason())
-                    .occupyPairs(relPairs)
+            // Async release: write Outbox INVENTORY_RELEASE event (replaces sync Feign releaseCanonical)
+            OrderDomainEvent releaseEvent = OrderDomainEvent.builder()
+                    .eventId(UUID.randomUUID().toString())
+                    .eventType(OrderEventType.INVENTORY_RELEASE)
+                    .aggregateType("INVENTORY")
+                    .aggregateId(shopOrder.getOrderId())
+                    .occurredAt(LocalDateTime.now())
+                    .traceId(command.getTraceId())
+                    .payloadJson(objectMapper.writeValueAsString(Map.of(
+                            "tradeId", tradeId,
+                            "orderId", shopOrder.getOrderId(),
+                            "reason", command.getReason(),
+                            "occupyPairs", shopOrder.getInventoryReservationRefs().stream()
+                                    .map(r -> Map.of("shopId", r.getShopId(), "skuId", r.getSkuId(),
+                                            "occupyId", r.getReservationId()))
+                                    .collect(Collectors.toList()))))
                     .build();
-            String shopKey = idempotencyKey + ":inv:rel:" + shopOrder.getShopId();
-            InventoryReleaseResponseV2 releaseResponse = inventoryClient.releaseCanonical(shopKey,
-                    releaseRequest);
-            ensureCancelInventoryReleased(releaseResponse, tradeId, shopOrder.getOrderId(),
-                    shopOrder.getShopId());
-            log.info("Canonical inventory released for cancelled shopOrder: orderId={}, shopId={}, refs={}",
-                    shopOrder.getOrderId(), shopOrder.getShopId(), relPairs.size());
-        } catch (DomainConflictException e) {
-            throw e;
+            outboxEventService.saveEvent(releaseEvent);
+            log.info("Inventory release event written (async): orderId={}, shopId={}",
+                    shopOrder.getOrderId(), shopOrder.getShopId());
         } catch (Exception e) {
             log.error("Failed to release inventory for cancelled trade: tradeId={}, orderId={}",
                     tradeId, shopOrder.getOrderId(), e);
             throw new DomainConflictException(
                     "INVENTORY_RELEASE_CONFLICT",
                     "Inventory release conflict during cancel for trade: " + tradeId);
-        }
-    }
-
-    private void ensureCancelInventoryReleased(InventoryReleaseResponseV2 releaseResponse,
-            String tradeId,
-            String orderId,
-            String shopId) {
-        if (releaseResponse == null || !releaseResponse.getSuccess()) {
-            String message = releaseResponse != null ? releaseResponse.getMessage() : "null response";
-            throw new DomainConflictException(
-                    "INVENTORY_RELEASE_CONFLICT",
-                    "Inventory release conflict during cancel for trade: " + tradeId
-                            + ", orderId=" + orderId
-                            + ", shopId=" + shopId
-                            + ", message=" + message);
         }
     }
 
