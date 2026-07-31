@@ -36,8 +36,8 @@
 1. **标题 + 简介** — Tiny Store：DDD 风格微服务电商平台，一句话定位 + 核心亮点列表
 2. **徽章** — Java 17 / Spring Boot 3.5 / Spring Cloud 2025.0.0 / MIT License
 3. **语言切换** — `English | 简体中文`（链到 README.zh-CN.md）
-4. **架构总览** — Mermaid flow 图：Gateway → 8 个领域服务 → PostgreSQL / Redis / Kafka / Nacos；标注 outbox 事件流与 ACL Feign 调用
-5. **服务模块表** — 9 个模块：端口 / schema / 职责（数据以 Makefile 与 pom.xml 核实为准）
+4. **架构总览** — Mermaid flow 图：Gateway → 7 个领域服务（Auth/Account/Inventory/Order/Payment/Product/Promotion）→ PostgreSQL / Redis / Kafka / Nacos；标注 outbox 事件流与 ACL Feign 调用
+5. **服务模块表** — 9 个 Maven 模块（8 个可部署服务 + 共享基础设施库 `tinystore-library-infrastructure`）：端口 / schema / 职责（数据以 Makefile 与 pom.xml 核实为准；gateway 无 schema，列 "—"）
 6. **核心架构模式** — 六边形架构（每模块 domain/application/infrastructure/interfaces 分层）、Outbox 模式（order → Kafka，含 DLT）、支付 Saga 状态机、Redis 幂等（网关 + order 双实现）、ACL（Feign）、特性开关、库存预扣规范状态机（RFC-001：PRE_DEDUCTED → CONFIRMED/RELEASED/EXPIRED）
 7. **快速开始** — 前置条件（Docker、JDK 17）→ `make debug`（一键起 8 服务 + 基础设施）→ 端口表 → 常用 make 目标（build/unit/it/e2e/test）
 8. **测试策略** — Unit（mock）→ IT（Testcontainers）→ E2E（compose 黑盒，经网关）→ 性能（200 并发一致性、库存超卖边界、幂等、锁竞争、k6）
