@@ -200,6 +200,7 @@ services:
       LOGGING_LEVEL_COM_GITHUB_SPUD_TINYSTORE: WARN
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 25
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 10
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     depends_on:
       postgres:
         condition: service_healthy
