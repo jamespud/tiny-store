@@ -1,10 +1,12 @@
 package com.github.spud.tinystore.tests.performance;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import com.github.spud.tinystore.tests.performance.support.GatewayClient;
 import com.github.spud.tinystore.tests.performance.support.PostgresClient;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.AfterEach;
@@ -152,10 +154,15 @@ class InventoryNoOversellConsistencyIT {
             .as("Canonical reservation flow must not rely on reserved_quantity projection during reserve")
             .isEqualTo(initialStock.reservedQuantity);
 
-        long reservationCount = pgClient.countReservationsByTradePrefix(testRunPrefix, "PRE_DEDUCTED");
-        log.info("DB reservation count (PRE_DEDUCTED) for prefix {}: {}", testRunPrefix, reservationCount);
-        assertThat(reservationCount).as("Canonical PRE_DEDUCTED reservations should match success count").isEqualTo(successCount);
-        assertThat(reservationCount).as("Reservation records should not exceed total stock").isLessThanOrEqualTo(finalStock.totalQuantity);
+        // Async: wait for Kafka consumer to process INVENTORY_RESERVE_DB events
+        final long expectedSuccess = successCount;
+        final String assertPrefix = testRunPrefix;
+        await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+            long reservationCount = pgClient.countReservationsByTradePrefix(assertPrefix, "PRE_DEDUCTED");
+            log.info("DB reservation count (PRE_DEDUCTED) for prefix {}: {}", assertPrefix, reservationCount);
+            assertThat(reservationCount).as("Canonical PRE_DEDUCTED reservations should match success count").isEqualTo(expectedSuccess);
+            assertThat(reservationCount).as("Reservation records should not exceed total stock").isLessThanOrEqualTo(finalStock.totalQuantity);
+        });
 
         long tradeCount = pgClient.countSuccessfulTrades(testRunPrefix);
         log.info("DB trade count with prefix {}: {}", testRunPrefix, tradeCount);

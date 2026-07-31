@@ -1,10 +1,12 @@
 package com.github.spud.tinystore.tests.performance;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import com.github.spud.tinystore.tests.performance.support.GatewayClient;
 import com.github.spud.tinystore.tests.performance.support.PostgresClient;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.AfterEach;
@@ -132,7 +134,7 @@ class OrderCreateIdempotencyConsistencyIT {
         log.info("Unique paymentIntentIds: {}", paymentIntentIds.size());
         assertThat(paymentIntentIds).as("All successful responses should return the same paymentIntentId (idempotent)").hasSize(1);
 
-        // Then: DB层强断言
+        // Then: DB层强断言 (order/payment 落库是同步的; inventory reservation 经 Outbox->Kafka 异步, 需等待)
         long tradeCount = pgClient.countTrades(tradeId);
         log.info("DB trade count for tradeId={}: {}", tradeId, tradeCount);
         assertThat(tradeCount).as("Only 1 trade record should exist").isEqualTo(1);
@@ -141,9 +143,12 @@ class OrderCreateIdempotencyConsistencyIT {
         log.info("DB shop_order count for tradeId={}: {}", tradeId, shopOrderCount);
         assertThat(shopOrderCount).as("Only 1 shop_order record should exist").isEqualTo(1);
 
-        long reservationCount = pgClient.countReservationsByTradeId(tradeId, "PRE_DEDUCTED");
-        log.info("DB reservation count (PRE_DEDUCTED) for tradeId={}: {}", tradeId, reservationCount);
-        assertThat(reservationCount).as("Only 1 inventory reservation should exist in PRE_DEDUCTED status").isEqualTo(1);
+        // Async: wait for Kafka consumer to process INVENTORY_RESERVE_DB event
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            long reservationCount = pgClient.countReservationsByTradeId(tradeId, "PRE_DEDUCTED");
+            log.info("DB reservation count (PRE_DEDUCTED) for tradeId={}: {}", tradeId, reservationCount);
+            assertThat(reservationCount).as("Only 1 inventory reservation should exist in PRE_DEDUCTED status").isEqualTo(1);
+        });
 
         PostgresClient.InventoryStock finalStock = pgClient.getInventoryStock("SHOP_A", "SKU_A");
         log.info("Final inventory_stock: total={}, reserved={}", finalStock.totalQuantity, finalStock.reservedQuantity);
