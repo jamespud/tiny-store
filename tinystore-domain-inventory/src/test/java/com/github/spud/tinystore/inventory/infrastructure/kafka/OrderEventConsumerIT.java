@@ -25,7 +25,6 @@ import org.testcontainers.utility.DockerImageName;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -82,60 +81,43 @@ class OrderEventConsumerIT {
                 objectMapper.writeValueAsString(payload),
                 "trace-test", LocalDateTime.now().toString());
         String json = objectMapper.writeValueAsString(dto);
-        kafkaTemplate.send(TOPIC, aggregateId, json);
+        kafkaTemplate.send(TOPIC, aggregateId, json).get();
     }
 
     @Test
-    @DisplayName("inventoryReserveDbEvent_consumerSavesReservation")
-    void inventoryReserveDbEvent_consumerSavesReservation() throws Exception {
+    @DisplayName("inventoryReserveDbEvent_consumerSavesReservation_andIdempotentOnDuplicate")
+    void inventoryReserveDbEvent_consumerSavesReservation_andIdempotentOnDuplicate() throws Exception {
         stockRepository.save(new InventoryStockEntity().setShopId("SHOP-ASYNC").setSkuId("SKU-ASYNC")
                 .setTotalQuantity(100).setReservedQuantity(0));
         String eventId = UUID.randomUUID().toString();
         String reservationId = "res-async-1";
 
-        sendEvent(eventId, "INVENTORY_RESERVE_DB", reservationId, Map.of(
+        Map<String, Object> payload = Map.of(
                 "reservationId", reservationId,
                 "shopId", "SHOP-ASYNC",
                 "skuId", "SKU-ASYNC",
                 "quantity", 1,
                 "tradeId", "trade-async",
                 "orderId", "order-async",
-                "expireAt", OffsetDateTime.now().plusMinutes(15).toString()));
+                "expireAt", OffsetDateTime.now().plusMinutes(15).toString());
 
+        // Send event
+        sendEvent(eventId, "INVENTORY_RESERVE_DB", reservationId, payload);
+
+        // Wait for consumer to process
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
             long count = reservationRepository.sumQuantityByShopSkuStatus("SHOP-ASYNC", "SKU-ASYNC", "PRE_DEDUCTED");
             assertThat(count).isEqualTo(1L);
         });
-    }
 
-    @Test
-    @DisplayName("duplicateEvent_consumerIsIdempotent_savesOnce")
-    void duplicateEvent_consumerIsIdempotent_savesOnce() throws Exception {
-        stockRepository.save(new InventoryStockEntity().setShopId("SHOP-DUP").setSkuId("SKU-DUP")
-                .setTotalQuantity(100).setReservedQuantity(0));
-        String eventId = UUID.randomUUID().toString();
-        String reservationId = "res-dup-1";
-
-        Map<String, Object> payload = Map.of(
-                "reservationId", reservationId,
-                "shopId", "SHOP-DUP",
-                "skuId", "SKU-DUP",
-                "quantity", 1,
-                "tradeId", "trade-dup",
-                "orderId", "order-dup",
-                "expireAt", OffsetDateTime.now().plusMinutes(15).toString());
-
+        // Send duplicate (same eventId)
         sendEvent(eventId, "INVENTORY_RESERVE_DB", reservationId, payload);
-        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
-            long count = reservationRepository.sumQuantityByShopSkuStatus("SHOP-DUP", "SKU-DUP", "PRE_DEDUCTED");
-            assertThat(count).isEqualTo(1L);
-        });
 
-        // Send duplicate
-        sendEvent(eventId, "INVENTORY_RESERVE_DB", reservationId, payload);
-        Thread.sleep(3000); // Wait for potential duplicate processing
+        // Wait a bit for potential duplicate processing
+        Thread.sleep(5000);
 
-        long finalCount = reservationRepository.sumQuantityByShopSkuStatus("SHOP-DUP", "SKU-DUP", "PRE_DEDUCTED");
-        assertThat(finalCount).isEqualTo(1L); // Still 1, not 2
+        // Verify still only 1 (idempotent)
+        long finalCount = reservationRepository.sumQuantityByShopSkuStatus("SHOP-ASYNC", "SKU-ASYNC", "PRE_DEDUCTED");
+        assertThat(finalCount).isEqualTo(1L);
     }
 }
