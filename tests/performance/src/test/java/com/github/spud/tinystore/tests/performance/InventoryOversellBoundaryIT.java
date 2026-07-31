@@ -1,10 +1,12 @@
 package com.github.spud.tinystore.tests.performance;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import com.github.spud.tinystore.tests.performance.support.GatewayClient;
 import com.github.spud.tinystore.tests.performance.support.PostgresClient;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -99,13 +101,16 @@ class InventoryOversellBoundaryIT {
 
         assertThat(finished).as("All concurrent reserves should finish within timeout").isTrue();
 
-        // Then: DB strong assertions
-        long preDeducted = pgClient.countReservations(shopId, skuId, "PRE_DEDUCTED");
-        log.info("Result: PRE_DEDUCTED={}, expected (stock)={}", preDeducted, stock);
-
-        assertThat(preDeducted)
-            .as("PRE_DEDUCTED count must equal stock S (no oversell): concurrency=%d stock=%d", concurrency, stock)
-            .isEqualTo(stock);
+        // Then: DB strong assertions (async: wait for Kafka consumer to process INVENTORY_RESERVE_DB events)
+        final String assertShopId = shopId;
+        final String assertSkuId = skuId;
+        await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+            long preDeducted = pgClient.countReservations(assertShopId, assertSkuId, "PRE_DEDUCTED");
+            log.info("Result: PRE_DEDUCTED={}, expected (stock)={}", preDeducted, stock);
+            assertThat(preDeducted)
+                .as("PRE_DEDUCTED count must equal stock S (no oversell): concurrency=%d stock=%d", concurrency, stock)
+                .isEqualTo(stock);
+        });
 
         // The controller returns HTTP 200 for both success and STOCK_LACK (success:false in body);
         // count actual admissions by parsing the body.
