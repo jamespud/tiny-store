@@ -963,6 +963,15 @@ public class TradeApplicationService {
         }
     }
 
+    /**
+     * 应用 promotion commit 回执结果（由 PromotionAckConsumer 调用）。
+     * TODO(Task 6): 完善实现 —— 更新 trade.promotionCommitStatus 并处理失败补偿。
+     */
+    public void applyPromotionCommitResult(String tradeId, boolean committed, String reason) {
+        log.info("applyPromotionCommitResult invoked: tradeId={}, committed={}, reason={}",
+                tradeId, committed, reason);
+    }
+
     // ============ 辅助方法 ============
 
     private PromotionQuoteRequest buildPromotionQuoteRequest(CreateTradeCommand command) {
