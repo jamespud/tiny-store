@@ -761,6 +761,12 @@ public class TradeApplicationService {
                 return;
             }
 
+            // 支付门控（仅异步 promotion commit 启用时生效）：仅 COMMITTED 的 trade 可支付。
+            // 幂等早退之后执行，避免重复回调在 trade 已关闭时误报错误。
+            if (promotionCommitAsyncEnabled) {
+                ensureTradePayable(command.getTradeId());
+            }
+
             // 获取 Trade 聚合根
             Trade trade = tradeRepository.findByTradeId(command.getTradeId())
                     .orElseThrow(() -> new DomainConflictException("TRADE_NOT_FOUND",
@@ -1005,6 +1011,26 @@ public class TradeApplicationService {
         } catch (Exception e) {
             log.error("Confirm trade receipt failed: tradeId={}", tradeId, e);
             throw e;
+        }
+    }
+
+    /**
+     * 支付门控：仅 COMMITTED 状态的 trade 可支付。
+     * 仅异步 promotion commit 启用（promotionCommitAsyncEnabled=true）时由
+     * onPaymentSucceeded 调用；flag 关闭时保持现状支付行为（不校验）。
+     *
+     * @param tradeId 交易ID
+     * @throws DomainConflictException TRADE_NOT_FOUND（trade 不存在）或
+     *                                 TRADE_NOT_READY_FOR_PAYMENT（非 COMMITTED）
+     */
+    public void ensureTradePayable(String tradeId) {
+        Trade trade = tradeRepository.findByTradeId(tradeId)
+                .orElseThrow(() -> new DomainConflictException("TRADE_NOT_FOUND",
+                        "Trade not found: " + tradeId));
+        if (!"COMMITTED".equals(trade.getPromotionCommitStatus())) {
+            throw new DomainConflictException("TRADE_NOT_READY_FOR_PAYMENT",
+                    "Trade promotion commit status is " + trade.getPromotionCommitStatus()
+                            + ", only COMMITTED trades are payable");
         }
     }
 

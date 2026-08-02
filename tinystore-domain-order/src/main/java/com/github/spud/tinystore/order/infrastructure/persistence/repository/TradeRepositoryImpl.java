@@ -9,6 +9,7 @@ import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -40,6 +41,11 @@ public class TradeRepositoryImpl implements TradeRepository {
     public void delete(Trade trade) {
         jpaRepository.findByTradeId(trade.getTradeId())
             .ifPresent(jpaRepository::delete);
+    }
+
+    @Override
+    public List<String> findStalePendingCommit(LocalDateTime threshold) {
+        return jpaRepository.findStalePendingCommitTradeIds(threshold);
     }
     
     private TradeEntity toEntity(Trade trade) {
