@@ -1,18 +1,12 @@
 /*
- * k6 load test script for order creation endpoint
- * 
- * Purpose: Stress test POST /api/order/trades with unique tradeIds
- * 
- * Metrics tracked:
- * - http_req_duration (p95, p99)
- * - http_reqs (RPS)
- * - http_req_failed (error rate)
- * - iteration_duration (overall throughput)
- * 
+ * k6 load test script for order creation endpoint - DIRECT to order service
+ *
+ * Same workload as order_create.js but hits order:28080 directly
+ * (bypasses gateway), path /order/trades instead of /api/order/trades.
+ * Used to isolate whether the RPS ceiling is the gateway or the order service.
+ *
  * Usage:
- *   k6 run order_create.js
- *   k6 run --vus 50 --duration 30s order_create.js
- *   BASE_URL=http://localhost:8080 k6 run order_create.js
+ *   BASE_URL=http://localhost:28080 SKU_ID=SKU-A-k6-1 k6 run order_create_direct.js
  */
 
 import http from 'k6/http';
@@ -27,7 +21,7 @@ const p95Latency = new Trend('order_create_p95_ms');
 const p99Latency = new Trend('order_create_p99_ms');
 
 // Environment configuration
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:28080';
 const VUS = __ENV.VUS || 100;
 const DURATION = __ENV.DURATION || '60s';
 const SKU_ID = __ENV.SKU_ID || 'SKU_A';
@@ -36,20 +30,16 @@ export const options = {
     vus: VUS,
     duration: DURATION,
     thresholds: {
-        // p95 latency should be below 2000ms
         'http_req_duration{name:create_trade}': ['p(95)<2000'],
-        // p99 latency should be below 5000ms
         'http_req_duration{name:create_trade}': ['p(99)<5000'],
-        // Less than 5% error rate
         'http_req_failed{name:create_trade}': ['rate<0.05'],
-        // At least 10 RPS
         'http_reqs': ['rate>10'],
     },
     summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
 };
 
 export default function () {
-    const tradeId = `k6-load-${Date.now()}-${randomString(8)}`;
+    const tradeId = `k6-direct-${Date.now()}-${randomString(8)}`;
     const idempotencyKey = `idem-${tradeId}`;
     const buyerId = `buyer-k6-${randomString(6)}`;
 
@@ -82,7 +72,7 @@ export default function () {
         tags: { name: 'create_trade' },
     };
 
-    const response = http.post(`${BASE_URL}/api/order/trades`, payload, params);
+    const response = http.post(`${BASE_URL}/order/trades`, payload, params);
 
     // Check response
     const success = check(response, {
@@ -117,27 +107,14 @@ export default function () {
 
 export function handleSummary(data) {
     console.log('');
-    console.log('===== Performance Summary =====');
+    console.log('===== Performance Summary (direct to order) =====');
     console.log(`Total Requests: ${data.metrics.http_reqs?.values?.count || 0}`);
     console.log(`Request Rate (RPS): ${data.metrics.http_reqs?.values?.rate?.toFixed(2) || 'N/A'}`);
     console.log(`Success: ${data.metrics.order_creation_success?.values?.count || 0}`);
     console.log(`Errors: ${data.metrics.order_creation_errors?.values?.count || 0}`);
     console.log(`Error Rate: ${((data.metrics.http_req_failed?.values?.rate || 0) * 100).toFixed(2)}%`);
     console.log('');
-    
-    if (data.metrics.http_req_duration?.values) {
-        console.log('Latency (ms):');
-        console.log(`  p50 (median): ${data.metrics.http_req_duration.values['p(50)']?.toFixed(2) || 'N/A'}`);
-        console.log(`  p90: ${data.metrics.http_req_duration.values['p(90)']?.toFixed(2) || 'N/A'}`);
-        console.log(`  p95: ${data.metrics.http_req_duration.values['p(95)']?.toFixed(2) || 'N/A'}`);
-        console.log(`  p99: ${data.metrics.http_req_duration.values['p(99)']?.toFixed(2) || 'N/A'}`);
-        console.log(`  max: ${data.metrics.http_req_duration.values.max?.toFixed(2) || 'N/A'}`);
-    }
-    
     console.log('===============================');
-    console.log('');
-    console.log('NOTE: Stock capacity is 10000 units (SKU_A).');
-    console.log('      High error rate occurs only when inventory is exhausted.');
 
     return {
         'stdout': JSON.stringify(data, null, 2),
