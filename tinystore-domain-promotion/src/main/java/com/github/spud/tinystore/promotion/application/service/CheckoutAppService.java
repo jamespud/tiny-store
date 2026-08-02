@@ -85,6 +85,7 @@ public class CheckoutAppService {
 
     @Transactional
     public CheckoutQuoteResponse quote(String idempotencyKey, CheckoutQuoteRequest request) {
+        long start = System.nanoTime();
         String key = "promotion:checkout:quote:" + idempotencyKey;
         String requestHash = computeInputHash(request);
         IdempotencyStorage.StoredValue stored = idempotencyStorage.get(key);
@@ -107,11 +108,16 @@ public class CheckoutAppService {
         if (!storeIdempotencyResponse(key, requestHash, resp)) {
             return buildQuoteConflictResponse();
         }
+        log.info("Checkout quote OK: userId={}, quoteId={}, payableCents={}, costMs={}",
+                request.getUserId(), resp.getQuoteId(),
+                resp.getSnapshot() == null ? null : resp.getSnapshot().getPayableCents(),
+                (System.nanoTime() - start) / 1_000_000.0);
         return resp;
     }
 
     @Transactional
     public CheckoutCommitResponse commit(String idempotencyKey, CheckoutCommitRequest request) {
+        long start = System.nanoTime();
         String key = "promotion:checkout:commit:" + idempotencyKey;
         String requestHash = sha256(request.getQuoteId() + "|" + request.getTradeId() + "|"
                 + request.getInputHash());
@@ -249,11 +255,15 @@ public class CheckoutAppService {
         if (!storeIdempotencyResponse(key, requestHash, resp)) {
             return buildCommitConflictResponse();
         }
+        log.info("Checkout commit OK: quoteId={}, tradeId={}, status={}, costMs={}",
+                entity.getId(), request.getTradeId(), resp.getStatus(),
+                (System.nanoTime() - start) / 1_000_000.0);
         return resp;
     }
 
     @Transactional
     public CheckoutReleaseResponse release(String idempotencyKey, CheckoutReleaseRequest request) {
+        long start = System.nanoTime();
         String key = "promotion:checkout:release:" + idempotencyKey;
         String requestHash = sha256(request.getQuoteId() + "|" + request.getTradeId() + "|" + request.getReason());
         IdempotencyStorage.StoredValue stored = idempotencyStorage.get(key);
@@ -296,6 +306,9 @@ public class CheckoutAppService {
         if (!storeIdempotencyResponse(key, requestHash, resp)) {
             return CheckoutReleaseResponse.of(false, "IDEMPOTENCY_CONFLICT");
         }
+        log.info("Checkout release OK: quoteId={}, tradeId={}, reason={}, costMs={}",
+                request.getQuoteId(), request.getTradeId(), request.getReason(),
+                (System.nanoTime() - start) / 1_000_000.0);
         return resp;
     }
 
