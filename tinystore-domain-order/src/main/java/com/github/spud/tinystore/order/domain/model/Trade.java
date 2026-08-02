@@ -42,7 +42,8 @@ public class Trade {
     private String promotionInputHash;
     private String inventoryReservationId;
 
-    private String promotionCommitStatus; // PENDING / COMMITTED / FAILED
+    @Builder.Default
+    private String promotionCommitStatus = "PENDING"; // PENDING / COMMITTED / FAILED
     
     @Builder.Default
     private List<String> couponCodes = new ArrayList<>();

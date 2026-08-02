@@ -69,6 +69,7 @@ public class TradeEntity {
     @Column(name = "inventory_reservation_id", length = 128)
     private String inventoryReservationId;
 
+    @Builder.Default
     @Column(name = "promotion_commit_status", nullable = false)
     private String promotionCommitStatus = "PENDING";
 

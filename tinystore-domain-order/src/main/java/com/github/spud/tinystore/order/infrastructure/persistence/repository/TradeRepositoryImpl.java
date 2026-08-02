@@ -55,7 +55,8 @@ public class TradeRepositoryImpl implements TradeRepository {
             .promotionQuoteId(trade.getPromotionQuoteId())
             .promotionInputHash(trade.getPromotionInputHash())
             .inventoryReservationId(trade.getInventoryReservationId())
-            .promotionCommitStatus(trade.getPromotionCommitStatus())
+            .promotionCommitStatus(trade.getPromotionCommitStatus() != null
+                    ? trade.getPromotionCommitStatus() : "PENDING")
             .couponCodes(serializeCouponCodes(trade.getCouponCodes()))
             .createdAt(trade.getCreatedAt())
             .updatedAt(trade.getUpdatedAt())
