@@ -1,13 +1,11 @@
 package com.github.spud.tinystore.order.infrastructure.kafka;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.spud.tinystore.order.application.service.TradeApplicationService;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaConsumerEventLogRepository;
-import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class PromotionAckConsumerTest {
