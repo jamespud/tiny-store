@@ -67,6 +67,7 @@ promotion:
   kafka:
     topic:
       order-events: tinystore.order.general
+      ack-events: tinystore.promotion.general
 server:
   port: 1200
 

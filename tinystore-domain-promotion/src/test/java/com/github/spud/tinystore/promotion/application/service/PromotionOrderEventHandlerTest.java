@@ -21,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.spud.tinystore.promotion.infrastructure.kafka.PromotionEventPublisher;
 import com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.entity.CheckoutQuoteEntity;
 import com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.repository.JpaCheckoutQuoteRepository;
 import com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.repository.JpaConsumerEventLogRepository;
@@ -36,6 +37,10 @@ class PromotionOrderEventHandlerTest {
 	private JpaUserCouponRepository userCouponRepository;
 	@Mock
 	private JpaConsumerEventLogRepository consumerEventLogRepository;
+	@Mock
+	private CheckoutAppService checkoutAppService;
+	@Mock
+	private PromotionEventPublisher promotionEventPublisher;
 
 	private PromotionOrderEventHandler handler;
 	private ObjectMapper objectMapper;
@@ -47,7 +52,9 @@ class PromotionOrderEventHandlerTest {
 			checkoutQuoteRepository,
 			userCouponRepository,
 			consumerEventLogRepository,
-			objectMapper
+			objectMapper,
+			checkoutAppService,
+			promotionEventPublisher
 		);
 	}
 

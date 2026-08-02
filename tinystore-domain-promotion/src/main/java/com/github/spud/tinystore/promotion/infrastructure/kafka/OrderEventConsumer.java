@@ -1,5 +1,7 @@
 package com.github.spud.tinystore.promotion.infrastructure.kafka;
 
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -77,6 +79,11 @@ public class OrderEventConsumer {
 			case "TRADE_CLOSED":
 				handler.handleTradeClosed(eventId, aggregateId, payload);
 				break;
+			case "PROMOTION_COMMIT":
+				// order 侧发布约定：PROMOTION_COMMIT 的 aggregateId 为 quoteId，
+				// 真实 tradeId 在 payload 中，需解析后传入（否则回执 tradeId 会错）
+				handler.handlePromotionCommit(eventId, resolveCommitTradeId(payload), payload);
+				break;
 			default:
 				log.debug("Ignore event type: {}", eventType);
 		}
@@ -84,5 +91,23 @@ public class OrderEventConsumer {
 		// 手动提交 offset
 		ack.acknowledge();
 		log.debug("Order event processed and acknowledged. eventId={}, eventType={}", eventId, eventType);
+	}
+
+	/**
+	 * 从 PROMOTION_COMMIT payload 中解析真实 tradeId（payload: quoteId/tradeId/inputHash）。
+	 * 解析失败或缺失 tradeId：抛 IllegalArgumentException（毒消息 → DLT）。
+	 */
+	private String resolveCommitTradeId(String payload) {
+		try {
+			Object tradeId = objectMapper.readValue(payload, Map.class).get("tradeId");
+			if (tradeId == null) {
+				throw new IllegalArgumentException("Missing tradeId in PROMOTION_COMMIT payload");
+			}
+			return String.valueOf(tradeId);
+		} catch (IllegalArgumentException e) {
+			throw e;
+		} catch (Exception e) {
+			throw new IllegalArgumentException("Invalid PROMOTION_COMMIT payload", e);
+		}
 	}
 }

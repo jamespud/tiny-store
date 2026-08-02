@@ -138,33 +138,48 @@ public class CheckoutAppService {
             }
         }
 
+        CommitOutcome outcome = commitQuoteCore(request.getQuoteId(), request.getTradeId(),
+                request.getInputHash());
+
         CheckoutCommitResponse resp = new CheckoutCommitResponse();
+        resp.setStatus(CheckoutResultStatus.valueOf(outcome.status()));
+        resp.setFinalQuoteId(outcome.finalQuoteId());
+        resp.setSnapshot(outcome.snapshot());
+        resp.setChangeReasons(outcome.changeReasons());
+        resp.setMessage(outcome.message());
+        if (!storeIdempotencyResponse(key, requestHash, resp)) {
+            return buildCommitConflictResponse();
+        }
+        if (outcome.success()) {
+            log.info("Checkout commit OK: quoteId={}, tradeId={}, status={}, costMs={}",
+                    outcome.finalQuoteId(), request.getTradeId(), resp.getStatus(),
+                    (System.nanoTime() - start) / 1_000_000.0);
+        }
+        return resp;
+    }
+
+    /**
+     * 预占核心逻辑（供同步 commit 与异步 consumer 共用）。
+     * 事务边界由调用方决定（同步 commit 自身 @Transactional；异步由 handler 的 @Transactional 包裹）。
+     *
+     * @param quoteIdStr 报价单 ID（字符串）
+     * @param tradeId 交易 ID
+     * @param inputHash 输入快照 hash（与 quote 快照 version.inputHash 比对）
+     * @return 预占结果：success=true 表示预占成功；否则为失败原因（含需重新报价的新 quote 信息）
+     */
+    public CommitOutcome commitQuoteCore(String quoteIdStr, String tradeId, String inputHash) {
         UUID quoteId;
         try {
-            quoteId = UUID.fromString(request.getQuoteId());
+            quoteId = UUID.fromString(quoteIdStr);
         } catch (Exception e) {
-            resp.setStatus(CheckoutResultStatus.REQUOTE_REQUIRED);
-            resp.setFinalQuoteId(null);
-            resp.setSnapshot(null);
-            resp.setChangeReasons(List.of(ChangeReason.of("QUOTE_NOT_FOUND", null)));
-            resp.setMessage("需要重新报价");
-            if (!storeIdempotencyResponse(key, requestHash, resp)) {
-                return buildCommitConflictResponse();
-            }
-            return resp;
+            return CommitOutcome.failure(CheckoutResultStatus.REQUOTE_REQUIRED.name(), "需要重新报价",
+                    ChangeReason.of("QUOTE_NOT_FOUND", null));
         }
 
         Optional<CheckoutQuoteEntity> opt = checkoutQuoteRepository.findById(quoteId);
         if (opt.isEmpty()) {
-            resp.setStatus(CheckoutResultStatus.REQUOTE_REQUIRED);
-            resp.setFinalQuoteId(null);
-            resp.setSnapshot(null);
-            resp.setChangeReasons(List.of(ChangeReason.of("QUOTE_NOT_FOUND", null)));
-            resp.setMessage("需要重新报价");
-            if (!storeIdempotencyResponse(key, requestHash, resp)) {
-                return buildCommitConflictResponse();
-            }
-            return resp;
+            return CommitOutcome.failure(CheckoutResultStatus.REQUOTE_REQUIRED.name(), "需要重新报价",
+                    ChangeReason.of("QUOTE_NOT_FOUND", null));
         }
         CheckoutQuoteEntity entity = opt.get();
         CheckoutQuotePayload payload = readPayload(entity.getSnapshot());
@@ -173,71 +188,40 @@ public class CheckoutAppService {
         if (entity.getExpiresAt().isBefore(now)) {
             checkoutQuoteRepository.updateStatus(entity.getId(), entity.getStatus(), "EXPIRED", now);
             CheckoutQuoteResponse newQuote = createQuote(payload.getQuoteRequest());
-            resp.setStatus(CheckoutResultStatus.REQUOTE_REQUIRED);
-            resp.setFinalQuoteId(newQuote.getQuoteId());
-            resp.setSnapshot(newQuote.getSnapshot());
-            resp.setChangeReasons(List.of(ChangeReason.of("QUOTE_EXPIRED", null)));
-            resp.setMessage("需要重新报价");
-            if (!storeIdempotencyResponse(key, requestHash, resp)) {
-                return buildCommitConflictResponse();
-            }
-            return resp;
+            return CommitOutcome.failure(CheckoutResultStatus.REQUOTE_REQUIRED.name(), "需要重新报价",
+                    List.of(ChangeReason.of("QUOTE_EXPIRED", null)),
+                    newQuote.getQuoteId(), newQuote.getSnapshot());
         }
 
         PricingSnapshot snapshot = payload.getSnapshot();
-        if (snapshot.getVersion() == null || !Objects.equals(request.getInputHash(), snapshot.getVersion().getInputHash())) {
+        if (snapshot.getVersion() == null || !Objects.equals(inputHash, snapshot.getVersion().getInputHash())) {
             CheckoutQuoteResponse newQuote = createQuote(payload.getQuoteRequest());
-            resp.setStatus(CheckoutResultStatus.REQUOTE_REQUIRED);
-            resp.setFinalQuoteId(newQuote.getQuoteId());
-            resp.setSnapshot(newQuote.getSnapshot());
-            resp.setChangeReasons(List.of(ChangeReason.of("INPUT_CHANGED", null)));
-            resp.setMessage("需要重新报价");
-            if (!storeIdempotencyResponse(key, requestHash, resp)) {
-                return buildCommitConflictResponse();
-            }
-            return resp;
+            return CommitOutcome.failure(CheckoutResultStatus.REQUOTE_REQUIRED.name(), "需要重新报价",
+                    List.of(ChangeReason.of("INPUT_CHANGED", null)),
+                    newQuote.getQuoteId(), newQuote.getSnapshot());
         }
 
         String currentPricingVersion = computePricingRulesVersion(now);
         String currentShippingVersion = computeShippingRulesVersion();
         if (!Objects.equals(currentPricingVersion, snapshot.getVersion().getPricingRulesVersion())) {
             CheckoutQuoteResponse newQuote = createQuote(payload.getQuoteRequest());
-            resp.setStatus(CheckoutResultStatus.REQUOTE_REQUIRED);
-            resp.setFinalQuoteId(newQuote.getQuoteId());
-            resp.setSnapshot(newQuote.getSnapshot());
-            resp.setChangeReasons(List.of(ChangeReason.of("SECKILL_PRICE_CHANGED", null)));
-            resp.setMessage("需要重新报价");
-            if (!storeIdempotencyResponse(key, requestHash, resp)) {
-                return buildCommitConflictResponse();
-            }
-            return resp;
+            return CommitOutcome.failure(CheckoutResultStatus.REQUOTE_REQUIRED.name(), "需要重新报价",
+                    List.of(ChangeReason.of("SECKILL_PRICE_CHANGED", null)),
+                    newQuote.getQuoteId(), newQuote.getSnapshot());
         }
         if (!Objects.equals(currentShippingVersion, snapshot.getVersion().getShippingRulesVersion())) {
             CheckoutQuoteResponse newQuote = createQuote(payload.getQuoteRequest());
-            resp.setStatus(CheckoutResultStatus.REQUOTE_REQUIRED);
-            resp.setFinalQuoteId(newQuote.getQuoteId());
-            resp.setSnapshot(newQuote.getSnapshot());
-            resp.setChangeReasons(List.of(ChangeReason.of("SHIPPING_INPUT_CHANGED", null)));
-            resp.setMessage("需要重新报价");
-            if (!storeIdempotencyResponse(key, requestHash, resp)) {
-                return buildCommitConflictResponse();
-            }
-            return resp;
+            return CommitOutcome.failure(CheckoutResultStatus.REQUOTE_REQUIRED.name(), "需要重新报价",
+                    List.of(ChangeReason.of("SHIPPING_INPUT_CHANGED", null)),
+                    newQuote.getQuoteId(), newQuote.getSnapshot());
         }
 
         List<ChangeReason> changes = new ArrayList<>();
-        boolean couponLockSuccess = lockCouponsAtomic(payload, request.getTradeId(), entity.getExpiresAt(), now, changes);
+        boolean couponLockSuccess = lockCouponsAtomic(payload, tradeId, entity.getExpiresAt(), now, changes);
         if (!couponLockSuccess) {
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
-            resp.setStatus(CheckoutResultStatus.REQUOTE_REQUIRED);
-            resp.setFinalQuoteId(null);
-            resp.setSnapshot(null);
-            resp.setChangeReasons(changes);
-            resp.setMessage("优惠券预占失败，请重新报价");
-            if (!storeIdempotencyResponse(key, requestHash, resp)) {
-                return buildCommitConflictResponse();
-            }
-            return resp;
+            return CommitOutcome.failure(CheckoutResultStatus.REQUOTE_REQUIRED.name(),
+                    "优惠券预占失败，请重新报价", changes);
         }
 
         recomputeTotals(payload);
@@ -245,20 +229,39 @@ public class CheckoutAppService {
         entity.setSnapshot(writePayload(payload));
         entity.setUpdatedAt(now);
         checkoutQuoteRepository.save(entity);
-        checkoutQuoteRepository.markCommitted(entity.getId(), request.getTradeId(), now);
+        checkoutQuoteRepository.markCommitted(entity.getId(), tradeId, now);
 
-        resp.setStatus(changes.isEmpty() ? CheckoutResultStatus.OK : CheckoutResultStatus.OK_WITH_CHANGE);
-        resp.setFinalQuoteId(entity.getId().toString());
-        resp.setSnapshot(payload.getSnapshot());
-        resp.setChangeReasons(changes);
-        resp.setMessage(changes.isEmpty() ? "成功" : "已降级/部分优惠失效");
-        if (!storeIdempotencyResponse(key, requestHash, resp)) {
-            return buildCommitConflictResponse();
+        return CommitOutcome.success(entity.getId().toString(), payload.getSnapshot(), changes);
+    }
+
+    /**
+     * 预占结果（同步 commit 与异步 consumer 共用）。
+     */
+    public record CommitOutcome(boolean success, String status, String finalQuoteId,
+                                PricingSnapshot snapshot, String message, List<ChangeReason> changeReasons) {
+
+        public static CommitOutcome success(String finalQuoteId, PricingSnapshot snapshot,
+                                            List<ChangeReason> changeReasons) {
+            boolean ok = changeReasons.isEmpty();
+            return new CommitOutcome(true,
+                    ok ? CheckoutResultStatus.OK.name() : CheckoutResultStatus.OK_WITH_CHANGE.name(),
+                    finalQuoteId, snapshot,
+                    ok ? "成功" : "已降级/部分优惠失效",
+                    changeReasons);
         }
-        log.info("Checkout commit OK: quoteId={}, tradeId={}, status={}, costMs={}",
-                entity.getId(), request.getTradeId(), resp.getStatus(),
-                (System.nanoTime() - start) / 1_000_000.0);
-        return resp;
+
+        public static CommitOutcome failure(String status, String message, List<ChangeReason> changeReasons,
+                                            String finalQuoteId, PricingSnapshot snapshot) {
+            return new CommitOutcome(false, status, finalQuoteId, snapshot, message, changeReasons);
+        }
+
+        public static CommitOutcome failure(String status, String message, List<ChangeReason> changeReasons) {
+            return failure(status, message, changeReasons, null, null);
+        }
+
+        public static CommitOutcome failure(String status, String message, ChangeReason reason) {
+            return failure(status, message, List.of(reason), null, null);
+        }
     }
 
     @Transactional
