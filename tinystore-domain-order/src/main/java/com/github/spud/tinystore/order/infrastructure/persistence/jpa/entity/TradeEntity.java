@@ -69,6 +69,9 @@ public class TradeEntity {
     @Column(name = "inventory_reservation_id", length = 128)
     private String inventoryReservationId;
 
+    @Column(name = "promotion_commit_status", nullable = false)
+    private String promotionCommitStatus = "PENDING";
+
     @Column(name = "coupon_code", length = 128)
     private String couponCode;
 
