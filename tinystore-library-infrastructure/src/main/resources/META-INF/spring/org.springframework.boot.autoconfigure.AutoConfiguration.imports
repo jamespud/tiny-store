@@ -1,3 +1,4 @@
 com.github.spud.tinystore.infrastructure.security.ResourceServerAutoConfiguration
 com.github.spud.tinystore.infrastructure.security.PermitAllAutoConfiguration
 com.github.spud.tinystore.infrastructure.config.LibraryMetricsAutoConfiguration
+com.github.spud.tinystore.infrastructure.config.FeignTraceAutoConfiguration
