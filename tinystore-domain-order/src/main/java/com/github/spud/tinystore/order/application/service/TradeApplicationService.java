@@ -1,5 +1,6 @@
 package com.github.spud.tinystore.order.application.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.spud.tinystore.order.application.command.CancelTradeCommand;
 import com.github.spud.tinystore.order.application.command.CreateTradeCommand;
@@ -78,6 +79,9 @@ public class TradeApplicationService {
 
     @Value("${order.payment-timeout-seconds:900}")
     private long paymentTimeoutSeconds;
+
+    @Value("${order.promotion.commit-async-enabled:false}")
+    private boolean promotionCommitAsyncEnabled;
 
     /**
      * 创建交易 Saga（半编排式）
@@ -325,20 +329,25 @@ public class TradeApplicationService {
                 updatedOrders.add(updatedShopOrder);
             }
 
-            // 5. promotion commit（现在 trade 已落库且所有 shop 库存已预占，可以 commit 了）
+            // 5. promotion commit：异步时写 Outbox（promotion consumer 预占并回执），同步时走 Feign
             PromotionCommitRequest promotionCommitRequest = PromotionCommitRequest.builder()
                     .quoteId(quoteResponse.getQuoteId())
                     .tradeId(tradeId)
                     .inputHash(inputHash)
                     .build();
-            try {
-                promotionClient.commit(idempotencyKey, promotionCommitRequest);
-                log.info("Promotion commit succeeded");
-            } catch (Exception e) {
-                log.error("Promotion commit failed", e);
-                throw new DomainConflictException("PROMOTION_COMMIT_FAILED",
-                        "Promotion commit failed for tradeId: " + tradeId + ", error: "
-                                + e.getMessage());
+            if (promotionCommitAsyncEnabled) {
+                writePromotionCommitOutbox(tradeId, quoteResponse.getQuoteId(), inputHash,
+                        command.getTraceId());
+            } else {
+                try {
+                    promotionClient.commit(idempotencyKey, promotionCommitRequest);
+                    log.info("Promotion commit succeeded");
+                } catch (Exception e) {
+                    log.error("Promotion commit failed", e);
+                    throw new DomainConflictException("PROMOTION_COMMIT_FAILED",
+                            "Promotion commit failed for tradeId: " + tradeId + ", error: "
+                                    + e.getMessage());
+                }
             }
 
             Trade trade = Trade.builder()
@@ -465,6 +474,28 @@ public class TradeApplicationService {
             log.error("Trade creation failed", e);
             throw e;
         }
+    }
+
+    /**
+     * 写 PROMOTION_COMMIT Outbox 事件（异步 promotion commit 路径）。
+     * 包级可见以支持单元测试（同包测试直接调用验证事件构造）。
+     */
+    void writePromotionCommitOutbox(String tradeId, String quoteId, String inputHash,
+                                    String traceId) throws JsonProcessingException {
+        OrderDomainEvent commitEvent = OrderDomainEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .eventType(OrderEventType.PROMOTION_COMMIT)
+                .aggregateType("PROMOTION")
+                .aggregateId(quoteId)
+                .occurredAt(LocalDateTime.now())
+                .traceId(traceId)
+                .payloadJson(objectMapper.writeValueAsString(Map.of(
+                        "quoteId", quoteId,
+                        "tradeId", tradeId,
+                        "inputHash", inputHash)))
+                .build();
+        outboxEventService.saveEvent(commitEvent);
+        log.info("Promotion commit outbox written (async): tradeId={}, quoteId={}", tradeId, quoteId);
     }
 
     private void compensateCreateTradeFailure(String idempotencyKey,
