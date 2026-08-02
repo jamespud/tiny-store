@@ -605,84 +605,98 @@ public class TradeApplicationService {
                         "Trade cannot be cancelled in current status: " + trade.getPayStatus());
             }
 
-            // 获取所有子单
-            List<ShopOrder> shopOrders = shopOrderRepository.findByTradeId(trade.getTradeId());
-
-            // 同步补偿：释放库存和优惠
-            // 按 ShopOrder 遍历释放库存（VERSION_2 用 canonical release，VERSION_1 用 legacy
-            // releaseV2）
-            for (ShopOrder shopOrder : shopOrders) {
-                releaseInventoryForCancelledShopOrder(idempotencyKey, command, trade.getTradeId(),
-                        shopOrder);
-            }
-
-            // 所有 release 成功后，才更新本地关闭态与关闭事件
-            trade.closeTrade();
-            tradeRepository.save(trade);
-
-            for (ShopOrder shopOrder : shopOrders) {
-                // Mark inventory status as RELEASED before closing the order
-                shopOrder.markInventoryReleased();
-                shopOrder.close();
-                shopOrderRepository.save(shopOrder);
-            }
-
-            OrderDomainEvent tradeClosedEvent = OrderDomainEvent.builder()
-                    .eventId(UUID.randomUUID().toString())
-                    .eventType(OrderEventType.TRADE_CLOSED)
-                    .aggregateType("TRADE")
-                    .aggregateId(trade.getTradeId())
-                    .occurredAt(LocalDateTime.now())
-                    .traceId(command.getTraceId())
-                    .payloadJson(objectMapper.writeValueAsString(Map.of(
-                            "tradeId", trade.getTradeId(),
-                            "reason", command.getReason())))
-                    .build();
-            outboxEventService.saveEvent(tradeClosedEvent);
-
-            for (ShopOrder shopOrder : shopOrders) {
-                OrderDomainEvent orderClosedEvent = OrderDomainEvent.builder()
-                        .eventId(UUID.randomUUID().toString())
-                        .eventType(OrderEventType.ORDER_CLOSED)
-                        .aggregateType("ORDER")
-                        .aggregateId(shopOrder.getOrderId())
-                        .occurredAt(LocalDateTime.now())
-                        .traceId(command.getTraceId())
-                        .payloadJson(objectMapper.writeValueAsString(Map.of(
-                                "orderId", shopOrder.getOrderId(),
-                                "tradeId", shopOrder.getTradeId())))
-                        .build();
-                outboxEventService.saveEvent(orderClosedEvent);
-            }
-
-            // 释放促销优惠
-            try {
-                // 校验 promotionQuoteId 已绑定
-                if (trade.getPromotionQuoteId() == null || trade.getPromotionQuoteId().isEmpty()) {
-                    log.warn("Missing promotionQuoteId for trade: {}, skipping promotion release",
-                            trade.getTradeId());
-                } else {
-                    PromotionReleaseRequest promotionReleaseRequest = PromotionReleaseRequest
-                            .builder()
-                            .quoteId(trade.getPromotionQuoteId())
-                            .tradeId(trade.getTradeId())
-                            .reason(command.getReason())
-                            .build();
-                    promotionClient.release(idempotencyKey, promotionReleaseRequest);
-                    log.info("Promotion released for cancelled trade: tradeId={}",
-                            trade.getTradeId());
-                }
-            } catch (Exception e) {
-                log.error("Failed to release promotion for cancelled trade: tradeId={}",
-                        trade.getTradeId(), e);
-            }
-
-            log.info("Trade cancelled: tradeId={}", trade.getTradeId());
-
+            cancelTradeInternal(idempotencyKey, command);
         } catch (Exception e) {
             log.error("Trade cancellation failed", e);
             throw e;
         }
+    }
+
+    /**
+     * 取消交易核心流程（复用：公共 cancelTrade 与内部 autoCancelTrade 均走此路径）。
+     * 释放库存（outbox INVENTORY_RELEASE）+ closeTrade + TRADE_CLOSED/ORDER_CLOSED outbox
+     * + promotion release（同步 Feign，异步化不在本计划范围）。
+     */
+    private void cancelTradeInternal(String idempotencyKey, CancelTradeCommand command) throws Exception {
+        // 获取 Trade 聚合根（公共 cancelTrade 已校验过；此处供 autoCancelTrade 直接复用，
+        // 同一事务内二次查找命中同一持久化上下文）
+        Trade trade = tradeRepository.findByTradeId(command.getTradeId())
+                .orElseThrow(() -> new DomainConflictException("TRADE_NOT_FOUND",
+                        "Trade not found: " + command.getTradeId()));
+
+        // 获取所有子单
+        List<ShopOrder> shopOrders = shopOrderRepository.findByTradeId(command.getTradeId());
+
+        // 同步补偿：释放库存和优惠
+        // 按 ShopOrder 遍历释放库存（VERSION_2 用 canonical release，VERSION_1 用 legacy
+        // releaseV2）
+        for (ShopOrder shopOrder : shopOrders) {
+            releaseInventoryForCancelledShopOrder(idempotencyKey, command, trade.getTradeId(),
+                    shopOrder);
+        }
+
+        // 所有 release 成功后，才更新本地关闭态与关闭事件
+        trade.closeTrade();
+        tradeRepository.save(trade);
+
+        for (ShopOrder shopOrder : shopOrders) {
+            // Mark inventory status as RELEASED before closing the order
+            shopOrder.markInventoryReleased();
+            shopOrder.close();
+            shopOrderRepository.save(shopOrder);
+        }
+
+        OrderDomainEvent tradeClosedEvent = OrderDomainEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .eventType(OrderEventType.TRADE_CLOSED)
+                .aggregateType("TRADE")
+                .aggregateId(trade.getTradeId())
+                .occurredAt(LocalDateTime.now())
+                .traceId(command.getTraceId())
+                .payloadJson(objectMapper.writeValueAsString(Map.of(
+                        "tradeId", trade.getTradeId(),
+                        "reason", command.getReason())))
+                .build();
+        outboxEventService.saveEvent(tradeClosedEvent);
+
+        for (ShopOrder shopOrder : shopOrders) {
+            OrderDomainEvent orderClosedEvent = OrderDomainEvent.builder()
+                    .eventId(UUID.randomUUID().toString())
+                    .eventType(OrderEventType.ORDER_CLOSED)
+                    .aggregateType("ORDER")
+                    .aggregateId(shopOrder.getOrderId())
+                    .occurredAt(LocalDateTime.now())
+                    .traceId(command.getTraceId())
+                    .payloadJson(objectMapper.writeValueAsString(Map.of(
+                            "orderId", shopOrder.getOrderId(),
+                            "tradeId", shopOrder.getTradeId())))
+                    .build();
+            outboxEventService.saveEvent(orderClosedEvent);
+        }
+
+        // 释放促销优惠
+        try {
+            // 校验 promotionQuoteId 已绑定
+            if (trade.getPromotionQuoteId() == null || trade.getPromotionQuoteId().isEmpty()) {
+                log.warn("Missing promotionQuoteId for trade: {}, skipping promotion release",
+                        trade.getTradeId());
+            } else {
+                PromotionReleaseRequest promotionReleaseRequest = PromotionReleaseRequest
+                        .builder()
+                        .quoteId(trade.getPromotionQuoteId())
+                        .tradeId(trade.getTradeId())
+                        .reason(command.getReason())
+                        .build();
+                promotionClient.release(idempotencyKey, promotionReleaseRequest);
+                log.info("Promotion released for cancelled trade: tradeId={}",
+                        trade.getTradeId());
+            }
+        } catch (Exception e) {
+            log.error("Failed to release promotion for cancelled trade: tradeId={}",
+                    trade.getTradeId(), e);
+        }
+
+        log.info("Trade cancelled: tradeId={}", trade.getTradeId());
     }
 
     private void releaseInventoryForCancelledShopOrder(String idempotencyKey,
@@ -995,12 +1009,57 @@ public class TradeApplicationService {
     }
 
     /**
-     * 应用 promotion commit 回执结果（由 PromotionAckConsumer 调用）。
-     * TODO(Task 6): 完善实现 —— 更新 trade.promotionCommitStatus 并处理失败补偿。
+     * 应用 promotion commit 回执结果（由回执 consumer 调用）：
+     * 成功 → COMMITTED；失败 → FAILED + 自动取消（未支付订单必为未支付，可直接关闭）。
+     * 幂等：对已关闭/已 FAILED 的 trade 忽略重复回执（不重复触发自动取消）。
      */
+    @Transactional(rollbackFor = Exception.class)
     public void applyPromotionCommitResult(String tradeId, boolean committed, String reason) {
-        log.info("applyPromotionCommitResult invoked: tradeId={}, committed={}, reason={}",
-                tradeId, committed, reason);
+        Trade trade = tradeRepository.findByTradeId(tradeId)
+                .orElseThrow(() -> new DomainConflictException("TRADE_NOT_FOUND",
+                        "Trade not found: " + tradeId));
+        if (committed) {
+            if (trade.isClosed()) {
+                log.warn("Promotion commit ack for already closed trade, ignore: tradeId={}", tradeId);
+                return;
+            }
+            trade.markPromotionCommitted();
+            tradeRepository.save(trade);
+            log.info("Trade promotion commit confirmed: tradeId={}", tradeId);
+            return;
+        }
+        // FAILED 回执：按 trade 状态机幂等（已 FAILED 或已关闭 → 忽略，避免重复自动取消）
+        if (trade.isClosed() || "FAILED".equals(trade.getPromotionCommitStatus())) {
+            log.warn("Promotion commit failure ack ignored, trade already failed/closed: tradeId={}",
+                    tradeId);
+            return;
+        }
+        trade.markPromotionCommitFailed();
+        tradeRepository.save(trade);
+        log.info("Trade promotion commit failed, auto-cancelling: tradeId={}, reason={}", tradeId, reason);
+        autoCancelTrade(tradeId, "PROMOTION_COMMIT_FAILED:" + reason, "auto-cancel-" + tradeId);
+    }
+
+    /**
+     * 自动取消（供 commit 失败与 PENDING 超时兜底使用）：复用 cancelTrade 核心流程，
+     * 生成内部 idempotencyKey 与 traceId。
+     * 异常以 unchecked 重抛（checked 异常会破坏回执 consumer 的精确重抛分析），
+     * 事务回滚 + consumer 重试/DLT 语义保持不变。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void autoCancelTrade(String tradeId, String reason, String traceId) {
+        String internalKey = "auto-cancel-" + tradeId + "-" + System.nanoTime();
+        CancelTradeCommand command = CancelTradeCommand.builder()
+                .tradeId(tradeId)
+                .reason(reason)
+                .traceId(traceId)
+                .build();
+        try {
+            cancelTradeInternal(internalKey, command);
+        } catch (Exception e) {
+            log.error("Auto-cancel failed for tradeId={}, will retry via scheduler", tradeId, e);
+            throw new IllegalStateException("Auto-cancel failed for tradeId=" + tradeId, e);
+        }
     }
 
     // ============ 辅助方法 ============
