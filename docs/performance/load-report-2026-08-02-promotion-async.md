@@ -2,7 +2,7 @@
 
 > 环境：单机 docker-compose-test 栈（gateway :8080 + order :28080 + inventory :13000 + promotion :1200 + PG/Redis/Nacos/Kafka），16 核 / 29G
 > 工具：JUnit + Awaitility + k6 v2.0.0（--summary-export 全量数值）
-> 对比基线：[2026-08-02 报告](./load-report-2026-08-02.md)（异步前、网关/order 调优后）；基线 k6 数值取自该轮 summary（VUS 500/1000/5000/10000 → RPS 809/1142/1090/841，P99 2615/1798/5578/30224）
+> 对比基线：2026-08-02 16:46 独立基线重跑（flag-off 栈，与 [2026-08-02 报告](./load-report-2026-08-02.md) 同配置——异步前、网关/order 调优后）；基线 k6 数值取自该重跑 summary（VUS 500/1000/5000/10000 → RPS 809/1142/1090/841，P99 2615/1798/5578/30224），非 08-02 报告本体的数值。该重跑与 08-02 报告属不同运行批次，数值略有差异（如 P95@10000：11112 vs 19861），源于负载波动，正文对比一律以本基线（16:46 重跑）为准
 > 验证对象：`feature/promotion-commit-async` 全链路（async flag 已随 compose-test 提交生效，见 §4）
 
 ## 1. 本次改动（相对 08-02 基线）
