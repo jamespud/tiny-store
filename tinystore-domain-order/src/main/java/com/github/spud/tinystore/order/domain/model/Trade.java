@@ -112,6 +112,22 @@ public class Trade {
     public boolean canCancel() {
         return this.payStatus == PayStatus.UNPAID;
     }
+
+    /**
+     * 标记 promotion commit 成功（由回执消费端调用）
+     */
+    public void markPromotionCommitted() {
+        this.promotionCommitStatus = "COMMITTED";
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    /**
+     * 标记 promotion commit 失败（由回执消费端调用，随后触发自动取消）
+     */
+    public void markPromotionCommitFailed() {
+        this.promotionCommitStatus = "FAILED";
+        this.updatedAt = LocalDateTime.now();
+    }
     
     public void closeTrade() {
         if (isClosed() || !canCancel()) {
