@@ -21,4 +21,8 @@ public interface TradeJpaRepository extends JpaRepository<TradeEntity, Long> {
 
     @Query("SELECT t FROM TradeEntity t WHERE t.payStatus = :payStatus AND t.createdAt < :before ORDER BY t.createdAt ASC")
     List<TradeEntity> findPendingPaymentsByTimeout(@Param("payStatus") String payStatus, @Param("before") LocalDateTime before);
+
+    @Query("SELECT t.tradeId FROM TradeEntity t WHERE t.promotionCommitStatus = 'PENDING' "
+            + "AND t.payStatus = 'UNPAID' AND t.createdAt < :threshold")
+    List<String> findStalePendingCommitTradeIds(@Param("threshold") LocalDateTime threshold);
 }
