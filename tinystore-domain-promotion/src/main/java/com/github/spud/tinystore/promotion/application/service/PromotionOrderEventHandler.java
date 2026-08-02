@@ -1,7 +1,9 @@
 package com.github.spud.tinystore.promotion.application.service;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.spud.tinystore.promotion.infrastructure.kafka.PromotionEventPublisher;
 import com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.entity.CheckoutQuoteEntity;
 import com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.entity.ConsumerEventLogEntity;
 import com.github.spud.tinystore.promotion.infrastructure.persistence.jpa.repository.JpaCheckoutQuoteRepository;
@@ -32,15 +35,21 @@ public class PromotionOrderEventHandler {
 	private final JpaUserCouponRepository userCouponRepository;
 	private final JpaConsumerEventLogRepository consumerEventLogRepository;
 	private final ObjectMapper objectMapper;
+	private final CheckoutAppService checkoutAppService;
+	private final PromotionEventPublisher promotionEventPublisher;
 
 	public PromotionOrderEventHandler(JpaCheckoutQuoteRepository checkoutQuoteRepository,
 		JpaUserCouponRepository userCouponRepository,
 		JpaConsumerEventLogRepository consumerEventLogRepository,
-		ObjectMapper objectMapper) {
+		ObjectMapper objectMapper,
+		CheckoutAppService checkoutAppService,
+		PromotionEventPublisher promotionEventPublisher) {
 		this.checkoutQuoteRepository = checkoutQuoteRepository;
 		this.userCouponRepository = userCouponRepository;
 		this.consumerEventLogRepository = consumerEventLogRepository;
 		this.objectMapper = objectMapper;
+		this.checkoutAppService = checkoutAppService;
+		this.promotionEventPublisher = promotionEventPublisher;
 	}
 
 	/**
@@ -169,6 +178,52 @@ public class PromotionOrderEventHandler {
 		}
 
 		log.info("TRADE_CLOSED event processed successfully. eventId={}, tradeId={}", eventId, tradeId);
+	}
+
+	/**
+	 * 处理 PROMOTION_COMMIT 事件：幂等检查后执行预占，成功/失败均发回执事件。
+	 * payload 结构：quoteId / tradeId / inputHash（traceId 可选）。
+	 * 解析失败视为毒消息，抛 IllegalArgumentException 直接进 DLT。
+	 *
+	 * @param eventId 事件 ID
+	 * @param tradeId 交易 ID
+	 * @param payloadJson 事件载荷
+	 */
+	@Transactional
+	public void handlePromotionCommit(String eventId, String tradeId, String payloadJson) {
+		// 幂等检查
+		if (!tryMarkProcessed(eventId)) {
+			log.info("Event already processed, skip. eventId={}", eventId);
+			return;
+		}
+
+		Map<String, Object> payload;
+		try {
+			payload = objectMapper.readValue(payloadJson, Map.class);
+		} catch (Exception e) {
+			log.error("Failed to parse PROMOTION_COMMIT payload. eventId={}, tradeId={}", eventId, tradeId, e);
+			throw new IllegalArgumentException("Invalid PROMOTION_COMMIT payload", e);
+		}
+		String quoteId = (String) payload.get("quoteId");
+		String inputHash = (String) payload.get("inputHash");
+		String traceId = (String) payload.getOrDefault("traceId", "");
+
+		CheckoutAppService.CommitOutcome outcome = checkoutAppService.commitQuoteCore(quoteId, tradeId, inputHash);
+
+		Map<String, Object> ack = new HashMap<>();
+		ack.put("eventId", UUID.randomUUID().toString());
+		ack.put("tradeId", tradeId);
+		ack.put("quoteId", quoteId);
+		ack.put("traceId", traceId);
+		if (outcome.success()) {
+			ack.put("eventType", "PROMOTION_COMMITTED");
+		} else {
+			ack.put("eventType", "PROMOTION_COMMIT_FAILED");
+			ack.put("reason", outcome.message());
+		}
+		promotionEventPublisher.publish((String) ack.get("eventType"), tradeId, ack, traceId);
+		log.info("Promotion commit processed: tradeId={}, quoteId={}, success={}",
+			tradeId, quoteId, outcome.success());
 	}
 
 	/**

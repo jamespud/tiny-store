@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.promotion.infrastructure.kafka;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.annotation.Value;
@@ -46,6 +47,17 @@ public class KafkaConsumerConfig {
 
     @Value("${tinystore.kafka.consumer.dlt.suffix:.DLT}")
     private String dltSuffix;
+
+    /**
+     * 促销事件发布器（回执事件发往 ack topic，默认 tinystore.promotion.general）。
+     * ObjectMapper 使用 Spring Boot 自动配置的 bean。
+     */
+    @Bean
+    public PromotionEventPublisher promotionEventPublisher(KafkaTemplate<String, String> kafkaTemplate,
+                                                           ObjectMapper objectMapper,
+                                                           @Value("${promotion.kafka.topic.ack-events:tinystore.promotion.general}") String topic) {
+        return new PromotionEventPublisher(kafkaTemplate, objectMapper, topic);
+    }
 
     /**
      * 配置 Kafka listener 容器工厂
