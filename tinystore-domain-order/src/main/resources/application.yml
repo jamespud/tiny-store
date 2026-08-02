@@ -41,6 +41,12 @@ spring:
         jwt:
           issuer-uri: ${JWT_ISSUER:http://localhost:9000}
 
+feign:
+  okhttp:
+    enabled: true
+  httpclient:
+    enabled: false
+
 tinystore:
   security:
     resource-server:
