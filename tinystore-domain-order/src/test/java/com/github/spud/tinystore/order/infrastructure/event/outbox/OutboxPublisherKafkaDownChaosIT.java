@@ -16,6 +16,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -95,7 +96,7 @@ class OutboxPublisherKafkaDownChaosIT {
         // exceptionally 回调会调用 markAsFailed，每次递增 retryCount，>=3 时置 FAILED
         for (int i = 1; i <= 3; i++) {
             OutboxEventEntity current = repository.findByEventId(eventId).orElseThrow();
-            publisher.publishEvent(current);
+            publisher.publishEvents(List.of(current));
 
             // 等待异步 exceptionally 回调完成（最多 10 秒）
             final int attempt = i;
