@@ -57,6 +57,7 @@ class PendingCommitTimeoutSchedulerTest {
         // 兜底调度器仅在异步 promotion commit 启用时生效
         ReflectionTestUtils.setField(scheduler, "promotionCommitAsyncEnabled", true);
         ReflectionTestUtils.setField(scheduler, "batchSize", 200);
+        ReflectionTestUtils.setField(scheduler, "pendingTimeoutSeconds", 60L);
     }
 
     @Test
@@ -81,7 +82,7 @@ class PendingCommitTimeoutSchedulerTest {
         // 且阈值参数为 now - 30s
         ArgumentCaptor<LocalDateTime> thresholdCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
         verify(tradeRepository).findStalePendingCommit(thresholdCaptor.capture());
-        LocalDateTime expectedThreshold = LocalDateTime.now().minusSeconds(30);
+        LocalDateTime expectedThreshold = LocalDateTime.now().minusSeconds(60);
         assertThat(thresholdCaptor.getValue()).isBetween(
                 expectedThreshold.minusSeconds(5), expectedThreshold.plusSeconds(5));
     }
