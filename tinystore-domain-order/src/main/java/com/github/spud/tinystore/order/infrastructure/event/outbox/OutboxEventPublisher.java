@@ -104,7 +104,12 @@ public class OutboxEventPublisher {
             futures.add(sendEventAsync(event, publishedIds));
         }
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-            .thenRun(() -> outboxEventService.markAsPublishedBatch(publishedIds));
+            .thenRun(() -> outboxEventService.markAsPublishedBatch(publishedIds))
+            .exceptionally(ex -> {
+                log.error("Failed to batch-mark published outbox events, will retry next poll. count={}",
+                        publishedIds.size(), ex);
+                return null;
+            });
     }
 
     /**
