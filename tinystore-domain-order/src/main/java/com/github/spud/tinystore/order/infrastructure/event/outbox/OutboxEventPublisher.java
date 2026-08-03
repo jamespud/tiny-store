@@ -44,51 +44,6 @@ public class OutboxEventPublisher {
     }
 
     /**
-     * 发布单个事件到 Kafka
-     *
-     * @param event Outbox 事件
-     */
-    public void publishEvent(OutboxEventEntity event) {
-        try {
-            // 构造 Kafka 消息 payload
-            KafkaEventMessage message = KafkaEventMessage.builder()
-                .eventId(event.getEventId())
-                .eventType(event.getEventType())
-                .aggregateType(event.getAggregateType())
-                .aggregateId(event.getAggregateId())
-                .payload(event.getPayloadJson())
-                .traceId(event.getTraceId())
-                .occurredAt(event.getCreatedAt().toString())
-                .build();
-
-            String messageJson = objectMapper.writeValueAsString(message);
-
-            // 发送至 Kafka
-            kafkaTemplate.send(kafkaTopic, event.getAggregateId(), messageJson)
-                .thenAccept(result -> {
-                    // 发送成功，标记 Outbox 为 PUBLISHED
-                    outboxEventService.markAsPublished(event.getEventId());
-                    log.info("Outbox event published to Kafka: eventId={}, topic={}, offset={}",
-                        event.getEventId(), kafkaTopic, result.getRecordMetadata().offset());
-                })
-                .exceptionally(ex -> {
-                    // 发送失败，增加指标计数并标记为 FAILED
-                    outboxPublishFailureCounter.increment();
-                    outboxEventService.markAsFailed(event.getEventId(), ex.getMessage());
-                    log.error("Failed to publish Outbox event to Kafka: eventId={}, error={}",
-                        event.getEventId(), ex.getMessage());
-                    return null;
-                });
-
-        } catch (Exception e) {
-            log.error("Error preparing Outbox event for Kafka: eventId={}, error={}",
-                event.getEventId(), e.getMessage(), e);
-            outboxPublishFailureCounter.increment();
-            outboxEventService.markAsFailed(event.getEventId(), e.getMessage());
-        }
-    }
-
-    /**
      * 批量发布事件：全部异步发送，成功后收集 eventId 一次批量标记 PUBLISHED
      * （替代逐条 thenAccept 标记，消除发布瓶颈）。
      *
