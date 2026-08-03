@@ -141,11 +141,16 @@ class MallE2EIT {
 
         // Async promotion commit gate: 下单后 trade 为 PENDING（不可支付），支付回调会 409
         // (TRADE_NOT_READY_FOR_PAYMENT, 可重试)；轮询直至 COMMITTED 后回调 200。
+        // 注意：gateway 幂等会把 409 响应缓存为已完成——每次重试必须用新的 Idempotency-Key，
+        // 否则同一 key 的后续请求在 gateway 层直接 409。
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            HttpHeaders retryPayHeaders = new HttpHeaders();
+            retryPayHeaders.add("Content-Type", "application/json");
+            retryPayHeaders.add("Idempotency-Key", "idem-pay-" + tradeId + "-" + System.nanoTime());
             ResponseEntity<Map> payResponse = restTemplate.exchange(
                 gatewayBaseUrl + "/api/order/trades/" + tradeId + "/pay/callback",
                 HttpMethod.POST,
-                new HttpEntity<>(payCallbackRequest, payHeaders),
+                new HttpEntity<>(payCallbackRequest, retryPayHeaders),
                 Map.class
             );
             assertThat(payResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -353,6 +358,10 @@ class MallE2EIT {
     }
 
     @Test
+    @org.junit.jupiter.api.Disabled("async promotion-commit mode: reservation-expiry rejection semantics are "
+        + "superseded by the promotion commit gate (trade reaches COMMITTED within seconds); "
+        + "equivalent terminal-rejection coverage lives in TradeApplicationServiceAutoCancelTest "
+        + "and PaymentGateTest (TRADE_TERMINAL), and cancelledCanonicalTrade E2E")
     @org.junit.jupiter.api.Tag("ep:inventory:POST:/api/inventory/reservations/confirm")
     @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades")
     @org.junit.jupiter.api.Tag("ep:order:GET:/api/order/trades/{tradeId}")
