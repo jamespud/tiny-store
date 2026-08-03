@@ -57,6 +57,11 @@ public class TradeEntity {
     @Column(name = "closed_at")
     private LocalDateTime closedAt;
 
+    @Version
+    @Builder.Default
+    @Column(name = "version", nullable = false)
+    private Long version = 0L;
+
     @Column(name = "finished_at")
     private LocalDateTime finishedAt;
 
