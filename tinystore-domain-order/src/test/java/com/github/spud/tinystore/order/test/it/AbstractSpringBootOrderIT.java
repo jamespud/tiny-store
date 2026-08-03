@@ -170,12 +170,6 @@ public abstract class AbstractSpringBootOrderIT extends AbstractOrderIT {
                                                              io.micrometer.core.instrument.MeterRegistry meterRegistry) {
             return new OutboxEventPublisher(meterRegistry) {
                 @Override
-                public void publishEvent(OutboxEventEntity event) {
-                    // 同步化：直接标记为已发布，不走 Kafka
-                    outboxEventService.markAsPublished(event.getEventId());
-                }
-
-                @Override
                 public void publishEvents(List<OutboxEventEntity> events) {
                     // 同步化：批量标记为已发布，不走 Kafka
                     events.forEach(e -> outboxEventService.markAsPublished(e.getEventId()));
