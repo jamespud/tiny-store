@@ -97,7 +97,7 @@ class TradeApplicationServicePaymentGateTest {
     }
 
     @Test
-    @DisplayName("ensureTradePayable rejects a FAILED trade with TRADE_NOT_READY_FOR_PAYMENT")
+    @DisplayName("ensureTradePayable rejects a FAILED trade with terminal code TRADE_TERMINAL")
     void paymentGate_shouldRejectFailedTrade() {
         // Given
         Trade trade = trade("trade-failed", "FAILED");
@@ -107,7 +107,22 @@ class TradeApplicationServicePaymentGateTest {
         assertThatThrownBy(() -> tradeApplicationService.ensureTradePayable("trade-failed"))
                 .isInstanceOf(DomainConflictException.class)
                 .satisfies(ex -> assertThat(((DomainConflictException) ex).getErrorCode())
-                        .isEqualTo("TRADE_NOT_READY_FOR_PAYMENT"));
+                        .isEqualTo("TRADE_TERMINAL"));
+    }
+
+    @Test
+    @DisplayName("ensureTradePayable rejects a CLOSED trade with terminal code TRADE_TERMINAL")
+    void paymentGate_shouldRejectClosedTrade() {
+        // Given: UNPAID trade 后关闭（closeTrade 无守卫异常——UNPAID 可取消）
+        Trade trade = trade("trade-closed", "PENDING");
+        trade.closeTrade();
+        when(tradeRepository.findByTradeId("trade-closed")).thenReturn(Optional.of(trade));
+
+        // When/Then
+        assertThatThrownBy(() -> tradeApplicationService.ensureTradePayable("trade-closed"))
+                .isInstanceOf(DomainConflictException.class)
+                .satisfies(ex -> assertThat(((DomainConflictException) ex).getErrorCode())
+                        .isEqualTo("TRADE_TERMINAL"));
     }
 
     @Test

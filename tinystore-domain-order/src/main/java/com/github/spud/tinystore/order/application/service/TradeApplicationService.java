@@ -1027,6 +1027,12 @@ public class TradeApplicationService {
         Trade trade = tradeRepository.findByTradeId(tradeId)
                 .orElseThrow(() -> new DomainConflictException("TRADE_NOT_FOUND",
                         "Trade not found: " + tradeId));
+        if (trade.isClosed() || "FAILED".equals(trade.getPromotionCommitStatus())) {
+            // 终态：payment 回调应停止重试（TRADE_TERMINAL）
+            throw new DomainConflictException("TRADE_TERMINAL",
+                    "Trade promotion commit status is " + trade.getPromotionCommitStatus()
+                            + ", trade is terminal (cancelled/failed)");
+        }
         if (!"COMMITTED".equals(trade.getPromotionCommitStatus())) {
             throw new DomainConflictException("TRADE_NOT_READY_FOR_PAYMENT",
                     "Trade promotion commit status is " + trade.getPromotionCommitStatus()
