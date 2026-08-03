@@ -43,6 +43,10 @@ public class PendingCommitTimeoutScheduler {
             "${order.promotion.pending-timeout-batch-size:200}")
     private int batchSize;
 
+    @org.springframework.beans.factory.annotation.Value(
+            "${order.promotion.pending-timeout-seconds:30}")
+    private long pendingTimeoutSeconds;
+
     public PendingCommitTimeoutScheduler(TradeRepository tradeRepository,
                                          TradeApplicationService tradeApplicationService) {
         this.tradeRepository = tradeRepository;
@@ -55,7 +59,7 @@ public class PendingCommitTimeoutScheduler {
             return;
         }
         List<String> staleTradeIds = tradeRepository.findStalePendingCommit(
-                LocalDateTime.now().minusSeconds(30));
+                LocalDateTime.now().minusSeconds(pendingTimeoutSeconds));
         int processed = 0;
         for (String tradeId : staleTradeIds) {
             if (processed >= batchSize) {

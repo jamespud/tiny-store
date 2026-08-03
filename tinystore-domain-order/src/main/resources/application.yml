@@ -71,8 +71,8 @@ order:
     topic:
       general: tinystore.order.general
   outbox:
-    poll-interval: 5000
-    batch-size: 1000
+    poll-interval: 1000
+    batch-size: 5000
 
   # ============================================================
   # Inventory Integration Feature Flags (RFC-001 Canonical Reservation)
