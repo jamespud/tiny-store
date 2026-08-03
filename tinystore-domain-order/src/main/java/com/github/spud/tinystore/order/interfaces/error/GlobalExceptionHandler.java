@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -45,6 +46,19 @@ public class GlobalExceptionHandler {
         log.warn("Domain conflict: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
             .body(OrderHttpResponse.fail(HttpStatus.CONFLICT.value(), ex.getMessage()));
+    }
+
+    /**
+     * 处理 @Version 乐观锁冲突（回执/超时取消/支付回调并发更新 trade）
+     * 返回 409 CONFLICT：状态已被并发修改，客户端应查询最新状态或重试
+     */
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<OrderHttpResponse<Object>> handleOptimisticLockingFailure(
+            ObjectOptimisticLockingFailureException ex) {
+        log.warn("Optimistic lock conflict: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(OrderHttpResponse.fail(HttpStatus.CONFLICT.value(),
+                    "Concurrent modification, please retry or query latest state"));
     }
 
     /**

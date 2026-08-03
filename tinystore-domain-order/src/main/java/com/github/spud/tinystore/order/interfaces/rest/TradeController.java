@@ -152,7 +152,7 @@ public class TradeController {
     public ResponseEntity<OrderHttpResponse<Void>> paymentCallback(
         @PathVariable String tradeId,
         @RequestBody PaymentCallbackRequest request,
-        @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        @RequestHeader("Idempotency-Key") String idempotencyKey) throws Exception {
 
         try {
             PaymentSucceededCommand command = PaymentSucceededCommand.builder()
@@ -174,9 +174,9 @@ public class TradeController {
             }
             throw e;
         } catch (Exception e) {
+            // rethrow：统一由 GlobalExceptionHandler 映射（乐观锁冲突→409 等），避免吞异常返回 500
             log.error("Payment callback failed: tradeId={}", tradeId, e);
-            return ResponseEntity.status(500).body(
-                OrderHttpResponse.fail(500, "Payment callback failed"));
+            throw e;
         }
     }
 
