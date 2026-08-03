@@ -1052,7 +1052,8 @@ public class TradeApplicationService {
                         "Trade not found: " + tradeId));
         if (committed) {
             if (trade.isClosed()) {
-                log.warn("Promotion commit ack for already closed trade, ignore: tradeId={}", tradeId);
+                log.warn("Promotion commit ack for already closed trade, compensating release: tradeId={}", tradeId);
+                compensatePromotionRelease(trade);
                 return;
             }
             trade.markPromotionCommitted();
@@ -1060,7 +1061,7 @@ public class TradeApplicationService {
             log.info("Trade promotion commit confirmed: tradeId={}", tradeId);
             return;
         }
-        // FAILED 回执：按 trade 状态机幂等（已 FAILED 或已关闭 → 忽略，避免重复自动取消）
+        // FAILED 回执：预占失败 → 券未锁定，无泄漏；按状态机幂等忽略重复回执（避免重复自动取消）
         if (trade.isClosed() || "FAILED".equals(trade.getPromotionCommitStatus())) {
             log.warn("Promotion commit failure ack ignored, trade already failed/closed: tradeId={}",
                     tradeId);
@@ -1070,6 +1071,27 @@ public class TradeApplicationService {
         tradeRepository.save(trade);
         log.info("Trade promotion commit failed, auto-cancelling: tradeId={}, reason={}", tradeId, reason);
         autoCancelTrade(tradeId, "PROMOTION_COMMIT_FAILED:" + reason, "auto-cancel-" + tradeId);
+    }
+
+    /**
+     * 补偿释放：已关闭订单收到回执时，释放 promotion 已预占的券（防券泄漏）。
+     * 幂等——promotion release 对未锁定/已释放 quote 无副作用；失败仅告警不阻断。
+     */
+    private void compensatePromotionRelease(Trade trade) {
+        if (trade.getPromotionQuoteId() == null || trade.getPromotionQuoteId().isEmpty()) {
+            return;
+        }
+        try {
+            PromotionReleaseRequest releaseRequest = PromotionReleaseRequest.builder()
+                    .quoteId(trade.getPromotionQuoteId())
+                    .tradeId(trade.getTradeId())
+                    .reason("TRADE_CLOSED_BEFORE_ACK")
+                    .build();
+            promotionClient.release("ack-compensate-" + trade.getTradeId(), releaseRequest);
+        } catch (Exception e) {
+            log.error("Failed to compensate promotion release for closed trade: tradeId={}",
+                    trade.getTradeId(), e);
+        }
     }
 
     /**
