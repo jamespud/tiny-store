@@ -8,6 +8,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.kafka.core.KafkaTemplate;
+import java.util.List;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
@@ -70,7 +71,7 @@ class OutboxEventPublisherMetricsTest {
         double countBefore = counter.count();
 
         // When: 调用 publishEvent（异步 exceptionally 会在后台执行）
-        publisher.publishEvent(event);
+        publisher.publishEvents(List.of(event));
 
         // 等待异步 exceptionally 完成（简化：直接等待短时间）
         try {
@@ -111,7 +112,7 @@ class OutboxEventPublisherMetricsTest {
         double countBefore = counter.count();
 
         // When: 调用 publishEvent
-        publisher.publishEvent(event);
+        publisher.publishEvents(List.of(event));
 
         // Then: counter 递增（catch 分支）
         assertThat(counter.count()).isEqualTo(countBefore + 1);
