@@ -118,20 +118,25 @@ class TradeApplicationServiceAutoCancelTest {
     }
 
     @Test
-    @DisplayName("applyPromotionCommitResult(committed=true) on already-closed trade is ignored (late ack race)")
-    void applyCommitted_onAlreadyClosedTrade_shouldBeIgnored() {
-        // Given: trade 已关闭（如超时自动取消后回执才到）
+    @DisplayName("applyPromotionCommitResult(committed=true) on already-closed trade compensates promotion release (late ack race)")
+    void applyCommitted_onAlreadyClosedTrade_shouldReleasePromotion() {
+        // Given: trade 已关闭（如超时自动取消后回执才到），券已由 promotion 预占
         Trade trade = trade("trade-1", PayStatus.UNPAID, "PENDING", true);
         when(tradeRepository.findByTradeId("trade-1")).thenReturn(Optional.of(trade));
 
-        // When/Then: 不抛错、状态不变、无任何写操作
+        // When/Then: 状态不变、无本地写操作，但补偿 release 已预占的券
         assertThatCode(() -> tradeApplicationService.applyPromotionCommitResult("trade-1", true, null))
                 .doesNotThrowAnyException();
         assertThat(trade.getPromotionCommitStatus()).isEqualTo("PENDING");
         assertThat(trade.isClosed()).isTrue();
         verify(tradeRepository, never()).save(any());
         verify(outboxEventService, never()).saveEvent(any());
+        verify(promotionClient).release(anyString(), argThat(req ->
+                "quote-1".equals(req.getQuoteId())
+                        && "trade-1".equals(req.getTradeId())
+                        && "TRADE_CLOSED_BEFORE_ACK".equals(req.getReason())));
     }
+
 
     @Test
     @DisplayName("applyPromotionCommitResult(committed=false) duplicate ack on already-FAILED/closed trade is ignored")
