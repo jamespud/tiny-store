@@ -83,6 +83,9 @@ public class TradeApplicationService {
     @Value("${order.promotion.commit-async-enabled:false}")
     private boolean promotionCommitAsyncEnabled;
 
+    @Value("${order.reservation.ttl-minutes:15}")
+    private long reservationTtlMinutes;
+
     /**
      * 创建交易 Saga（半编排式）
      * 步骤：
@@ -321,7 +324,7 @@ public class TradeApplicationService {
                                     "quantity", reserveItem.getQuantity(),
                                     "tradeId", tradeId,
                                     "orderId", shopOrder.getOrderId(),
-                                    "expireAt", OffsetDateTime.now().plusMinutes(15).toString())))
+                                    "expireAt", OffsetDateTime.now().plusMinutes(reservationTtlMinutes).toString())))
                             .build();
                     outboxEventService.saveEvent(reserveDbEvent);
                 }
