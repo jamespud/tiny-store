@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Outbox 事件发布者（从 Outbox 表读取待发布事件，发送至 Kafka）
@@ -123,6 +124,8 @@ public class OutboxEventPublisher {
                 .build();
             String messageJson = objectMapper.writeValueAsString(message);
             return kafkaTemplate.send(kafkaTopic, event.getAggregateId(), messageJson)
+                // 超时保护：producer 缓冲满/网络慢时单个 send 卡住会让 allOf 批量标记永不执行
+                .orTimeout(10, TimeUnit.SECONDS)
                 .thenAccept(result -> {
                     publishedIds.add(event.getEventId());
                     log.info("Outbox event published to Kafka: eventId={}, topic={}, offset={}",
