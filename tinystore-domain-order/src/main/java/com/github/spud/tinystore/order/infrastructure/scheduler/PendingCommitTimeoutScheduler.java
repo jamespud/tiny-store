@@ -39,6 +39,10 @@ public class PendingCommitTimeoutScheduler {
     @Value("${order.promotion.commit-async-enabled:false}")
     private boolean promotionCommitAsyncEnabled;
 
+    @org.springframework.beans.factory.annotation.Value(
+            "${order.promotion.pending-timeout-batch-size:200}")
+    private int batchSize;
+
     public PendingCommitTimeoutScheduler(TradeRepository tradeRepository,
                                          TradeApplicationService tradeApplicationService) {
         this.tradeRepository = tradeRepository;
@@ -52,7 +56,14 @@ public class PendingCommitTimeoutScheduler {
         }
         List<String> staleTradeIds = tradeRepository.findStalePendingCommit(
                 LocalDateTime.now().minusSeconds(30));
+        int processed = 0;
         for (String tradeId : staleTradeIds) {
+            if (processed >= batchSize) {
+                log.warn("Pending timeout batch limit reached ({}), deferring {} remaining trades",
+                        batchSize, staleTradeIds.size() - processed);
+                break;
+            }
+            processed++;
             try {
                 // 双检查：回执 consumer / 支付回调可能已推进状态，跳过状态已变化的 trade
                 Trade trade = tradeRepository.findByTradeId(tradeId).orElse(null);

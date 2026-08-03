@@ -56,6 +56,7 @@ class PendingCommitTimeoutSchedulerTest {
         scheduler = new PendingCommitTimeoutScheduler(tradeRepository, tradeApplicationService);
         // 兜底调度器仅在异步 promotion commit 启用时生效
         ReflectionTestUtils.setField(scheduler, "promotionCommitAsyncEnabled", true);
+        ReflectionTestUtils.setField(scheduler, "batchSize", 200);
     }
 
     @Test
@@ -167,5 +168,29 @@ class PendingCommitTimeoutSchedulerTest {
             builder.closedAt(LocalDateTime.now());
         }
         return builder.build();
+    }
+
+    @Test
+    @DisplayName("auto-cancel respects the per-round batch limit (500 stale → 200 processed)")
+    void timeoutScheduler_shouldProcessAtMostBatchLimit() {
+        // Given: 500 条 stale trade 且全部仍为 PENDING
+        List<String> staleIds = new java.util.ArrayList<>();
+        for (int i = 0; i < 500; i++) {
+            String id = "trade-" + i;
+            staleIds.add(id);
+            // lenient: 仅前 200 条会被消费，其余 stub 未使用（Mockito 严格模式会误报）
+            org.mockito.Mockito.lenient()
+                    .when(tradeRepository.findByTradeId(id))
+                    .thenReturn(Optional.of(trade(id, "PENDING", PayStatus.UNPAID, false)));
+        }
+        when(tradeRepository.findStalePendingCommit(any(LocalDateTime.class))).thenReturn(staleIds);
+
+        // When
+        scheduler.autoCancelStalePendingTrades();
+
+        // Then: 恰好处理 batchSize（200）条，其余延后
+        verify(tradeApplicationService, org.mockito.Mockito.times(200))
+                .autoCancelTrade(org.mockito.ArgumentMatchers.startsWith("trade-"),
+                        eq("PROMOTION_COMMIT_TIMEOUT"), anyString());
     }
 }
