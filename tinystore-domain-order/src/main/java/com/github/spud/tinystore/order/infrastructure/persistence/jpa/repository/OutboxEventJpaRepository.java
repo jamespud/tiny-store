@@ -8,6 +8,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -28,8 +29,10 @@ public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventEntit
 
     /**
      * 批量标记已发布（替代逐条 SELECT+UPDATE，一次往返）。
+     * 自定义 @Modifying 方法不自动加事务——必须显式 @Transactional（否则 Hibernate 拒绝批量 UPDATE）。
      */
     @Modifying(clearAutomatically = true)
+    @Transactional
     @Query("UPDATE OutboxEventEntity e SET e.status = 'PUBLISHED', e.publishedAt = :publishedAt "
             + "WHERE e.eventId IN :eventIds")
     int markAsPublishedBatch(@Param("eventIds") List<String> eventIds,
