@@ -21,6 +21,8 @@ import java.util.List;
 public class Trade {
     
     private Long id;
+    @Builder.Default
+    private Long version = 0L;
     private String tradeId;
     private String buyerId;
     private String buyerNick;

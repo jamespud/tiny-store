@@ -89,7 +89,7 @@ class TradeJpaRepositoryIT extends AbstractOrderIT {
     @Test
     void testSaveAndRetrievePayStatusUpdate() {
         // Given
-        TradeEntity trade = entityManager.find(TradeEntity.class, 
+        TradeEntity trade = entityManager.find(TradeEntity.class,
             tradeJpaRepository.findByTradeId(testTradeId).get().getId());
 
         // When
@@ -99,5 +99,26 @@ class TradeJpaRepositoryIT extends AbstractOrderIT {
         // Then
         TradeEntity updated = tradeJpaRepository.findByTradeId(testTradeId).get();
         assertEquals("PAID", updated.getPayStatus());
+    }
+
+    @Test
+    void testDomainTradeSecondSaveSucceeds() {
+        // Given: @DataJpaTest 不含 domain repo——手动构造（依赖 jpaRepository + ObjectMapper）
+        com.github.spud.tinystore.order.infrastructure.persistence.repository.TradeRepositoryImpl repo =
+            new com.github.spud.tinystore.order.infrastructure.persistence.repository.TradeRepositoryImpl(
+                tradeJpaRepository, new com.fasterxml.jackson.databind.ObjectMapper());
+        com.github.spud.tinystore.order.domain.model.Trade domainTrade =
+            repo.findByTradeId(testTradeId).orElseThrow();
+
+        // When: 修改并保存两次（模拟 回执→支付回调 连续修改路径）
+        domainTrade.markPromotionCommitted();
+        repo.save(domainTrade);
+        domainTrade.markPromotionCommitFailed();
+        repo.save(domainTrade);
+
+        // Then: 第二次 save 无 ObjectOptimisticLockingFailureException
+        com.github.spud.tinystore.order.domain.model.Trade reloaded =
+            repo.findByTradeId(testTradeId).orElseThrow();
+        assertEquals("FAILED", reloaded.getPromotionCommitStatus());
     }
 }

@@ -250,7 +250,7 @@ class TradeControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"paymentIntentId\":\"pay-intent-123\",\"amountCents\":9900,\"traceId\":\"trace-123\"}"))
             .andExpect(status().isInternalServerError())
-            .andExpect(content().string(containsString("Payment callback failed")))
+            .andExpect(content().string(containsString("An unexpected error occurred")))
             .andExpect(content().string(not(containsString("missing reservation refs for order-123"))));
     }
 

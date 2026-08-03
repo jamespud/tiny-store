@@ -139,14 +139,17 @@ class MallE2EIT {
         payHeaders.add("Content-Type", "application/json");
         payHeaders.add("Idempotency-Key", "idem-pay-" + tradeId);
 
-        ResponseEntity<Map> payResponse = restTemplate.exchange(
-            gatewayBaseUrl + "/api/order/trades/" + tradeId + "/pay/callback",
-            HttpMethod.POST,
-            new HttpEntity<>(payCallbackRequest, payHeaders),
-            Map.class
-        );
-
-        assertThat(payResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        // Async promotion commit gate: 下单后 trade 为 PENDING（不可支付），支付回调会 409
+        // (TRADE_NOT_READY_FOR_PAYMENT, 可重试)；轮询直至 COMMITTED 后回调 200。
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            ResponseEntity<Map> payResponse = restTemplate.exchange(
+                gatewayBaseUrl + "/api/order/trades/" + tradeId + "/pay/callback",
+                HttpMethod.POST,
+                new HttpEntity<>(payCallbackRequest, payHeaders),
+                Map.class
+            );
+            assertThat(payResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        });
 
         // Step 4: Verify trade paid state (PAID, shopOrders PENDING_SHIP)
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {

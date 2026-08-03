@@ -51,6 +51,7 @@ public class TradeRepositoryImpl implements TradeRepository {
     private TradeEntity toEntity(Trade trade) {
         return TradeEntity.builder()
             .id(trade.getId())
+            .version(trade.getVersion())
             .tradeId(trade.getTradeId())
             .buyerId(trade.getBuyerId())
             .buyerNick(trade.getBuyerNick())
@@ -73,6 +74,7 @@ public class TradeRepositoryImpl implements TradeRepository {
     private Trade toDomain(TradeEntity entity) {
         return Trade.builder()
             .id(entity.getId())
+            .version(entity.getVersion())
             .tradeId(entity.getTradeId())
             .buyerId(entity.getBuyerId())
             .buyerNick(entity.getBuyerNick())
