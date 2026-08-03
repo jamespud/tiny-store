@@ -19,8 +19,21 @@ public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventEntit
 
     Optional<OutboxEventEntity> findByEventId(String eventId);
 
-    @Query("SELECT e FROM OutboxEventEntity e WHERE e.status = :status ORDER BY e.createdAt ASC LIMIT :limit")
+    /**
+     * 分片抢占待发布事件：FOR UPDATE SKIP LOCKED 保证多实例发布会各自抢占不同批次。
+     */
+    @Query(value = "SELECT * FROM tinystore_order.order_outbox WHERE status = :status "
+            + "ORDER BY created_at ASC LIMIT :limit FOR UPDATE SKIP LOCKED", nativeQuery = true)
     List<OutboxEventEntity> findPendingEvents(@Param("status") String status, @Param("limit") int limit);
+
+    /**
+     * 批量标记已发布（替代逐条 SELECT+UPDATE，一次往返）。
+     */
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE OutboxEventEntity e SET e.status = 'PUBLISHED', e.publishedAt = :publishedAt "
+            + "WHERE e.eventId IN :eventIds")
+    int markAsPublishedBatch(@Param("eventIds") List<String> eventIds,
+                             @Param("publishedAt") LocalDateTime publishedAt);
 
     List<OutboxEventEntity> findByAggregateIdOrderByCreatedAtAsc(String aggregateId);
 

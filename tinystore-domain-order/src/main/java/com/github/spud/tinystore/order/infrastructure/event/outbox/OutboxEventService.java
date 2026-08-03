@@ -102,6 +102,19 @@ public class OutboxEventService {
     }
 
     /**
+     * 批量标记已发布（一次 UPDATE 替代逐条 SELECT+UPDATE，消除发布瓶颈）。
+     *
+     * @param eventIds 发布成功的 eventId 列表
+     */
+    public void markAsPublishedBatch(List<String> eventIds) {
+        if (eventIds == null || eventIds.isEmpty()) {
+            return;
+        }
+        int updated = outboxEventJpaRepository.markAsPublishedBatch(eventIds, LocalDateTime.now());
+        log.info("Outbox events marked as published (batch): count={}", updated);
+    }
+
+    /**
      * 标记事件发布失败并增加重试计数
      *
      * @param eventId 事件 ID

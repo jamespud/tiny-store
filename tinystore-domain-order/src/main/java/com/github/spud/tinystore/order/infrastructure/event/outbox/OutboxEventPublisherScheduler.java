@@ -43,7 +43,7 @@ public class OutboxEventPublisherScheduler {
     @Value("${order.outbox.poll-interval:5000}")
     private long pollInterval;
 
-    @Value("${order.outbox.batch-size:100}")
+    @Value("${order.outbox.batch-size:1000}")
     private int batchSize;
 
     /**
