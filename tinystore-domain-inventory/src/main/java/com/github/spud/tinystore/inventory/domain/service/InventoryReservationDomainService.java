@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -252,6 +253,17 @@ public class InventoryReservationDomainService {
                 // Deterministic conflict — do NOT change state
                 log.warn("Confirm conflict: reservationId={} is in terminal state {}", reservationId, currentStatus);
                 conflictIds.add(reservationId);
+            } else if (currentStatus == InventoryReservationStatus.PRE_DEDUCTED) {
+                // 逻辑过期检查：expiry scheduler 有 5s 调度窗口，confirm 可能抢先成功——
+                // 直接拒绝已过期（expireAt < now）但状态未流转的 reservation
+                Optional<java.time.LocalDateTime> expireAtOpt =
+                        reservationRepository.findExpireAtByReservationId(reservationId);
+                if (expireAtOpt.isPresent()
+                        && expireAtOpt.get().isBefore(LocalDateTime.now())) {
+                    log.warn("Confirm conflict: reservationId={} is logically expired (expireAt={})",
+                            reservationId, expireAtOpt.get());
+                    conflictIds.add(reservationId);
+                }
             }
             // CONFIRMED and PRE_DEDUCTED items proceed to pass 2
         }
