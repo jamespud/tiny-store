@@ -101,12 +101,6 @@ spring:
             token-uri: http://localhost:9000/oauth2/token
             jwk-set-uri: http://localhost:9000/.well-known/jwks.json
 
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus
-
 # dev defaults; use per-profile overrides below
 tinystore:
   internal:
