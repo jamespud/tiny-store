@@ -110,7 +110,8 @@ public class InventoryRedisManager {
             end
             
             redis.call('set', deducted_key, deducted + amount)
-            local timestamp = redis.call('time')[1] * 1000 + redis.call('time')[2] / 1000
+            -- 毫秒取整（浮点长尾会让 reservation_id 超 varchar(64)）
+            local timestamp = redis.call('time')[1] * 1000 + math.floor(redis.call('time')[2] / 1000)
             local member = biz_id .. '_' .. timestamp .. '_' .. amount
             redis.call('zadd', uncommit_zset_key, timestamp, member)
             

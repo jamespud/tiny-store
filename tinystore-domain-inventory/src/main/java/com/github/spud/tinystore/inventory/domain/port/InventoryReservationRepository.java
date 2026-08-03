@@ -25,6 +25,13 @@ public interface InventoryReservationRepository {
     Optional<String> findStatusByReservationId(String reservationId);
 
     /**
+     * Find the expiry time of a reservation (read-only, no lock).
+     * Used by confirm to reject logically-expired reservations before the
+     * expiry scheduler flips their status (closes the scheduler-window race).
+     */
+    Optional<java.time.LocalDateTime> findExpireAtByReservationId(String reservationId);
+
+    /**
      * Find all reservations created by the same reserve operation.
      * Used to replay reservation refs on idempotent reserve retries.
      */
