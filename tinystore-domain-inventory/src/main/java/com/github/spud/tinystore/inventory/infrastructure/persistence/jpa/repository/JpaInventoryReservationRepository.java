@@ -29,7 +29,7 @@ public interface JpaInventoryReservationRepository extends JpaRepository<Invento
 	Optional<Integer> findQuantityByReservationId(@Param("reservationId") String reservationId);
 
 	@Query("select r.expireAt from InventoryReservationEntity r where r.reservationId = :reservationId")
-	Optional<java.time.LocalDateTime> findExpireAtByReservationId(@Param("reservationId") String reservationId);
+	Optional<java.time.OffsetDateTime> findExpireAtByReservationId(@Param("reservationId") String reservationId);
 
 	@Query("select r.reservationId from InventoryReservationEntity r where r.status = 'PRE_DEDUCTED' and r.expireAt < :now")
 	List<String> findExpiredCandidateIds(@Param("now") OffsetDateTime now);

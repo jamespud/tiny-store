@@ -29,7 +29,7 @@ public interface InventoryReservationRepository {
      * Used by confirm to reject logically-expired reservations before the
      * expiry scheduler flips their status (closes the scheduler-window race).
      */
-    Optional<java.time.LocalDateTime> findExpireAtByReservationId(String reservationId);
+    Optional<java.time.OffsetDateTime> findExpireAtByReservationId(String reservationId);
 
     /**
      * Find all reservations created by the same reserve operation.

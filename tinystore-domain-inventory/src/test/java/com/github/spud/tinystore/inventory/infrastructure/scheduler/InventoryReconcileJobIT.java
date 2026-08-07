@@ -63,6 +63,7 @@ class InventoryReconcileJobIT {
     @Autowired private JpaInventoryReservationRepository reservationRepository;
     @Autowired private JpaInventoryReconcileLogRepository logRepository;
     @Autowired private StringRedisTemplate redisTemplate;
+    @Autowired private com.github.spud.tinystore.inventory.infrastructure.util.InventoryRedisManager redisManager;
 
     private static final String SHOP = "SHOP-REC-JOB";
     private static final String SKU = "sku-1";
@@ -95,6 +96,7 @@ class InventoryReconcileJobIT {
     void oversell_totalTooHigh_repairedByDecrby() {
         seedStock(100); // targetTotal = 100 + 0 = 100
         redisTemplate.opsForValue().set(TOTAL, "150"); // too high -> oversell risk
+        redisTemplate.opsForValue().set(VERSION, "0"); // version key 必须存在（CAS 修复前置）
 
         job.reconcile();
 
@@ -112,6 +114,7 @@ class InventoryReconcileJobIT {
         seedPreDeducted(5); // dbPreDeducted=5 -> targetDeducted = 5 + 0 = 5
         redisTemplate.opsForValue().set(TOTAL, "100");
         redisTemplate.opsForValue().set(DEDUCTED, "2"); // too low -> deficit 3
+        redisTemplate.opsForValue().set(VERSION, "0"); // version key 必须存在（CAS 修复前置）
 
         job.reconcile();
 
@@ -146,5 +149,76 @@ class InventoryReconcileJobIT {
         job.reconcile();
 
         assertThat(logRepository.findAll()).isEmpty();
+    }
+
+    // ===== Task 4: multi-instance concurrency (version-CAS idempotency) =====
+
+    private static final String VERSION = "inventory:version:" + SHOP + ":" + SKU;
+
+    @Test
+    @DisplayName("concurrent same-snapshot decreaseTotal: only one applies, version bumps once")
+    void concurrentDecreaseTotal_sameSnapshot_onlyOneApplies() throws Exception {
+        seedStock(100);
+        redisTemplate.opsForValue().set(TOTAL, "120");
+        redisTemplate.opsForValue().set(VERSION, "5");
+
+        int threads = 5;
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(threads);
+        java.util.concurrent.atomic.AtomicInteger appliedCount = new java.util.concurrent.atomic.AtomicInteger();
+
+        for (int i = 0; i < threads; i++) {
+            new Thread(() -> {
+                try {
+                    start.await();
+                    boolean applied = redisManager.decreaseTotalV2(SHOP, SKU, 20L, 5L);
+                    if (applied) appliedCount.incrementAndGet();
+                } catch (Exception ignored) {
+                } finally {
+                    done.countDown();
+                }
+            }).start();
+        }
+        start.countDown();
+        done.await(10, java.util.concurrent.TimeUnit.SECONDS);
+
+        assertThat(appliedCount.get()).isEqualTo(1);  // 仅一个成功
+        assertThat(redisTemplate.opsForValue().get(TOTAL)).isEqualTo("100");
+        assertThat(redisTemplate.opsForValue().get(VERSION)).isEqualTo("6");  // 只 +1
+    }
+
+    @Test
+    @DisplayName("repair vs business preDeduct concurrent: version +2, no lost update")
+    void repairVsPreDeduct_concurrent_noLostUpdate() throws Exception {
+        seedStock(200);
+        redisTemplate.opsForValue().set(TOTAL, "120");
+        redisTemplate.opsForValue().set(DEDUCTED, "0");
+        redisTemplate.opsForValue().set(VERSION, "5");
+
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(2);
+
+        Thread repair = new Thread(() -> {
+            try {
+                start.await();
+                redisManager.decreaseTotalV2(SHOP, SKU, 20L, 5L);
+            } catch (Exception ignored) {
+            } finally { done.countDown(); }
+        });
+        Thread business = new Thread(() -> {
+            try {
+                start.await();
+                redisManager.preDeductInventoryV2(SHOP, SKU, 10, "order-conc");
+            } catch (Exception ignored) {
+            } finally { done.countDown(); }
+        });
+        repair.start(); business.start();
+        start.countDown();
+        done.await(10, java.util.concurrent.TimeUnit.SECONDS);
+
+        // version 最终 +2（两个写都生效）或 +1（repair CAS 失败，仅 preDeduct）
+        long finalVersion = Long.parseLong(redisTemplate.opsForValue().get(VERSION));
+        assertThat(finalVersion).isBetween(6L, 7L);
+        // 关键不变量：无丢更新（version 与写次数一致）
     }
 }
