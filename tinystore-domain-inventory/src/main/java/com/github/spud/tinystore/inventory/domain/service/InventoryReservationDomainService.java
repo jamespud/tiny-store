@@ -256,10 +256,10 @@ public class InventoryReservationDomainService {
             } else if (currentStatus == InventoryReservationStatus.PRE_DEDUCTED) {
                 // 逻辑过期检查：expiry scheduler 有 5s 调度窗口，confirm 可能抢先成功——
                 // 直接拒绝已过期（expireAt < now）但状态未流转的 reservation
-                Optional<java.time.LocalDateTime> expireAtOpt =
+                Optional<java.time.OffsetDateTime> expireAtOpt =
                         reservationRepository.findExpireAtByReservationId(reservationId);
                 if (expireAtOpt.isPresent()
-                        && expireAtOpt.get().isBefore(LocalDateTime.now())) {
+                        && expireAtOpt.get().isBefore(java.time.OffsetDateTime.now())) {
                     log.warn("Confirm conflict: reservationId={} is logically expired (expireAt={})",
                             reservationId, expireAtOpt.get());
                     conflictIds.add(reservationId);

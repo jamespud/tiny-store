@@ -43,7 +43,7 @@ public class JpaInventoryReservationRepositoryAdapter implements InventoryReserv
     }
 
     @Override
-    public Optional<java.time.LocalDateTime> findExpireAtByReservationId(String reservationId) {
+    public Optional<java.time.OffsetDateTime> findExpireAtByReservationId(String reservationId) {
         return jpaRepo.findExpireAtByReservationId(reservationId);
     }
 
