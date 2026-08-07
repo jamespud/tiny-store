@@ -67,6 +67,8 @@ public class RedisInventoryDeductGateway implements InventoryDeductGateway {
             }
             Boolean set = redisTemplate.opsForValue().setIfAbsent(totalKey, String.valueOf(dbTotal));
             if (Boolean.TRUE.equals(set)) {
+                String versionKey = redisManager.getVersionKeyV2(shopId, skuId);
+                redisTemplate.opsForValue().setIfAbsent(versionKey, "0");
                 log.info("Initialized Redis total key on adjust: {}={}", totalKey, dbTotal);
                 return true;
             }
@@ -115,6 +117,9 @@ public class RedisInventoryDeductGateway implements InventoryDeductGateway {
         // SETNX: 仅在 key 不存在时设置（避免并发覆盖）
         Boolean set = redisTemplate.opsForValue().setIfAbsent(totalKey, String.valueOf(totalQty));
         if (Boolean.TRUE.equals(set)) {
+            // version 与 total 同生（SETNX 0，不覆盖已存在的 version）
+            String versionKey = redisManager.getVersionKeyV2(shopId, skuId);
+            redisTemplate.opsForValue().setIfAbsent(versionKey, "0");
             log.info("Initialized Redis total key: {}={}", totalKey, totalQty);
         }
     }

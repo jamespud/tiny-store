@@ -45,6 +45,7 @@ public class InventoryRedisManager {
     private static final String KEY_V2_TOTAL = "inventory:total:%s:%s";       // shopId:skuId
     private static final String KEY_V2_DEDUCTED = "inventory:deducted:%s:%s";
     private static final String KEY_V2_UNCOMMIT = "inventory:uncommit:%s:%s";
+    private static final String KEY_V2_VERSION = "inventory:version:%s:%s";
 
     /**
      * 默认超时时间：30分钟（毫秒）
@@ -245,6 +246,18 @@ public class InventoryRedisManager {
             end
             
             return {deducted, uncommit_total, diff}
+            """;
+
+    /**
+     * 脚本6：V2 addTotal（INCRBY total + INCR version 原子，保持 version 不变量）
+     */
+    private static final String ADD_TOTAL_V2_SCRIPT = """
+            local total_key = KEYS[1]
+            local version_key = KEYS[2]
+            local delta = tonumber(ARGV[1]) or 0
+            redis.call('incrby', total_key, delta)
+            redis.call('incr', version_key)
+            return 1
             """;
 
     // ========================== 初始化（序列化配置） ==========================
@@ -577,8 +590,11 @@ public class InventoryRedisManager {
         Assert.hasText(shopId, "shopId不能为空");
         Assert.hasText(skuId, "skuId不能为空");
         String totalKey = String.format(KEY_V2_TOTAL, shopId, skuId);
+        String versionKey = String.format(KEY_V2_VERSION, shopId, skuId);
+        List<String> keys = Arrays.asList(totalKey, versionKey);
         try {
-            redisTemplate.opsForValue().increment(totalKey, delta);
+            DefaultRedisScript<Long> script = new DefaultRedisScript<>(ADD_TOTAL_V2_SCRIPT, Long.class);
+            redisTemplate.execute(script, keys, String.valueOf(delta));
             log.info("V2 addTotal: key={}, delta={}", totalKey, delta);
             return true;
         } catch (Exception e) {
@@ -592,6 +608,13 @@ public class InventoryRedisManager {
      */
     public String getDeductedKeyV2(String shopId, String skuId) {
         return String.format(KEY_V2_DEDUCTED, shopId, skuId);
+    }
+
+    /**
+     * V2：获取 version key 名（供对账读取 / CAS 修复使用）
+     */
+    public String getVersionKeyV2(String shopId, String skuId) {
+        return String.format(KEY_V2_VERSION, shopId, skuId);
     }
 
     /**
