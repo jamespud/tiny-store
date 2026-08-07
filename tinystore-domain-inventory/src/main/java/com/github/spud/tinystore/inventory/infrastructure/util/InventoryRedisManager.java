@@ -267,6 +267,40 @@ public class InventoryRedisManager {
             return 1
             """;
 
+    /**
+     * 脚本7：V2 decreaseTotal CAS（version 匹配才 DECRBY + INCR version；不匹配 no-op）
+     */
+    private static final String DECREASE_TOTAL_V2_CAS_SCRIPT = """
+            local total_key = KEYS[1]
+            local version_key = KEYS[2]
+            local expect_version = tonumber(ARGV[1])
+            local amount = tonumber(ARGV[2]) or 0
+            local current_version = tonumber(redis.call('get', version_key)) or 0
+            if current_version ~= expect_version then
+                return 0
+            end
+            redis.call('incrby', total_key, -amount)
+            redis.call('incr', version_key)
+            return 1
+            """;
+
+    /**
+     * 脚本8：V2 increaseDeducted CAS（version 匹配才 INCRBY + INCR version；不匹配 no-op）
+     */
+    private static final String INCREASE_DEDUCTED_V2_CAS_SCRIPT = """
+            local deducted_key = KEYS[1]
+            local version_key = KEYS[2]
+            local expect_version = tonumber(ARGV[1])
+            local amount = tonumber(ARGV[2]) or 0
+            local current_version = tonumber(redis.call('get', version_key)) or 0
+            if current_version ~= expect_version then
+                return 0
+            end
+            redis.call('incrby', deducted_key, amount)
+            redis.call('incr', version_key)
+            return 1
+            """;
+
     // ========================== 初始化（序列化配置） ==========================
     /**
      * 初始化RedisTemplate序列化器（避免key/value乱码）
@@ -628,37 +662,49 @@ public class InventoryRedisManager {
     }
 
     /**
-     * V2：DECRBY total by amount (reconcile repair, additive). amount must be > 0.
+     * V2：DECRBY total by amount with version CAS（reconcile repair）。
+     * version 匹配才应用 + bump；不匹配 no-op 返回 false（幂等，多实例安全）。
      */
-    public boolean decreaseTotalV2(String shopId, String skuId, long amount) {
+    public boolean decreaseTotalV2(String shopId, String skuId, long amount, long expectVersion) {
         Assert.hasText(shopId, "shopId不能为空");
         Assert.hasText(skuId, "skuId不能为空");
         Assert.isTrue(amount > 0, "amount必须大于0");
         String totalKey = String.format(KEY_V2_TOTAL, shopId, skuId);
+        String versionKey = String.format(KEY_V2_VERSION, shopId, skuId);
+        List<String> keys = Arrays.asList(totalKey, versionKey);
         try {
-            redisTemplate.opsForValue().increment(totalKey, -amount);
-            log.info("V2 decreaseTotal: key={}, amount={}", totalKey, amount);
-            return true;
+            DefaultRedisScript<Long> script = new DefaultRedisScript<>(DECREASE_TOTAL_V2_CAS_SCRIPT, Long.class);
+            Long result = redisTemplate.execute(script, keys, String.valueOf(expectVersion), String.valueOf(amount));
+            boolean applied = result != null && result == 1L;
+            log.info("V2 decreaseTotal CAS: key={}, amount={}, expectVersion={}, applied={}",
+                    totalKey, amount, expectVersion, applied);
+            return applied;
         } catch (Exception e) {
-            log.error("V2 decreaseTotal failed: key={}, amount={}", totalKey, amount, e);
+            log.error("V2 decreaseTotal CAS failed: key={}, amount={}", totalKey, amount, e);
             return false;
         }
     }
 
     /**
-     * V2：INCRBY deducted by amount (reconcile repair, additive). amount must be > 0.
+     * V2：INCRBY deducted by amount with version CAS（reconcile repair）。
+     * version 匹配才应用 + bump；不匹配 no-op 返回 false（幂等，多实例安全）。
      */
-    public boolean increaseDeductedV2(String shopId, String skuId, long amount) {
+    public boolean increaseDeductedV2(String shopId, String skuId, long amount, long expectVersion) {
         Assert.hasText(shopId, "shopId不能为空");
         Assert.hasText(skuId, "skuId不能为空");
         Assert.isTrue(amount > 0, "amount必须大于0");
         String deductedKey = String.format(KEY_V2_DEDUCTED, shopId, skuId);
+        String versionKey = String.format(KEY_V2_VERSION, shopId, skuId);
+        List<String> keys = Arrays.asList(deductedKey, versionKey);
         try {
-            redisTemplate.opsForValue().increment(deductedKey, amount);
-            log.info("V2 increaseDeducted: key={}, amount={}", deductedKey, amount);
-            return true;
+            DefaultRedisScript<Long> script = new DefaultRedisScript<>(INCREASE_DEDUCTED_V2_CAS_SCRIPT, Long.class);
+            Long result = redisTemplate.execute(script, keys, String.valueOf(expectVersion), String.valueOf(amount));
+            boolean applied = result != null && result == 1L;
+            log.info("V2 increaseDeducted CAS: key={}, amount={}, expectVersion={}, applied={}",
+                    deductedKey, amount, expectVersion, applied);
+            return applied;
         } catch (Exception e) {
-            log.error("V2 increaseDeducted failed: key={}, amount={}", deductedKey, amount, e);
+            log.error("V2 increaseDeducted CAS failed: key={}, amount={}", deductedKey, amount, e);
             return false;
         }
     }

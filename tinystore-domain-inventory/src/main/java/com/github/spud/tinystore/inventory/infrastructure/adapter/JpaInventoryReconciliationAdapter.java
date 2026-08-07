@@ -38,6 +38,7 @@ public class JpaInventoryReconciliationAdapter implements InventoryReconciliatio
 
         Long redisTotal = readLong(redisManager.getTotalKeyV2(shopId, skuId));
         Long redisDeducted = readLong(redisManager.getDeductedKeyV2(shopId, skuId));
+        Long redisVersion = readLong(redisManager.getVersionKeyV2(shopId, skuId));
 
         return ReconciliationSnapshot.builder()
                 .shopId(shopId).skuId(skuId)
@@ -46,6 +47,7 @@ public class JpaInventoryReconciliationAdapter implements InventoryReconciliatio
                 .dbPreDeductedQuantity(dbPreDeducted)
                 .redisTotal(redisTotal)
                 .redisDeducted(redisDeducted)
+                .redisVersion(redisVersion)
                 .build();
     }
 

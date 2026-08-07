@@ -172,4 +172,69 @@ class InventoryRedisManagerTest {
         assertThat(cleaned).isEqualTo(0);
         assertThat(get("inventory:version:shop:sku")).isEqualTo("5");
     }
+
+    // ===== Task 3: version-CAS repair (decreaseTotalV2 / increaseDeductedV2) =====
+
+    @Test
+    @DisplayName("decreaseTotalV2 version matches: apply DECRBY + INCR version, return true")
+    void decreaseTotalV2_versionMatches_shouldApplyAndBump() {
+        set("inventory:total:shop:sku", "120");
+        set("inventory:version:shop:sku", "5");
+
+        boolean applied = redisManager.decreaseTotalV2("shop", "sku", 20L, 5L);
+
+        assertThat(applied).isTrue();
+        assertThat(get("inventory:total:shop:sku")).isEqualTo("100");
+        assertThat(get("inventory:version:shop:sku")).isEqualTo("6");
+    }
+
+    @Test
+    @DisplayName("decreaseTotalV2 version mismatch: no-op, return false")
+    void decreaseTotalV2_versionMismatch_shouldNoop() {
+        set("inventory:total:shop:sku", "120");
+        set("inventory:version:shop:sku", "6");  // 已被业务 bump
+
+        boolean applied = redisManager.decreaseTotalV2("shop", "sku", 20L, 5L);  // 旧 snapshot version=5
+
+        assertThat(applied).isFalse();
+        assertThat(get("inventory:total:shop:sku")).isEqualTo("120");
+        assertThat(get("inventory:version:shop:sku")).isEqualTo("6");
+    }
+
+    @Test
+    @DisplayName("decreaseTotalV2 version key missing: no-op, return false")
+    void decreaseTotalV2_versionKeyMissing_shouldNoop() {
+        set("inventory:total:shop:sku", "120");
+        // version key 不存在
+
+        boolean applied = redisManager.decreaseTotalV2("shop", "sku", 20L, 5L);
+
+        assertThat(applied).isFalse();
+        assertThat(get("inventory:total:shop:sku")).isEqualTo("120");
+    }
+
+    @Test
+    @DisplayName("increaseDeductedV2 version matches: apply INCRBY + INCR version, return true")
+    void increaseDeductedV2_versionMatches_shouldApplyAndBump() {
+        set("inventory:deducted:shop:sku", "0");
+        set("inventory:version:shop:sku", "5");
+
+        boolean applied = redisManager.increaseDeductedV2("shop", "sku", 10L, 5L);
+
+        assertThat(applied).isTrue();
+        assertThat(get("inventory:deducted:shop:sku")).isEqualTo("10");
+        assertThat(get("inventory:version:shop:sku")).isEqualTo("6");
+    }
+
+    @Test
+    @DisplayName("increaseDeductedV2 version mismatch: no-op, return false")
+    void increaseDeductedV2_versionMismatch_shouldNoop() {
+        set("inventory:deducted:shop:sku", "0");
+        set("inventory:version:shop:sku", "7");
+
+        boolean applied = redisManager.increaseDeductedV2("shop", "sku", 10L, 5L);
+
+        assertThat(applied).isFalse();
+        assertThat(get("inventory:deducted:shop:sku")).isEqualTo("0");
+    }
 }
