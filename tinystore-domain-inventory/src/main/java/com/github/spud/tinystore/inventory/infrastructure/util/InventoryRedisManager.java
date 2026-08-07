@@ -96,26 +96,28 @@ public class InventoryRedisManager {
             local total_key = KEYS[1]
             local deducted_key = KEYS[2]
             local uncommit_zset_key = KEYS[3]
-            
+            local version_key = KEYS[4]
+
             local amount = tonumber(ARGV[1]) or 0
             local biz_id = ARGV[2] or ""
             local total = tonumber(redis.call('get', total_key)) or 0
             local deducted = tonumber(redis.call('get', deducted_key)) or 0
-            
+
             if biz_id == "" then
                 return -2
             end
-            
+
             if (deducted + amount) > total then
                 return -1
             end
-            
+
             redis.call('set', deducted_key, deducted + amount)
             -- 毫秒取整（浮点长尾会让 reservation_id 超 varchar(64)）
             local timestamp = redis.call('time')[1] * 1000 + math.floor(redis.call('time')[2] / 1000)
             local member = biz_id .. '_' .. timestamp .. '_' .. amount
             redis.call('zadd', uncommit_zset_key, timestamp, member)
-            
+            redis.call('incr', version_key)
+
             return member
             """;
 
@@ -125,17 +127,19 @@ public class InventoryRedisManager {
     private static final String ROLLBACK_PRE_DEDUCT_SCRIPT = """
             local deducted_key = KEYS[1]
             local uncommit_zset_key = KEYS[2]
-            
+            local version_key = KEYS[3]
+            local conflict_hash_key = KEYS[4]
+
             local member = ARGV[1] or ""
             if member == "" then
                 return -1
             end
-            
+
             local exists = redis.call('zscore', uncommit_zset_key, member)
             if not exists then
                 return 0
             end
-            
+
             local parts = {}
             for part in string.gmatch(member, '[^_]+') do
                 table.insert(parts, part)
@@ -147,15 +151,16 @@ public class InventoryRedisManager {
             if amount <= 0 then
                 return 0
             end
-            
+
             local current_deducted = tonumber(redis.call('get', deducted_key)) or 0
             if current_deducted < amount then
-                redis.call('hincrby', KEYS[3], KEYS[1] .. '_' .. member, 1)
+                redis.call('hincrby', conflict_hash_key, deducted_key .. '_' .. member, 1)
                 return 0
             end
             redis.call('set', deducted_key, current_deducted - amount)
             redis.call('zrem', uncommit_zset_key, member)
-            
+            redis.call('incr', version_key)
+
             return 1
             """;
 
@@ -187,14 +192,15 @@ public class InventoryRedisManager {
     private static final String CLEAN_TIMEOUT_UNCOMMIT_SCRIPT = """
             local deducted_key = KEYS[1]
             local uncommit_zset_key = KEYS[2]
+            local version_key = KEYS[3]
             local timeout = tonumber(ARGV[1]) or 1800000
-            
+
             local current_ts = redis.call('time')[1] * 1000 + redis.call('time')[2] / 1000
             local expire_ts = current_ts - timeout
-            
+
             local timeout_members = redis.call('zrangebyscore', uncommit_zset_key, 0, expire_ts)
             local clean_count = #timeout_members
-            
+
             if clean_count > 0 then
                 local total_rollback = 0
                 for _, member in ipairs(timeout_members) do
@@ -212,8 +218,9 @@ public class InventoryRedisManager {
                     redis.call('set', deducted_key, current_deducted - total_rollback)
                 end
                 redis.call('zremrangebyscore', uncommit_zset_key, 0, expire_ts)
+                redis.call('incr', version_key)
             end
-            
+
             return clean_count
             """;
 
@@ -498,7 +505,8 @@ public class InventoryRedisManager {
         String totalKey = String.format(KEY_V2_TOTAL, shopId, skuId);
         String deductedKey = String.format(KEY_V2_DEDUCTED, shopId, skuId);
         String uncommitKey = String.format(KEY_V2_UNCOMMIT, shopId, skuId);
-        List<String> keys = Arrays.asList(totalKey, deductedKey, uncommitKey);
+        String versionKey = String.format(KEY_V2_VERSION, shopId, skuId);
+        List<String> keys = Arrays.asList(totalKey, deductedKey, uncommitKey, versionKey);
         List<String> args = Arrays.asList(String.valueOf(amount), bizId);
 
         DefaultRedisScript<Object> script = new DefaultRedisScript<>(PRE_DEDUCT_SCRIPT, Object.class);
@@ -534,8 +542,9 @@ public class InventoryRedisManager {
 
         String deductedKey = String.format(KEY_V2_DEDUCTED, shopId, skuId);
         String uncommitKey = String.format(KEY_V2_UNCOMMIT, shopId, skuId);
+        String versionKey = String.format(KEY_V2_VERSION, shopId, skuId);
         String rollbackErrorKey = KEY_PREFIX_ROLLBACK_ERROR;
-        List<String> keys = Arrays.asList(deductedKey, uncommitKey, rollbackErrorKey);
+        List<String> keys = Arrays.asList(deductedKey, uncommitKey, versionKey, rollbackErrorKey);
         List<String> args = Arrays.asList(preDeductMember);
 
         DefaultRedisScript<Long> script = new DefaultRedisScript<>(ROLLBACK_PRE_DEDUCT_SCRIPT, Long.class);
@@ -565,7 +574,8 @@ public class InventoryRedisManager {
 
         String deductedKey = String.format(KEY_V2_DEDUCTED, shopId, skuId);
         String uncommitKey = String.format(KEY_V2_UNCOMMIT, shopId, skuId);
-        List<String> keys = Arrays.asList(deductedKey, uncommitKey);
+        String versionKey = String.format(KEY_V2_VERSION, shopId, skuId);
+        List<String> keys = Arrays.asList(deductedKey, uncommitKey, versionKey);
         List<String> args = Arrays.asList(String.valueOf(timeout));
 
         DefaultRedisScript<Long> script = new DefaultRedisScript<>(CLEAN_TIMEOUT_UNCOMMIT_SCRIPT, Long.class);
