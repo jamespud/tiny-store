@@ -82,17 +82,27 @@ public class InventoryReconcileJob {
         }
 
         List<String> repaired = new ArrayList<>();
-        if (snap.isTotalTooHigh() && snap.getRedisTotal() != null) {
-            deductGateway.decreaseTotal(shopId, skuId, snap.getRedisTotal() - snap.getTargetTotal());
-            repaired.add("TOTAL");
+        List<String> skipped = new ArrayList<>();
+        if (snap.isTotalTooHigh() && snap.getRedisTotal() != null && snap.getRedisVersion() != null) {
+            boolean applied = deductGateway.decreaseTotal(shopId, skuId,
+                    snap.getRedisTotal() - snap.getTargetTotal(), snap.getRedisVersion());
+            if (applied) repaired.add("TOTAL");
+            else skipped.add("TOTAL");
         }
-        if (snap.isDeductedTooLow() && snap.getRedisDeducted() != null) {
-            deductGateway.increaseDeducted(shopId, skuId, snap.getTargetDeducted() - snap.getRedisDeducted());
-            repaired.add("DEDUCTED");
+        if (snap.isDeductedTooLow() && snap.getRedisDeducted() != null && snap.getRedisVersion() != null) {
+            boolean applied = deductGateway.increaseDeducted(shopId, skuId,
+                    snap.getTargetDeducted() - snap.getRedisDeducted(), snap.getRedisVersion());
+            if (applied) repaired.add("DEDUCTED");
+            else skipped.add("DEDUCTED");
         }
         if (!repaired.isEmpty()) {
             metricsPort.reconcileRepaired();
             saveLog(shopId, skuId, snap, "REPAIRED_OVERSELL", String.join(",", repaired));
+            return true;
+        }
+        if (!skipped.isEmpty()) {
+            // CAS 跳过：不计修复 metric，下轮重新快照评估
+            saveLog(shopId, skuId, snap, "CAS_SKIPPED", String.join(",", skipped));
             return true;
         }
 

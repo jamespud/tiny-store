@@ -26,6 +26,7 @@ public class ReconciliationSnapshot {
     private long dbPreDeductedQuantity;
     private Long redisTotal;    // null if key absent
     private Long redisDeducted; // null if key absent
+    private Long redisVersion;  // null if version key absent (skip CAS repair)
 
     /** Authoritative Redis total target: DB remaining + confirmed (confirm does not decrement Redis). */
     public long getTargetTotal() {

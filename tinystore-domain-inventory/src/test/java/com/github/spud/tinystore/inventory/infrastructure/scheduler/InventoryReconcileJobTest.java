@@ -15,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -32,6 +33,7 @@ class InventoryReconcileJobTest {
 
     private static final String SHOP = "shop-1";
     private static final String SKU = "sku-1";
+    private static final long VER = 5L;  // 默认 snapshot version
 
     private void seedOneSku() {
         when(stockRepository.findAll()).thenReturn(List.of(
@@ -40,10 +42,15 @@ class InventoryReconcileJobTest {
 
     private ReconciliationSnapshot snap(long dbTotal, long dbConfirmed, long dbPreDeducted,
                                         Long redisTotal, Long redisDeducted) {
+        return snap(dbTotal, dbConfirmed, dbPreDeducted, redisTotal, redisDeducted, VER);
+    }
+
+    private ReconciliationSnapshot snap(long dbTotal, long dbConfirmed, long dbPreDeducted,
+                                        Long redisTotal, Long redisDeducted, Long redisVersion) {
         return ReconciliationSnapshot.builder()
                 .shopId(SHOP).skuId(SKU)
                 .dbTotalQuantity(dbTotal).dbConfirmedQuantity(dbConfirmed).dbPreDeductedQuantity(dbPreDeducted)
-                .redisTotal(redisTotal).redisDeducted(redisDeducted)
+                .redisTotal(redisTotal).redisDeducted(redisDeducted).redisVersion(redisVersion)
                 .build();
     }
 
@@ -53,9 +60,10 @@ class InventoryReconcileJobTest {
         seedOneSku();
         when(reconciliationPort.snapshot(SHOP, SKU))
                 .thenReturn(snap(100, 0, 0, 150L, 0L)); // targetTotal=100, redisTotal=150 -> excess 50
+        when(deductGateway.decreaseTotal(SHOP, SKU, 50L, VER)).thenReturn(true);
         job.reconcile();
-        verify(deductGateway).decreaseTotal(SHOP, SKU, 50L);
-        verify(deductGateway, never()).increaseDeducted(any(), any(), anyLong());
+        verify(deductGateway).decreaseTotal(SHOP, SKU, 50L, VER);
+        verify(deductGateway, never()).increaseDeducted(any(), any(), anyLong(), anyLong());
         verify(logRepository).save(any());
     }
 
@@ -65,9 +73,10 @@ class InventoryReconcileJobTest {
         seedOneSku();
         when(reconciliationPort.snapshot(SHOP, SKU))
                 .thenReturn(snap(100, 0, 5, 100L, 2L)); // targetDeducted=5, redisDeducted=2 -> deficit 3
+        when(deductGateway.increaseDeducted(SHOP, SKU, 3L, VER)).thenReturn(true);
         job.reconcile();
-        verify(deductGateway).increaseDeducted(SHOP, SKU, 3L);
-        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong());
+        verify(deductGateway).increaseDeducted(SHOP, SKU, 3L, VER);
+        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong(), anyLong());
         verify(logRepository).save(any());
     }
 
@@ -77,9 +86,11 @@ class InventoryReconcileJobTest {
         seedOneSku();
         when(reconciliationPort.snapshot(SHOP, SKU))
                 .thenReturn(snap(100, 0, 5, 150L, 2L)); // excess 50, deficit 3
+        when(deductGateway.decreaseTotal(SHOP, SKU, 50L, VER)).thenReturn(true);
+        when(deductGateway.increaseDeducted(SHOP, SKU, 3L, VER)).thenReturn(true);
         job.reconcile();
-        verify(deductGateway).decreaseTotal(SHOP, SKU, 50L);
-        verify(deductGateway).increaseDeducted(SHOP, SKU, 3L);
+        verify(deductGateway).decreaseTotal(SHOP, SKU, 50L, VER);
+        verify(deductGateway).increaseDeducted(SHOP, SKU, 3L, VER);
         verify(logRepository).save(any());
     }
 
@@ -90,8 +101,8 @@ class InventoryReconcileJobTest {
         when(reconciliationPort.snapshot(SHOP, SKU))
                 .thenReturn(snap(100, 0, 2, 80L, 9L)); // totalTooLow + deductedTooHigh -> lost-sales
         job.reconcile();
-        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong());
-        verify(deductGateway, never()).increaseDeducted(any(), any(), anyLong());
+        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong(), anyLong());
+        verify(deductGateway, never()).increaseDeducted(any(), any(), anyLong(), anyLong());
         verify(logRepository).save(any());
     }
 
@@ -102,7 +113,7 @@ class InventoryReconcileJobTest {
         when(reconciliationPort.snapshot(SHOP, SKU))
                 .thenReturn(snap(-1, 0, 0, 100L, 0L));
         job.reconcile();
-        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong());
+        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong(), anyLong());
         verify(logRepository).save(any());
     }
 
@@ -115,8 +126,8 @@ class InventoryReconcileJobTest {
                 .thenReturn(snap(100, 0, 0, 110L, 120L));
         job.reconcile();
         // negativeAvailable is checked before oversell repair -> no repair
-        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong());
-        verify(deductGateway, never()).increaseDeducted(any(), any(), anyLong());
+        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong(), anyLong());
+        verify(deductGateway, never()).increaseDeducted(any(), any(), anyLong(), anyLong());
         verify(logRepository).save(any());
     }
 
@@ -128,8 +139,8 @@ class InventoryReconcileJobTest {
         when(reconciliationPort.snapshot(SHOP, SKU))
                 .thenReturn(snap(100, 5, 0, 105L, 5L));
         job.reconcile();
-        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong());
-        verify(deductGateway, never()).increaseDeducted(any(), any(), anyLong());
+        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong(), anyLong());
+        verify(deductGateway, never()).increaseDeducted(any(), any(), anyLong(), anyLong());
         verify(logRepository, never()).save(any());
     }
 
@@ -143,5 +154,50 @@ class InventoryReconcileJobTest {
         when(reconciliationPort.snapshot(SHOP, "good")).thenReturn(snap(100, 0, 0, 100L, 0L)); // clean
         job.reconcile(); // must not propagate the "bad" exception
         verify(reconciliationPort).snapshot(SHOP, "good"); // second SKU still processed
+    }
+
+    // ===== Task 3: version-CAS skip / partial / version-null =====
+
+    @Test
+    @DisplayName("casSkip_totalTooHigh_logsSkippedNotMetric")
+    void casSkip_totalTooHigh_logsSkippedNotMetric() {
+        when(reconciliationPort.snapshot(SHOP, SKU))
+                .thenReturn(snap(100, 0, 0, 150L, 0L)); // excess 50
+        when(deductGateway.decreaseTotal(SHOP, SKU, 50L, VER)).thenReturn(false);  // CAS 跳过
+
+        boolean acted = job.reconcileOne(SHOP, SKU);
+
+        assertThat(acted).isTrue();  // 写了 CAS_SKIPPED 日志
+        verify(metricsPort, never()).reconcileRepaired();  // 不计修复 metric
+        verify(logRepository).save(argThat(e -> "CAS_SKIPPED".equals(e.getAction())));
+    }
+
+    @Test
+    @DisplayName("partialSuccess_totalApplied_deductedSkipped_logsRepairedWithTotalOnly")
+    void partialSuccess_totalApplied_deductedSkipped_logsRepairedWithTotalOnly() {
+        // total 过高 + deducted 过低
+        when(reconciliationPort.snapshot(SHOP, SKU))
+                .thenReturn(snap(100, 0, 10L, 120L, 0L));  // excess 20, deficit 10
+        when(deductGateway.decreaseTotal(SHOP, SKU, 20L, VER)).thenReturn(true);
+        when(deductGateway.increaseDeducted(SHOP, SKU, 10L, VER)).thenReturn(false);  // CAS 跳过
+
+        boolean acted = job.reconcileOne(SHOP, SKU);
+
+        assertThat(acted).isTrue();
+        verify(metricsPort).reconcileRepaired();  // 有修复 -> 计 metric
+        verify(logRepository).save(argThat(e -> "REPAIRED_OVERSELL".equals(e.getAction())
+                && "TOTAL".equals(e.getRepairedFields())));
+    }
+
+    @Test
+    @DisplayName("versionNull_skipsRepairEntirely_noLog")
+    void versionNull_skipsRepairEntirely_noLog() {
+        when(reconciliationPort.snapshot(SHOP, SKU))
+                .thenReturn(snap(100, 0, 0, 150L, 0L, null));  // version key 缺失
+
+        boolean acted = job.reconcileOne(SHOP, SKU);
+
+        assertThat(acted).isFalse();  // 不尝试修复、不写日志
+        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong(), anyLong());
     }
 }

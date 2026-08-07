@@ -41,14 +41,14 @@ public interface InventoryDeductGateway {
     /**
      * DECRBY Redis total by amount (reconcile repair, conservative direction).
      * Additive: does not clobber concurrent addTotal INCR.
-     * @return true if Redis DECRBY succeeded, false on Redis failure
+     * @return true if applied (version matched), false on CAS skip or Redis failure
      */
-    boolean decreaseTotal(String shopId, String skuId, long amount);
+    boolean decreaseTotal(String shopId, String skuId, long amount, long expectVersion);
 
     /**
-     * INCRBY Redis deducted by amount (reconcile repair, conservative direction).
-     * Additive: does not clobber concurrent preDeduct INCR.
-     * @return true if Redis INCRBY succeeded, false on Redis failure
+     * INCRBY Redis deducted by amount with version CAS (reconcile repair, conservative direction).
+     * version 匹配才应用；不匹配 no-op。幂等：多实例并发修复同 SKU 仅一个生效。
+     * @return true if applied (version matched), false on CAS skip or Redis failure
      */
-    boolean increaseDeducted(String shopId, String skuId, long amount);
+    boolean increaseDeducted(String shopId, String skuId, long amount, long expectVersion);
 }
