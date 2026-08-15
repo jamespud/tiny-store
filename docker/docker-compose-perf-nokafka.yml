@@ -1,0 +1,213 @@
+# =====================================================================
+# Minimal 下单链路 (order-creation) peak-load stack
+# ---------------------------------------------------------------------
+# Trims the full test stack (12 containers) down to the 7 containers
+# that are actually on the createTrade hot path:
+#   postgres + redis + nacos + order + inventory + promotion  (KAFKA REMOVED)
+#
+# Same as docker-compose-perf.yml but WITHOUT kafka, as a pure-sync probe.
+# To boot without a broker:
+#   - Kafka bootstrap points at 127.0.0.1:9092 (resolvable, nothing listening) so
+#     listener/consumer beans do NOT throw ConfigException at startup
+#   - SPRING_KAFKA_LISTENER_AUTO_STARTUP=false so @KafkaListener containers never start
+#   - ORDER_OUTBOX_POLL_INTERVAL=86400000 so the outbox publisher idles after its
+#     first poll -> removes the publisher's DB polling/batch-update contention
+#     (the real sync-path bottleneck from load-report-2026-08-03 sec.6.1)
+# USE ONLY as a pure-sync ceiling probe - async promotion/inventory links will
+# NOT close (outbox events accumulate, consumers off, sends fail into FAILED).
+#
+# Removed (NOT on the createTrade path):
+#   - gateway   -> hit order:28080 directly (perf/k6/order_create_direct.js,
+#                  avoids the ~13-15% gateway overhead measured in 08-02)
+#   - auth      -> resource server disabled (TINYSTORE_SECURITY_RESOURCESERVER_ENABLED=false)
+#   - account   -> not called by createTrade
+#   - payment   -> only used by OrderTimeoutScheduler (not createTrade)
+#   - product   -> product cache disabled, payload carries productId/skuId directly
+#
+# Tuning mirrors docker-compose-test.yml (Hikari=100 / Tomcat=500 /
+# PG max_connections=500) so numbers stay comparable to prior reports.
+# =====================================================================
+name: tinystore-perf
+
+services:
+  # ======================= Infrastructure =======================
+  postgres:
+    image: postgres:18.1
+    container_name: tinystore-postgres-perf
+    environment:
+      POSTGRES_DB: tinystore
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    command: ["postgres", "-c", "max_connections=500"]
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data-perf:/var/lib/postgresql
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    networks:
+      - tinystore-perf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.4.0
+    container_name: tinystore-redis-perf
+    ports:
+      - "6380:6379"
+    networks:
+      - tinystore-perf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nacos:
+    image: nacos/nacos-server:v3.1.1
+    container_name: tinystore-nacos-perf
+    ports:
+      - "8849:8848"
+      - "9849:9848"
+    environment:
+      MODE: standalone
+      NACOS_AUTH_TOKEN: "ZXlKaGJHY2lPaUpJVXpVeE1pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnVZVzFsSWpvaVNtOW9iaUlzSW1Ga2JXbHVJanAwY25WbGZRLklpdUxkRHdTX0VONmU1ZENzdmlRRFVsZ0djUXdkWHdadm5vM284NjNZMlFmRGphYnNYZ2gyQURqYnBzVVU2VUF1R1FSVFFmb0ZhajdSV3owdFRHSTh3"
+      NACOS_AUTH_IDENTITY_KEY: "nacos-key"
+      NACOS_AUTH_IDENTITY_VALUE: "nacos-val"
+    networks:
+      - tinystore-perf
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8848/nacos/v1/ns/instance/list?serviceName=nacos" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ======================= Hot-path apps =======================
+  inventory:
+    build:
+      context: ../tinystore-domain-inventory
+      dockerfile: Dockerfile
+    container_name: tinystore-inventory-perf
+    ports:
+      - "13000:13000"
+    expose:
+      - "23000"
+    environment:
+      SPRING_PROFILES_ACTIVE: default
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: 127.0.0.1:9092
+      SPRING_KAFKA_LISTENER_AUTO_STARTUP: "false"
+      NACOS_SERVER_ADDR: nacos:8848
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+      TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
+      TINYSTORE_SECURITY_PERMIT_ALL_ENABLED: true
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ""
+      INVENTORY_RESERVATION_EXPIRY_FIXED_DELAY: PT5S
+      INVENTORY_RESERVATION_EXPIRY_DEFAULT_MINUTES: 1
+      LOGGING_LEVEL_COM_GITHUB_SPUD_TINYSTORE: WARN
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 25
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 25
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+    networks:
+      - tinystore-perf
+
+  promotion:
+    build:
+      context: ../tinystore-domain-promotion
+      dockerfile: Dockerfile
+    container_name: tinystore-promotion-perf
+    ports:
+      - "1200:1200"
+    expose:
+      - "11200"
+    environment:
+      SPRING_PROFILES_ACTIVE: default
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP: 127.0.0.1:9092
+      NACOS_SERVER_ADDR: nacos:8848
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tinystore?currentSchema=tinystore_promotion
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: 127.0.0.1:9092
+      SPRING_KAFKA_LISTENER_AUTO_STARTUP: "false"
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+      TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
+      TINYSTORE_SECURITY_PERMIT_ALL_ENABLED: true
+      PROMOTION_KAFKA_TOPIC_ACK_EVENTS: tinystore.promotion.general
+      LOGGING_LEVEL_COM_GITHUB_SPUD_TINYSTORE: WARN
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 25
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 25
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+    networks:
+      - tinystore-perf
+
+  order:
+    build:
+      context: ../tinystore-domain-order
+      dockerfile: Dockerfile
+    container_name: tinystore-order-perf
+    ports:
+      - "28080:28080"
+    expose:
+      - "38080"
+    environment:
+      SPRING_PROFILES_ACTIVE: default
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP: 127.0.0.1:9092
+      NACOS_SERVER_ADDR: nacos:8848
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tinystore?currentSchema=tinystore_order
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: 127.0.0.1:9092
+      SPRING_KAFKA_LISTENER_AUTO_STARTUP: "false"
+      ORDER_OUTBOX_POLL_INTERVAL: 86400000
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+      TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
+      TINYSTORE_SECURITY_PERMIT_ALL_ENABLED: true
+      TINYSTORE_PRODUCT_CACHE_ENABLED: false
+      ORDER_INVENTORY_USE_CANONICAL_RESERVATION_API: true
+      ORDER_PROMOTION_COMMIT_ASYNC_ENABLED: "true"
+      ORDER_KAFKA_TOPIC_PROMOTION_EVENTS: tinystore.promotion.general
+      LOGGING_LEVEL_COM_GITHUB_SPUD_TINYSTORE: WARN
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 100
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 100
+      SERVER_TOMCAT_THREADS_MAX: 500
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+    networks:
+      - tinystore-perf
+
+networks:
+  tinystore-perf:
+    driver: bridge
+
+volumes:
+  postgres-data-perf:
