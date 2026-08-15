@@ -461,8 +461,52 @@ load-min: build ## Peak-test the order-creation link on the minimal stack (7 con
 load-min-nokafka: ## Peak-test the order-creation link WITHOUT Kafka (pure-sync probe, async links do NOT close)
 	$(MAKE) load-min PERF_COMPOSE=$(abspath docker/docker-compose-perf-nokafka.yml)
 
-load-matrix: build ## Run full load matrix (oversell/idempotency/confirm/k6 at 4 levels)
-	@echo "Starting test environment for load matrix..."
+load-matrix: build ## Run k6 load matrix (multi-VUS scan through gateway, full stack, clean per-level results)
+	@echo "Starting full-stack load matrix (gateway :8080)..."
+	@echo "WARNING: k6 must be installed (https://k6.io/docs/get-started/installation/)"
+	@if ! command -v k6 > /dev/null 2>&1; then \
+		echo "ERROR: k6 not found. Install it first:"; \
+		exit 1; \
+	fi
+	@set -e; \
+	root_dir=$$(pwd); \
+	levels="$${VUS_LEVELS:-500 1000 5000 10000}"; \
+	duration="$${DURATION:-60s}"; \
+	stock="$${STOCK_PER_SKU:-500000}"; \
+	cleanup() { \
+		echo "Cleaning up test environment..."; \
+		cd "$$root_dir"; \
+		docker compose -f $(COMPOSE_TEST) down -v; \
+	}; \
+	trap cleanup EXIT; \
+	docker compose -f $(COMPOSE_TEST) up -d --build; \
+	echo "Waiting for gateway (max 120s)..."; \
+	for i in $$(seq 1 24); do \
+		curl -sf --max-time 3 http://localhost:8080/actuator/health > /dev/null 2>&1 && { echo "Gateway healthy after $$((i*5))s"; break; }; \
+		if [ $$i -eq 24 ]; then \
+			echo "ERROR: gateway failed to become healthy within 120s"; \
+			docker compose -f $(COMPOSE_TEST) logs --tail=50 gateway; \
+			exit 1; \
+		fi; \
+		sleep 5; \
+	done; \
+	echo "Waiting 30s for Nacos service registration (order -> inventory via Feign)..."; \
+	sleep 30; \
+	seed_sku() { \
+		sku="$$1"; \
+		docker compose -f $(COMPOSE_TEST) exec -T postgres psql -U postgres -d tinystore -v ON_ERROR_STOP=1 \
+			-c "INSERT INTO tinystore_inventory.inventory_stock (shop_id, sku_id, total_quantity, reserved_quantity, version, created_at, updated_at) VALUES ('SHOP_A','$$sku',$$stock,0,0,NOW(),NOW()) ON CONFLICT DO NOTHING;" > /dev/null; \
+	}; \
+	for lvl in $$levels; do \
+		seed_sku "SKU-matrix-$$lvl"; \
+	done; \
+	echo "Running k6 load matrix (VUS=$$levels, DURATION=$$duration, per-level SKU, via gateway :8080)..."; \
+	cd perf/k6; \
+	VUS_LEVELS="$$levels" DURATION="$$duration" BASE_URL="http://localhost:8080" bash run_matrix.sh; \
+	echo "Load matrix complete - per-level results printed above (see LOAD MATRIX SUMMARY)"
+
+load-matrix-it: build ## Run consistency IT matrix (oversell/idempotency/confirm at multiple concurrency levels, DB assertions)
+	@echo "Starting test environment for consistency matrix..."
 	@set -e; \
 	root_dir=$$(pwd); \
 	cleanup() { echo "Cleaning up..."; cd "$$root_dir"; docker compose -f $(COMPOSE_TEST) down -v; }; \
@@ -485,6 +529,4 @@ load-matrix: build ## Run full load matrix (oversell/idempotency/confirm/k6 at 4
 		echo "===== CONFIRM-LOCK N=$$N ====="; \
 		$(MAVEN) -pl tests/performance test -Pperf -Dtest=InventoryConfirmLockContentionIT -Dperf.confirm.concurrency=$$N -Dinventory.base.url=http://localhost:13000 -Dpg.url=jdbc:postgresql://localhost:5433/tinystore || exit 1; \
 	done; \
-	echo "===== k6 MATRIX ====="; \
-	bash perf/k6/run_matrix.sh || true; \
-	echo "Load matrix complete - collect outputs into docs/performance/load-report-2026-07-28.md"
+	echo "Consistency matrix complete - collect outputs into docs/performance/load-report-2026-07-28.md"
