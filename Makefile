@@ -6,6 +6,8 @@
 # Variables
 COMPOSE_DEBUG := docker/docker-compose-debug.yml
 COMPOSE_TEST := docker/docker-compose-test.yml
+COMPOSE_PERF := $(abspath docker/docker-compose-perf.yml)
+PERF_COMPOSE := $(COMPOSE_PERF)
 MAVEN := "./mvnw"
 MAVEN_CLEAN_OPTS := -Dmaven.clean.failOnError=false
 
@@ -357,6 +359,107 @@ load: build ## Run k6 load tests (stress test with p95/p99 latency metrics)
 	echo "Running k6 load tests..."; \
 	cd perf/k6 && k6 run order_create.js || exit 1; \
 	echo "Load tests completed successfully"
+
+
+load-min: build ## Peak-test the order-creation link on the minimal stack (7 containers, direct to order)
+	@echo "Starting minimal order-link peak-test stack (postgres+redis+kafka+nacos+order+inventory+promotion)..."
+	@echo "WARNING: k6 must be installed (https://k6.io/docs/get-started/installation/)"
+	@if ! command -v k6 > /dev/null 2>&1; then \
+		echo "ERROR: k6 not found. Install it first:"; \
+		echo "  macOS:   brew install k6"; \
+		echo "  Linux:   sudo apt install k6 (or download from https://k6.io)"; \
+		exit 1; \
+	fi
+	@set -e; \
+	root_dir=$$(pwd); \
+	levels="$${VUS_LEVELS:-1000 2000 3000 4000 5000}"; \
+	warmup="$${WARMUP_LEVEL:-$${levels%% *}}"; \
+	duration="$${DURATION:-30s}"; \
+	stock="$${STOCK_PER_SKU:-500000}"; \
+	cleanup() { \
+		echo "Cleaning up perf stack..."; \
+		cd "$$root_dir"; \
+		docker compose -f $(PERF_COMPOSE) down -v; \
+	}; \
+	trap cleanup EXIT; \
+	docker compose -f $(PERF_COMPOSE) up -d --build; \
+	echo "Waiting for postgres (max 120s)..."; \
+	for i in $$(seq 1 24); do \
+		if docker compose -f $(PERF_COMPOSE) exec -T postgres pg_isready -U postgres > /dev/null 2>&1; then \
+			echo "Postgres ready after $$((i*5))s"; \
+			break; \
+		fi; \
+		if [ $$i -eq 24 ]; then \
+			echo "ERROR: postgres failed to become ready within 120s"; \
+			exit 1; \
+		fi; \
+		sleep 5; \
+	done; \
+	echo "Waiting for order (direct :28080) + inventory + promotion to be healthy (max 240s)..."; \
+	for i in $$(seq 1 48); do \
+		ok=1; \
+		for base in http://localhost:28080 http://localhost:13000 http://localhost:1200; do \
+			if ! curl -sf --max-time 3 "$$base/actuator/health" > /dev/null 2>&1; then \
+				ok=0; \
+				break; \
+			fi; \
+		done; \
+		if [ $$ok -eq 1 ]; then \
+			echo "order/inventory/promotion healthy after $$((i*5))s"; \
+			break; \
+		fi; \
+		if [ $$i -eq 48 ]; then \
+			echo "ERROR: services failed to become healthy within 240s"; \
+			docker compose -f $(PERF_COMPOSE) logs --tail=100 order; \
+			exit 1; \
+		fi; \
+		sleep 5; \
+	done; \
+	seed_sku() { \
+		sku="$$1"; \
+		docker compose -f $(PERF_COMPOSE) exec -T postgres psql -U postgres -d tinystore -v ON_ERROR_STOP=1 \
+			-c "INSERT INTO tinystore_inventory.inventory_stock (shop_id, sku_id, total_quantity, reserved_quantity, version, created_at, updated_at) VALUES ('SHOP_A','$$sku',$$stock,0,0,NOW(),NOW()) ON CONFLICT DO NOTHING;" > /dev/null; \
+	}; \
+	seed_sku "SKU-perf-warmup"; \
+	echo "Warmup (VUS=$$warmup, DURATION=$$duration, SKU=SKU-perf-warmup, discarded)..."; \
+	VUS=$$warmup DURATION=$$duration SKU_ID=SKU-perf-warmup BASE_URL=http://localhost:28080 \
+		k6 run --quiet order_create_direct.js --summary-export /tmp/tinystore-perf-warmup.export.json \
+			> /tmp/tinystore-perf-warmup.json 2> /tmp/tinystore-perf-warmup.err || true; \
+	echo "Running k6 direct-to-order peak scan (VUS=$$levels, DURATION=$$duration) - the first level is a transition and is discarded..."; \
+	cd perf/k6; \
+	first=1; \
+	for lvl in $$levels; do \
+		sku="SKU-perf-$$lvl"; \
+		seed_sku "$$sku"; \
+		echo "=== VUS=$$lvl DURATION=$$duration SKU=$$sku (direct order) ==="; \
+		summary=""; \
+		attempt=1; \
+		while [ $$attempt -le 2 ]; do \
+			VUS=$$lvl DURATION=$$duration SKU_ID=$$sku BASE_URL=http://localhost:28080 \
+				k6 run --quiet order_create_direct.js --summary-export /tmp/tinystore-perf-$$lvl.export.json \
+					> /tmp/tinystore-perf-$$lvl.json 2> /tmp/tinystore-perf-$$lvl.err || true; \
+			summary=$$(python3 k6_summary.py /tmp/tinystore-perf-$$lvl.json /tmp/tinystore-perf-$$lvl.err || true); \
+			case "$$summary" in \
+				"NO DATA"*) \
+					echo "  --> no data on attempt $$attempt (transient k6 init error?), retrying in 5s..."; \
+					attempt=$$((attempt+1)); \
+					sleep 5;; \
+				*) \
+					break;; \
+			esac; \
+		done; \
+		if [ $$first -eq 1 ]; then \
+			echo "  --> [transition] discarded (first level after warmup, system still reaching steady state)"; \
+			first=0; \
+		else \
+			echo "  --> $$summary"; \
+		fi; \
+		echo "=== end VUS=$$lvl ==="; \
+	done; \
+	echo "Minimal-stack order-link peak test completed"
+
+load-min-nokafka: ## Peak-test the order-creation link WITHOUT Kafka (pure-sync probe, async links do NOT close)
+	$(MAKE) load-min PERF_COMPOSE=$(abspath docker/docker-compose-perf-nokafka.yml)
 
 load-matrix: build ## Run full load matrix (oversell/idempotency/confirm/k6 at 4 levels)
 	@echo "Starting test environment for load matrix..."
