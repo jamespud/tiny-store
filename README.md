@@ -152,7 +152,11 @@ Stop the environment with `make down` (use `MODE=test make down` for the test en
 | `make e2e-smoke` | Health-check-only E2E (gateway + all service routes) |
 | `make test` | Full suite sequentially: unit → IT → E2E |
 | `make consistency` | 200-concurrent-request consistency tests with DB assertions |
-| `make load` | k6 load tests (p95/p99 latency metrics) |
+| `make load` | k6 load test (p95/p99 latency metrics) |
+| `make load-min` | Order-link peak scan on the minimal 7-container stack (multi-VUS, warmup + first-level discard) |
+| `make load-min-nokafka` | Same as load-min without Kafka (pure-sync probe) |
+| `make load-matrix` | Full-stack k6 load matrix (multi-VUS, per-level SKU, one clear result line per level) |
+| `make load-matrix-it` | Consistency matrix (oversell / idempotency / confirm at multiple concurrency levels + strong DB assertions) |
 
 Load-test results and methodology live under [`docs/performance/`](docs/performance/), architecture notes under [`docs/architecture/`](docs/architecture/).
 

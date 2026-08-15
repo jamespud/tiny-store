@@ -153,6 +153,10 @@ curl http://localhost:8080/actuator/health
 | `make test` | 完整测试套件依次执行：单元 → 集成 → E2E |
 | `make consistency` | 200 并发请求一致性测试 + DB 断言 |
 | `make load` | k6 压测（p95/p99 延迟指标） |
+| `make load-min` | 最小栈（7 容器）下单链路峰值扫描（多档 VUS，预热后丢首档） |
+| `make load-min-nokafka` | 同 load-min，但不含 Kafka（纯同步探针） |
+| `make load-matrix` | 全栈 k6 负载矩阵（多档 VUS、逐档独立 SKU、每档一行量化结果） |
+| `make load-matrix-it` | 一致性矩阵（超卖 / 幂等 / confirm 多档并发 + DB 强断言） |
 
 压测结果与方法论见 [`docs/performance/`](docs/performance/)，架构笔记见 [`docs/architecture/`](docs/architecture/)。
 
