@@ -10,11 +10,13 @@ import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.reposi
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.repository.JpaInventoryStockRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,26 +33,50 @@ import java.util.List;
 @ConditionalOnProperty(name = "inventory.reconciliation.enabled", havingValue = "true", matchIfMissing = true)
 public class InventoryReconcileJob {
 
+    /** Redis lock key: only one instance runs a reconcile pass at a time. */
+    private static final String RECONCILE_LOCK_KEY = "inventory:reconcile:lock";
+    /** Lock TTL guard; a pass longer than this allows the next instance to take over (CAS still safe). */
+    private static final Duration RECONCILE_LOCK_TTL = Duration.ofMinutes(5);
+
     private final JpaInventoryStockRepository stockRepository;
     private final InventoryReconciliationPort reconciliationPort;
     private final InventoryDeductGateway deductGateway;
     private final JpaInventoryReconcileLogRepository logRepository;
     private final InventoryMetricsPort metricsPort;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     public InventoryReconcileJob(JpaInventoryStockRepository stockRepository,
                                  InventoryReconciliationPort reconciliationPort,
                                  InventoryDeductGateway deductGateway,
                                  JpaInventoryReconcileLogRepository logRepository,
-                                 InventoryMetricsPort metricsPort) {
+                                 InventoryMetricsPort metricsPort,
+                                 RedisTemplate<String, Object> redisTemplate) {
         this.stockRepository = stockRepository;
         this.reconciliationPort = reconciliationPort;
         this.deductGateway = deductGateway;
         this.logRepository = logRepository;
         this.metricsPort = metricsPort;
+        this.redisTemplate = redisTemplate;
     }
 
     @Scheduled(fixedDelayString = "${inventory.reconciliation.fixed-delay:PT10M}")
     public void reconcile() {
+        // Single-instance guard: only one instance scans (SET NX PX). CAS keeps repairs safe,
+        // the lock removes N x full-table scans and duplicate audit rows across instances.
+        Boolean acquired = redisTemplate.opsForValue()
+                .setIfAbsent(RECONCILE_LOCK_KEY, "1", RECONCILE_LOCK_TTL);
+        if (!Boolean.TRUE.equals(acquired)) {
+            log.info("Reconcile lock not acquired — another instance is running, skip this pass");
+            return;
+        }
+        try {
+            runReconcilePass();
+        } finally {
+            redisTemplate.delete(RECONCILE_LOCK_KEY);
+        }
+    }
+
+    private void runReconcilePass() {
         // Paged scan: bound memory for large catalogs (no full-table in-memory load).
         int actions = 0;
         int page = 0;
