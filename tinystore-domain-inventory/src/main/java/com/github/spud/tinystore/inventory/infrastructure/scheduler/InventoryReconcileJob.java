@@ -154,6 +154,8 @@ public class InventoryReconcileJob {
                     .setAction(action)
                     .setRepairedFields(repairedFields));
         } catch (Exception e) {
+            // 修复/告警已发生但审计落库失败：计数以便观测，不阻断对账
+            metricsPort.reconcileLogFailed();
             log.error("Failed to persist reconcile log: shopId={}, skuId={}, action={}", shopId, skuId, action, e);
         }
     }

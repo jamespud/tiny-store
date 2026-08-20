@@ -13,4 +13,5 @@ public interface InventoryMetricsPort {
     void adjustSuccess();
     void reconcileRepaired();
     void reconcileAlert();
+    void reconcileLogFailed();
 }

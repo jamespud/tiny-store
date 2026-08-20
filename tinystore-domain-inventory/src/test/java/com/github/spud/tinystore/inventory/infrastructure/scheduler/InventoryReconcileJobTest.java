@@ -256,4 +256,18 @@ class InventoryReconcileJobTest {
         verify(deductGateway).initState(SHOP, SKU, 100L, 0L);
         verify(metricsPort, never()).reconcileRepaired();
     }
+
+    @Test
+    @DisplayName("logSaveFailure_countsMetricAndDoesNotPropagate")
+    void logSaveFailure_countsMetricAndDoesNotPropagate() {
+        seedOneSku();
+        when(reconciliationPort.snapshot(SHOP, SKU))
+                .thenReturn(snap(100, 0, 0, 150L, 0L)); // totalTooHigh
+        when(deductGateway.repairOversell(SHOP, SKU, -50L, 0L, VER)).thenReturn(true);
+        doThrow(new RuntimeException("db down")).when(logRepository).save(any());
+
+        job.reconcile(); // 不抛异常
+
+        verify(metricsPort).reconcileLogFailed();
+    }
 }
