@@ -6,16 +6,23 @@ import com.github.spud.tinystore.inventory.domain.value.ReconciliationSnapshot;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.entity.InventoryStockEntity;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.repository.JpaInventoryReconcileLogRepository;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.repository.JpaInventoryStockRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+
+import java.time.Duration;
 
 import java.util.List;
 
@@ -24,6 +31,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("InventoryReconcileJob Unit Tests")
 class InventoryReconcileJobTest {
 
@@ -32,12 +40,20 @@ class InventoryReconcileJobTest {
     @Mock private InventoryDeductGateway deductGateway;
     @Mock private JpaInventoryReconcileLogRepository logRepository;
     @Mock private com.github.spud.tinystore.inventory.domain.port.InventoryMetricsPort metricsPort;
+    @Mock private RedisTemplate<String, Object> redisTemplate;
+    @Mock private ValueOperations<String, Object> valueOps;
 
     @InjectMocks private InventoryReconcileJob job;
 
     private static final String SHOP = "shop-1";
     private static final String SKU = "sku-1";
     private static final long VER = 5L;  // 默认 snapshot version
+
+    @BeforeEach
+    void lockAcquiredByDefault() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.setIfAbsent(eq("inventory:reconcile:lock"), any(), any(Duration.class))).thenReturn(true);
+    }
 
     private void seedOneSku() {
         when(stockRepository.findAll(any(Pageable.class))).thenReturn(new PageImpl<>(List.of(
@@ -269,5 +285,33 @@ class InventoryReconcileJobTest {
         job.reconcile(); // 不抛异常
 
         verify(metricsPort).reconcileLogFailed();
+    }
+
+    // ===== Fix 6: single-instance reconcile lock (Redis SET NX PX) =====
+
+    @Test
+    @DisplayName("lockNotAcquired_skipsWholeScan")
+    void lockNotAcquired_skipsWholeScan() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.setIfAbsent(eq("inventory:reconcile:lock"), any(), any(Duration.class))).thenReturn(false);
+
+        job.reconcile();
+
+        verify(reconciliationPort, never()).snapshot(any(), any());
+        verify(redisTemplate, never()).delete(anyString());
+    }
+
+    @Test
+    @DisplayName("lockAcquired_runsScanAndReleasesLock")
+    void lockAcquired_runsScanAndReleasesLock() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.setIfAbsent(eq("inventory:reconcile:lock"), any(), any(Duration.class))).thenReturn(true);
+        seedOneSku();
+        when(reconciliationPort.snapshot(SHOP, SKU)).thenReturn(snap(100, 0, 0, 100L, 0L)); // clean
+
+        job.reconcile();
+
+        verify(reconciliationPort).snapshot(SHOP, SKU);
+        verify(redisTemplate).delete(anyString()); // finally 释放锁
     }
 }
