@@ -268,35 +268,23 @@ public class InventoryRedisManager {
             """;
 
     /**
-     * 脚本7：V2 decreaseTotal CAS（version 匹配才 DECRBY + INCR version；不匹配 no-op）
+     * 脚本7：V2 双字段原子修复（reconcile repair）。
+     * version 匹配才同时 DECRBY total + INCRBY deducted + INCR version（原子，只 bump 一次）；
+     * 不匹配 no-op 返回 0（幂等，多实例安全，无部分修复）。
      */
-    private static final String DECREASE_TOTAL_V2_CAS_SCRIPT = """
+    private static final String REPAIR_OVERSELL_V2_CAS_SCRIPT = """
             local total_key = KEYS[1]
-            local version_key = KEYS[2]
+            local deducted_key = KEYS[2]
+            local version_key = KEYS[3]
             local expect_version = tonumber(ARGV[1])
-            local amount = tonumber(ARGV[2]) or 0
+            local total_delta = tonumber(ARGV[2]) or 0
+            local deducted_delta = tonumber(ARGV[3]) or 0
             local current_version = tonumber(redis.call('get', version_key)) or 0
             if current_version ~= expect_version then
                 return 0
             end
-            redis.call('incrby', total_key, -amount)
-            redis.call('incr', version_key)
-            return 1
-            """;
-
-    /**
-     * 脚本8：V2 increaseDeducted CAS（version 匹配才 INCRBY + INCR version；不匹配 no-op）
-     */
-    private static final String INCREASE_DEDUCTED_V2_CAS_SCRIPT = """
-            local deducted_key = KEYS[1]
-            local version_key = KEYS[2]
-            local expect_version = tonumber(ARGV[1])
-            local amount = tonumber(ARGV[2]) or 0
-            local current_version = tonumber(redis.call('get', version_key)) or 0
-            if current_version ~= expect_version then
-                return 0
-            end
-            redis.call('incrby', deducted_key, amount)
+            redis.call('incrby', total_key, total_delta)
+            redis.call('incrby', deducted_key, deducted_delta)
             redis.call('incr', version_key)
             return 1
             """;
@@ -690,49 +678,33 @@ public class InventoryRedisManager {
     }
 
     /**
-     * V2：DECRBY total by amount with version CAS（reconcile repair）。
-     * version 匹配才应用 + bump；不匹配 no-op 返回 false（幂等，多实例安全）。
+     * V2：双字段原子修复（reconcile repair）。
+     * version 匹配才同时应用 totalDelta（<=0，下调 total）+ deductedDelta（>=0，上调 deducted），
+     * 只 bump 一次 version。不匹配 no-op 返回 false（幂等，多实例安全，无部分修复）。
+     *
+     * @param totalDelta    <=0：仅当 totalTooHigh 时传负差，否则 0
+     * @param deductedDelta >=0：仅当 deductedTooLow 时传正差，否则 0
+     * @return true if applied (version matched), false on CAS skip or Redis failure
      */
-    public boolean decreaseTotalV2(String shopId, String skuId, long amount, long expectVersion) {
+    public boolean repairOversellV2(String shopId, String skuId, long totalDelta, long deductedDelta, long expectVersion) {
         Assert.hasText(shopId, "shopId不能为空");
         Assert.hasText(skuId, "skuId不能为空");
-        Assert.isTrue(amount > 0, "amount必须大于0");
+        Assert.isTrue(totalDelta <= 0, "totalDelta必须<=0（只允许下调 total）");
+        Assert.isTrue(deductedDelta >= 0, "deductedDelta必须>=0（只允许上调 deducted）");
         String totalKey = String.format(KEY_V2_TOTAL, shopId, skuId);
-        String versionKey = String.format(KEY_V2_VERSION, shopId, skuId);
-        List<String> keys = Arrays.asList(totalKey, versionKey);
-        try {
-            DefaultRedisScript<Long> script = new DefaultRedisScript<>(DECREASE_TOTAL_V2_CAS_SCRIPT, Long.class);
-            Long result = redisTemplate.execute(script, keys, String.valueOf(expectVersion), String.valueOf(amount));
-            boolean applied = result != null && result == 1L;
-            log.info("V2 decreaseTotal CAS: key={}, amount={}, expectVersion={}, applied={}",
-                    totalKey, amount, expectVersion, applied);
-            return applied;
-        } catch (Exception e) {
-            log.error("V2 decreaseTotal CAS failed: key={}, amount={}", totalKey, amount, e);
-            return false;
-        }
-    }
-
-    /**
-     * V2：INCRBY deducted by amount with version CAS（reconcile repair）。
-     * version 匹配才应用 + bump；不匹配 no-op 返回 false（幂等，多实例安全）。
-     */
-    public boolean increaseDeductedV2(String shopId, String skuId, long amount, long expectVersion) {
-        Assert.hasText(shopId, "shopId不能为空");
-        Assert.hasText(skuId, "skuId不能为空");
-        Assert.isTrue(amount > 0, "amount必须大于0");
         String deductedKey = String.format(KEY_V2_DEDUCTED, shopId, skuId);
         String versionKey = String.format(KEY_V2_VERSION, shopId, skuId);
-        List<String> keys = Arrays.asList(deductedKey, versionKey);
+        List<String> keys = Arrays.asList(totalKey, deductedKey, versionKey);
         try {
-            DefaultRedisScript<Long> script = new DefaultRedisScript<>(INCREASE_DEDUCTED_V2_CAS_SCRIPT, Long.class);
-            Long result = redisTemplate.execute(script, keys, String.valueOf(expectVersion), String.valueOf(amount));
+            DefaultRedisScript<Long> script = new DefaultRedisScript<>(REPAIR_OVERSELL_V2_CAS_SCRIPT, Long.class);
+            Long result = redisTemplate.execute(script, keys,
+                    String.valueOf(expectVersion), String.valueOf(totalDelta), String.valueOf(deductedDelta));
             boolean applied = result != null && result == 1L;
-            log.info("V2 increaseDeducted CAS: key={}, amount={}, expectVersion={}, applied={}",
-                    deductedKey, amount, expectVersion, applied);
+            log.info("V2 repairOversell CAS: shopId={}, skuId={}, totalDelta={}, deductedDelta={}, expectVersion={}, applied={}",
+                    shopId, skuId, totalDelta, deductedDelta, expectVersion, applied);
             return applied;
         } catch (Exception e) {
-            log.error("V2 increaseDeducted CAS failed: key={}, amount={}", deductedKey, amount, e);
+            log.error("V2 repairOversell CAS failed: shopId={}, skuId={}", shopId, skuId, e);
             return false;
         }
     }

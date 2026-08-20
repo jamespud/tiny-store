@@ -178,7 +178,7 @@ class InventoryReconcileJobIT {
             new Thread(() -> {
                 try {
                     start.await();
-                    boolean applied = redisManager.decreaseTotalV2(SHOP, SKU, 20L, 5L);
+                    boolean applied = redisManager.repairOversellV2(SHOP, SKU, -20L, 0L, 5L);
                     if (applied) appliedCount.incrementAndGet();
                 } catch (Exception ignored) {
                 } finally {
@@ -208,7 +208,7 @@ class InventoryReconcileJobIT {
         Thread repair = new Thread(() -> {
             try {
                 start.await();
-                redisManager.decreaseTotalV2(SHOP, SKU, 20L, 5L);
+                redisManager.repairOversellV2(SHOP, SKU, -20L, 0L, 5L);
             } catch (Exception ignored) {
             } finally { done.countDown(); }
         });

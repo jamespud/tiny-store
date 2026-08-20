@@ -59,42 +59,38 @@ class InventoryReconcileJobTest {
     }
 
     @Test
-    @DisplayName("totalTooHigh_triggersDecreaseTotalAndLogsRepaired")
-    void totalTooHigh_triggersDecreaseTotalAndLogsRepaired() {
+    @DisplayName("totalTooHigh_triggersRepairOversellAndLogsRepaired")
+    void totalTooHigh_triggersRepairOversellAndLogsRepaired() {
         seedOneSku();
         when(reconciliationPort.snapshot(SHOP, SKU))
                 .thenReturn(snap(100, 0, 0, 150L, 0L)); // targetTotal=100, redisTotal=150 -> excess 50
-        when(deductGateway.decreaseTotal(SHOP, SKU, 50L, VER)).thenReturn(true);
+        when(deductGateway.repairOversell(SHOP, SKU, -50L, 0L, VER)).thenReturn(true);
         job.reconcile();
-        verify(deductGateway).decreaseTotal(SHOP, SKU, 50L, VER);
-        verify(deductGateway, never()).increaseDeducted(any(), any(), anyLong(), anyLong());
+        verify(deductGateway).repairOversell(SHOP, SKU, -50L, 0L, VER);
         verify(logRepository).save(any());
     }
 
     @Test
-    @DisplayName("deductedTooLow_triggersIncreaseDeductedAndLogsRepaired")
-    void deductedTooLow_triggersIncreaseDeductedAndLogsRepaired() {
+    @DisplayName("deductedTooLow_triggersRepairOversellAndLogsRepaired")
+    void deductedTooLow_triggersRepairOversellAndLogsRepaired() {
         seedOneSku();
         when(reconciliationPort.snapshot(SHOP, SKU))
                 .thenReturn(snap(100, 0, 5, 100L, 2L)); // targetDeducted=5, redisDeducted=2 -> deficit 3
-        when(deductGateway.increaseDeducted(SHOP, SKU, 3L, VER)).thenReturn(true);
+        when(deductGateway.repairOversell(SHOP, SKU, 0L, 3L, VER)).thenReturn(true);
         job.reconcile();
-        verify(deductGateway).increaseDeducted(SHOP, SKU, 3L, VER);
-        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong(), anyLong());
+        verify(deductGateway).repairOversell(SHOP, SKU, 0L, 3L, VER);
         verify(logRepository).save(any());
     }
 
     @Test
-    @DisplayName("mixedTotalTooHighAndDeductedTooLow_repairsBoth")
-    void mixedTotalTooHighAndDeductedTooLow_repairsBoth() {
+    @DisplayName("mixedTotalTooHighAndDeductedTooLow_repairsBothAtomically")
+    void mixedTotalTooHighAndDeductedTooLow_repairsBothAtomically() {
         seedOneSku();
         when(reconciliationPort.snapshot(SHOP, SKU))
                 .thenReturn(snap(100, 0, 5, 150L, 2L)); // excess 50, deficit 3
-        when(deductGateway.decreaseTotal(SHOP, SKU, 50L, VER)).thenReturn(true);
-        when(deductGateway.increaseDeducted(SHOP, SKU, 3L, VER)).thenReturn(true);
+        when(deductGateway.repairOversell(SHOP, SKU, -50L, 3L, VER)).thenReturn(true);
         job.reconcile();
-        verify(deductGateway).decreaseTotal(SHOP, SKU, 50L, VER);
-        verify(deductGateway).increaseDeducted(SHOP, SKU, 3L, VER);
+        verify(deductGateway).repairOversell(SHOP, SKU, -50L, 3L, VER); // 一次 CAS 同时修复
         verify(logRepository).save(any());
     }
 
@@ -105,8 +101,7 @@ class InventoryReconcileJobTest {
         when(reconciliationPort.snapshot(SHOP, SKU))
                 .thenReturn(snap(100, 0, 2, 80L, 9L)); // totalTooLow + deductedTooHigh -> lost-sales
         job.reconcile();
-        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong(), anyLong());
-        verify(deductGateway, never()).increaseDeducted(any(), any(), anyLong(), anyLong());
+        verify(deductGateway, never()).repairOversell(any(), any(), anyLong(), anyLong(), anyLong());
         verify(logRepository).save(any());
     }
 
@@ -117,7 +112,7 @@ class InventoryReconcileJobTest {
         when(reconciliationPort.snapshot(SHOP, SKU))
                 .thenReturn(snap(-1, 0, 0, 100L, 0L));
         job.reconcile();
-        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong(), anyLong());
+        verify(deductGateway, never()).repairOversell(any(), any(), anyLong(), anyLong(), anyLong());
         verify(logRepository).save(any());
     }
 
@@ -130,8 +125,7 @@ class InventoryReconcileJobTest {
                 .thenReturn(snap(100, 0, 0, 110L, 120L));
         job.reconcile();
         // negativeAvailable is checked before oversell repair -> no repair
-        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong(), anyLong());
-        verify(deductGateway, never()).increaseDeducted(any(), any(), anyLong(), anyLong());
+        verify(deductGateway, never()).repairOversell(any(), any(), anyLong(), anyLong(), anyLong());
         verify(logRepository).save(any());
     }
 
@@ -143,8 +137,7 @@ class InventoryReconcileJobTest {
         when(reconciliationPort.snapshot(SHOP, SKU))
                 .thenReturn(snap(100, 5, 0, 105L, 5L));
         job.reconcile();
-        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong(), anyLong());
-        verify(deductGateway, never()).increaseDeducted(any(), any(), anyLong(), anyLong());
+        verify(deductGateway, never()).repairOversell(any(), any(), anyLong(), anyLong(), anyLong());
         verify(logRepository, never()).save(any());
     }
 
@@ -191,7 +184,7 @@ class InventoryReconcileJobTest {
     void casSkip_totalTooHigh_logsSkippedNotMetric() {
         when(reconciliationPort.snapshot(SHOP, SKU))
                 .thenReturn(snap(100, 0, 0, 150L, 0L)); // excess 50
-        when(deductGateway.decreaseTotal(SHOP, SKU, 50L, VER)).thenReturn(false);  // CAS 跳过
+        when(deductGateway.repairOversell(SHOP, SKU, -50L, 0L, VER)).thenReturn(false);  // CAS 跳过
 
         boolean acted = job.reconcileOne(SHOP, SKU);
 
@@ -201,20 +194,19 @@ class InventoryReconcileJobTest {
     }
 
     @Test
-    @DisplayName("partialSuccess_totalApplied_deductedSkipped_logsRepairedWithTotalOnly")
-    void partialSuccess_totalApplied_deductedSkipped_logsRepairedWithTotalOnly() {
-        // total 过高 + deducted 过低
+    @DisplayName("repair_versionMismatch_skipsBoth_logsCasSkipped")
+    void repair_versionMismatch_skipsBoth_logsCasSkipped() {
+        // total 过高 + deducted 过低；版本被并发业务 bump -> 整体 CAS 跳过（无部分修复）
         when(reconciliationPort.snapshot(SHOP, SKU))
                 .thenReturn(snap(100, 0, 10L, 120L, 0L));  // excess 20, deficit 10
-        when(deductGateway.decreaseTotal(SHOP, SKU, 20L, VER)).thenReturn(true);
-        when(deductGateway.increaseDeducted(SHOP, SKU, 10L, VER)).thenReturn(false);  // CAS 跳过
+        when(deductGateway.repairOversell(SHOP, SKU, -20L, 10L, VER)).thenReturn(false);
 
         boolean acted = job.reconcileOne(SHOP, SKU);
 
         assertThat(acted).isTrue();
-        verify(metricsPort).reconcileRepaired();  // 有修复 -> 计 metric
-        verify(logRepository).save(argThat(e -> "REPAIRED_OVERSELL".equals(e.getAction())
-                && "TOTAL".equals(e.getRepairedFields())));
+        verify(metricsPort, never()).reconcileRepaired();  // 整体跳过 -> 不计修复 metric
+        verify(logRepository).save(argThat(e -> "CAS_SKIPPED".equals(e.getAction())
+                && "TOTAL,DEDUCTED".equals(e.getRepairedFields())));
     }
 
     @Test
@@ -229,7 +221,7 @@ class InventoryReconcileJobTest {
         // 缺失 version -> 权威初始化补建（Fix 1），不再"跳过且不写日志"
         assertThat(acted).isTrue();
         verify(deductGateway).initState(SHOP, SKU, 100L, 0L);
-        verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong(), anyLong());
+        verify(deductGateway, never()).repairOversell(any(), any(), anyLong(), anyLong(), anyLong());
         verify(logRepository).save(argThat(e -> "INITIALIZED_KEYS".equals(e.getAction())));
     }
 

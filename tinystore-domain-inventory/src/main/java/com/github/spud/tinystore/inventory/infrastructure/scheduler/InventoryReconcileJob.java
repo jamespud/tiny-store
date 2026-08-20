@@ -108,27 +108,26 @@ public class InventoryReconcileJob {
         }
 
         List<String> repaired = new ArrayList<>();
-        List<String> skipped = new ArrayList<>();
-        if (snap.isTotalTooHigh() && snap.getRedisTotal() != null && snap.getRedisVersion() != null) {
-            boolean applied = deductGateway.decreaseTotal(shopId, skuId,
-                    snap.getRedisTotal() - snap.getTargetTotal(), snap.getRedisVersion());
-            if (applied) repaired.add("TOTAL");
-            else skipped.add("TOTAL");
+        // 双字段原子修复：仅超卖方向（total 过高 / deducted 过低），一次 CAS 同时应用，无部分修复
+        long totalDelta = 0;
+        long deductedDelta = 0;
+        if (snap.isTotalTooHigh()) {
+            totalDelta = snap.getTargetTotal() - snap.getRedisTotal(); // <0：下调 total
+            repaired.add("TOTAL");
         }
-        if (snap.isDeductedTooLow() && snap.getRedisDeducted() != null && snap.getRedisVersion() != null) {
-            boolean applied = deductGateway.increaseDeducted(shopId, skuId,
-                    snap.getTargetDeducted() - snap.getRedisDeducted(), snap.getRedisVersion());
-            if (applied) repaired.add("DEDUCTED");
-            else skipped.add("DEDUCTED");
+        if (snap.isDeductedTooLow()) {
+            deductedDelta = snap.getTargetDeducted() - snap.getRedisDeducted(); // >0：上调 deducted
+            repaired.add("DEDUCTED");
         }
         if (!repaired.isEmpty()) {
-            metricsPort.reconcileRepaired();
-            saveLog(shopId, skuId, snap, "REPAIRED_OVERSELL", String.join(",", repaired));
-            return true;
-        }
-        if (!skipped.isEmpty()) {
-            // CAS 跳过：不计修复 metric，下轮重新快照评估
-            saveLog(shopId, skuId, snap, "CAS_SKIPPED", String.join(",", skipped));
+            boolean applied = deductGateway.repairOversell(shopId, skuId, totalDelta, deductedDelta, snap.getRedisVersion());
+            if (applied) {
+                metricsPort.reconcileRepaired();
+                saveLog(shopId, skuId, snap, "REPAIRED_OVERSELL", String.join(",", repaired));
+                return true;
+            }
+            // CAS 跳过（version 已被并发业务 bump）：不计修复 metric，下轮重新快照评估
+            saveLog(shopId, skuId, snap, "CAS_SKIPPED", String.join(",", repaired));
             return true;
         }
 
