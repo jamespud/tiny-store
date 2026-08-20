@@ -94,6 +94,17 @@ class InventoryReconcileJobIT {
                 .setExpireAt(OffsetDateTime.now().plusMinutes(30)).setTradeId("t").setOperationId("op"));
     }
 
+    /**
+     * Reconcile logs scoped to this test's (SHOP, SKU).
+     * The shared reused-DB environment may contain other seeded SKUs (e.g. V5 SHOP_A/SHOP_B)
+     * that the reconcile job legitimately also processes; assertions must not count them.
+     */
+    private List<InventoryReconcileLogEntity> logsForTestSku() {
+        return logRepository.findAll().stream()
+                .filter(e -> SHOP.equals(e.getShopId()) && SKU.equals(e.getSkuId()))
+                .toList();
+    }
+
     @Test
     @DisplayName("oversell_totalTooHigh_repairedByDecrby")
     void oversell_totalTooHigh_repairedByDecrby() {
@@ -105,7 +116,7 @@ class InventoryReconcileJobIT {
         job.reconcile();
 
         assertThat(redisTemplate.opsForValue().get(TOTAL)).isEqualTo("100"); // DECRBY 50
-        List<InventoryReconcileLogEntity> rows = logRepository.findAll();
+        List<InventoryReconcileLogEntity> rows = logsForTestSku();
         assertThat(rows).hasSize(1);
         assertThat(rows.get(0).getAction()).isEqualTo("REPAIRED_OVERSELL");
         assertThat(rows.get(0).getRepairedFields()).isEqualTo("TOTAL");
@@ -123,7 +134,7 @@ class InventoryReconcileJobIT {
         job.reconcile();
 
         assertThat(redisTemplate.opsForValue().get(DEDUCTED)).isEqualTo("5"); // INCRBY 3
-        List<InventoryReconcileLogEntity> rows = logRepository.findAll();
+        List<InventoryReconcileLogEntity> rows = logsForTestSku();
         assertThat(rows).hasSize(1);
         assertThat(rows.get(0).getAction()).isEqualTo("REPAIRED_OVERSELL");
         assertThat(rows.get(0).getRepairedFields()).isEqualTo("DEDUCTED");
@@ -140,7 +151,7 @@ class InventoryReconcileJobIT {
         job.reconcile();
 
         assertThat(redisTemplate.opsForValue().get(TOTAL)).isEqualTo("80"); // unchanged
-        List<InventoryReconcileLogEntity> rows = logRepository.findAll();
+        List<InventoryReconcileLogEntity> rows = logsForTestSku();
         assertThat(rows).hasSize(1);
         assertThat(rows.get(0).getAction()).isEqualTo("ALERT_LOST_SALES");
     }
@@ -155,7 +166,7 @@ class InventoryReconcileJobIT {
 
         job.reconcile();
 
-        assertThat(logRepository.findAll()).isEmpty();
+        assertThat(logsForTestSku()).isEmpty();
     }
 
     // ===== Task 4: multi-instance concurrency (version-CAS idempotency) =====
@@ -270,7 +281,7 @@ class InventoryReconcileJobIT {
         assertThat(redisTemplate.opsForValue().get(TOTAL)).isEqualTo("100");
         assertThat(redisTemplate.opsForValue().get(DEDUCTED)).isEqualTo("5");
         assertThat(redisTemplate.opsForValue().get(VERSION)).isEqualTo("0");
-        List<InventoryReconcileLogEntity> rows = logRepository.findAll();
+        List<InventoryReconcileLogEntity> rows = logsForTestSku();
         assertThat(rows).hasSize(1);
         assertThat(rows.get(0).getAction()).isEqualTo("INITIALIZED_KEYS");
     }
