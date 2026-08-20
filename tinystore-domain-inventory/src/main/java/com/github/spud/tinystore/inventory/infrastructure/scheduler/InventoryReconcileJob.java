@@ -10,6 +10,8 @@ import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.reposi
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.repository.JpaInventoryStockRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -49,16 +51,25 @@ public class InventoryReconcileJob {
 
     @Scheduled(fixedDelayString = "${inventory.reconciliation.fixed-delay:PT10M}")
     public void reconcile() {
-        List<InventoryStockEntity> stocks = stockRepository.findAll();
+        // Paged scan: bound memory for large catalogs (no full-table in-memory load).
         int actions = 0;
-        for (InventoryStockEntity stock : stocks) {
-            try {
-                if (reconcileOne(stock.getShopId(), stock.getSkuId())) {
-                    actions++;
+        int page = 0;
+        int pageSize = 500;
+        while (true) {
+            Page<InventoryStockEntity> stocks = stockRepository.findAll(PageRequest.of(page, pageSize));
+            for (InventoryStockEntity stock : stocks) {
+                try {
+                    if (reconcileOne(stock.getShopId(), stock.getSkuId())) {
+                        actions++;
+                    }
+                } catch (Exception e) {
+                    log.error("Reconcile failed for shopId={}, skuId={}", stock.getShopId(), stock.getSkuId(), e);
                 }
-            } catch (Exception e) {
-                log.error("Reconcile failed for shopId={}, skuId={}", stock.getShopId(), stock.getSkuId(), e);
             }
+            if (stocks.isLast()) {
+                break;
+            }
+            page++;
         }
         if (actions > 0) {
             log.info("Reconcile pass: {} actions logged", actions);

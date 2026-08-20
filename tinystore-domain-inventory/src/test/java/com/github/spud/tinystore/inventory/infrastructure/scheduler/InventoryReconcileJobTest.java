@@ -12,6 +12,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -36,8 +40,8 @@ class InventoryReconcileJobTest {
     private static final long VER = 5L;  // 默认 snapshot version
 
     private void seedOneSku() {
-        when(stockRepository.findAll()).thenReturn(List.of(
-                new InventoryStockEntity().setShopId(SHOP).setSkuId(SKU).setTotalQuantity(100).setReservedQuantity(0)));
+        when(stockRepository.findAll(any(Pageable.class))).thenReturn(new PageImpl<>(List.of(
+                new InventoryStockEntity().setShopId(SHOP).setSkuId(SKU).setTotalQuantity(100).setReservedQuantity(0))));
     }
 
     private ReconciliationSnapshot snap(long dbTotal, long dbConfirmed, long dbPreDeducted,
@@ -147,13 +151,37 @@ class InventoryReconcileJobTest {
     @Test
     @DisplayName("reconcile_continuesOnPerSkuException")
     void reconcile_continuesOnPerSkuException() {
-        when(stockRepository.findAll()).thenReturn(List.of(
+        when(stockRepository.findAll(any(Pageable.class))).thenReturn(new PageImpl<>(List.of(
                 new InventoryStockEntity().setShopId(SHOP).setSkuId("bad").setTotalQuantity(100).setReservedQuantity(0),
-                new InventoryStockEntity().setShopId(SHOP).setSkuId("good").setTotalQuantity(100).setReservedQuantity(0)));
+                new InventoryStockEntity().setShopId(SHOP).setSkuId("good").setTotalQuantity(100).setReservedQuantity(0))));
         when(reconciliationPort.snapshot(SHOP, "bad")).thenThrow(new RuntimeException("redis down"));
         when(reconciliationPort.snapshot(SHOP, "good")).thenReturn(snap(100, 0, 0, 100L, 0L)); // clean
         job.reconcile(); // must not propagate the "bad" exception
         verify(reconciliationPort).snapshot(SHOP, "good"); // second SKU still processed
+    }
+
+    @Test
+    @DisplayName("reconcile_iteratesAllPages")
+    void reconcile_iteratesAllPages() {
+        InventoryStockEntity skuA = new InventoryStockEntity().setShopId(SHOP).setSkuId("sku-A")
+                .setTotalQuantity(100).setReservedQuantity(0);
+        InventoryStockEntity skuB = new InventoryStockEntity().setShopId(SHOP).setSkuId("sku-B")
+                .setTotalQuantity(100).setReservedQuantity(0);
+        InventoryStockEntity skuC = new InventoryStockEntity().setShopId(SHOP).setSkuId("sku-C")
+                .setTotalQuantity(100).setReservedQuantity(0);
+        PageRequest firstReq = PageRequest.of(0, 2);
+        PageRequest secondReq = PageRequest.of(1, 2);
+        // Job pages with its own pageSize; mock returns page1 then page2 in sequence.
+        when(stockRepository.findAll(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(skuA, skuB), firstReq, 3),
+                            new PageImpl<>(List.of(skuC), secondReq, 3));
+        when(reconciliationPort.snapshot(eq(SHOP), anyString()))
+                .thenReturn(snap(100, 0, 0, 100L, 0L)); // all clean
+        job.reconcile();
+        verify(reconciliationPort).snapshot(SHOP, "sku-A");
+        verify(reconciliationPort).snapshot(SHOP, "sku-B");
+        verify(reconciliationPort).snapshot(SHOP, "sku-C");
+        verify(stockRepository, times(2)).findAll(any(Pageable.class));
     }
 
     // ===== Task 3: version-CAS skip / partial / version-null =====
