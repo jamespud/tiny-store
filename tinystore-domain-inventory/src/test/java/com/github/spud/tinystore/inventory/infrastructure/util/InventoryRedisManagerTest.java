@@ -237,4 +237,44 @@ class InventoryRedisManagerTest {
         assertThat(applied).isFalse();
         assertThat(get("inventory:deducted:shop:sku")).isEqualTo("0");
     }
+
+    @Test
+    @DisplayName("initStateV2 all keys missing: SETNX authoritative total/deducted/version, return true")
+    void initStateV2_allMissing_shouldInitialize() {
+        boolean applied = redisManager.initStateV2("shop", "sku", 100L, 5L);
+
+        assertThat(applied).isTrue();
+        assertThat(get("inventory:total:shop:sku")).isEqualTo("100");
+        assertThat(get("inventory:deducted:shop:sku")).isEqualTo("5");
+        assertThat(get("inventory:version:shop:sku")).isEqualTo("0");
+    }
+
+    @Test
+    @DisplayName("initStateV2 keys already present: never clobber, return false")
+    void initStateV2_keysPresent_shouldNoop() {
+        set("inventory:total:shop:sku", "95");
+        set("inventory:deducted:shop:sku", "5");
+        set("inventory:version:shop:sku", "3");
+
+        boolean applied = redisManager.initStateV2("shop", "sku", 100L, 5L);
+
+        assertThat(applied).isFalse();
+        assertThat(get("inventory:total:shop:sku")).isEqualTo("95"); // 不覆盖已存在值
+        assertThat(get("inventory:deducted:shop:sku")).isEqualTo("5");
+        assertThat(get("inventory:version:shop:sku")).isEqualTo("3");
+    }
+
+    @Test
+    @DisplayName("initStateV2 partial keys missing: only init missing ones, keep existing")
+    void initStateV2_partialMissing_shouldInitMissingOnly() {
+        set("inventory:total:shop:sku", "100");
+        // deducted + version 缺失（Redis flush 后部分重建场景）
+
+        boolean applied = redisManager.initStateV2("shop", "sku", 100L, 5L);
+
+        assertThat(applied).isTrue();
+        assertThat(get("inventory:total:shop:sku")).isEqualTo("100"); // 不覆盖
+        assertThat(get("inventory:deducted:shop:sku")).isEqualTo("5");
+        assertThat(get("inventory:version:shop:sku")).isEqualTo("0");
+    }
 }

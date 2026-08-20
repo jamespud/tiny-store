@@ -2,6 +2,7 @@ package com.github.spud.tinystore.inventory.infrastructure.adapter;
 
 import com.github.spud.tinystore.inventory.domain.port.InventoryDeductGateway;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.entity.InventoryStockEntity;
+import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.repository.JpaInventoryReservationRepository;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.repository.JpaInventoryStockRepository;
 import com.github.spud.tinystore.inventory.infrastructure.util.InventoryRedisManager;
 import lombok.extern.slf4j.Slf4j;
@@ -22,13 +23,16 @@ public class RedisInventoryDeductGateway implements InventoryDeductGateway {
 
     private final InventoryRedisManager redisManager;
     private final JpaInventoryStockRepository stockRepository;
+    private final JpaInventoryReservationRepository reservationRepository;
     private final RedisTemplate<String, Object> redisTemplate;
 
     public RedisInventoryDeductGateway(InventoryRedisManager redisManager,
                                        JpaInventoryStockRepository stockRepository,
+                                       JpaInventoryReservationRepository reservationRepository,
                                        RedisTemplate<String, Object> redisTemplate) {
         this.redisManager = redisManager;
         this.stockRepository = stockRepository;
+        this.reservationRepository = reservationRepository;
         this.redisTemplate = redisTemplate;
     }
 
@@ -52,24 +56,14 @@ public class RedisInventoryDeductGateway implements InventoryDeductGateway {
         String totalKey = redisManager.getTotalKeyV2(shopId, skuId);
         Boolean exists = redisTemplate.hasKey(totalKey);
         if (!Boolean.TRUE.equals(exists)) {
-            // Key absent: initialize to authoritative DB total (already post-adjustment).
+            // Key absent: initialize to authoritative Redis total (dbTotal + confirmed, already post-adjustment).
             // Do NOT then INCRBY - that would double-count the delta.
-            long dbTotal = 0;
-            try {
-                Optional<InventoryStockEntity> stockOpt = stockRepository.findByShopIdAndSkuId(shopId, skuId);
-                if (stockOpt.isPresent()) {
-                    dbTotal = stockOpt.get().getTotalQuantity();
-                } else {
-                    log.warn("DB inventory_stock not found for addTotal init: shopId={}, skuId={}, using 0", shopId, skuId);
-                }
-            } catch (Exception e) {
-                log.error("Failed to load totalQuantity from DB for addTotal init: shopId={}, skuId={}", shopId, skuId, e);
-            }
-            Boolean set = redisTemplate.opsForValue().setIfAbsent(totalKey, String.valueOf(dbTotal));
+            long authoritativeTotal = authoritativeRedisTotal(shopId, skuId);
+            Boolean set = redisTemplate.opsForValue().setIfAbsent(totalKey, String.valueOf(authoritativeTotal));
             if (Boolean.TRUE.equals(set)) {
                 String versionKey = redisManager.getVersionKeyV2(shopId, skuId);
                 redisTemplate.opsForValue().setIfAbsent(versionKey, "0");
-                log.info("Initialized Redis total key on adjust: {}={}", totalKey, dbTotal);
+                log.info("Initialized Redis total key on adjust: {}={}", totalKey, authoritativeTotal);
                 return true;
             }
             // Race: another caller set it concurrently. Fall through to INCRBY.
@@ -88,7 +82,41 @@ public class RedisInventoryDeductGateway implements InventoryDeductGateway {
         return redisManager.increaseDeductedV2(shopId, skuId, amount, expectVersion);
     }
 
+    @Override
+    public boolean initState(String shopId, String skuId, long targetTotal, long targetDeducted) {
+        return redisManager.initStateV2(shopId, skuId, targetTotal, targetDeducted);
+    }
+
     // ========================== 内部方法 ==========================
+
+
+    /**
+     * Authoritative Redis total for a fresh key: DB remaining total + CONFIRMED quantity.
+     * CONFIRMED reservations consumed stock (deductConfirmed decrements total_quantity) but
+     * never decremented Redis, so a re-initialized Redis total must include them
+     * (matches ReconciliationSnapshot.getTargetTotal()).
+     */
+    private long authoritativeRedisTotal(String shopId, String skuId) {
+        long confirmed = 0;
+        try {
+            confirmed = reservationRepository.sumQuantityByShopSkuStatus(shopId, skuId, "CONFIRMED");
+        } catch (Exception e) {
+            log.error("Failed to load CONFIRMED quantity for authoritative total: shopId={}, skuId={}",
+                    shopId, skuId, e);
+        }
+        long dbTotal = 0;
+        try {
+            Optional<InventoryStockEntity> stockOpt = stockRepository.findByShopIdAndSkuId(shopId, skuId);
+            if (stockOpt.isPresent()) {
+                dbTotal = stockOpt.get().getTotalQuantity();
+            } else {
+                log.warn("DB inventory_stock not found for shopId={}, skuId={}, setting total=0", shopId, skuId);
+            }
+        } catch (Exception e) {
+            log.error("Failed to load totalQuantity from DB for shopId={}, skuId={}", shopId, skuId, e);
+        }
+        return dbTotal + confirmed;
+    }
 
     /**
      * 确保 V2 total key 已初始化。
@@ -102,25 +130,15 @@ public class RedisInventoryDeductGateway implements InventoryDeductGateway {
             return;
         }
 
-        long totalQty = 0;
-        try {
-            Optional<InventoryStockEntity> stockOpt = stockRepository.findByShopIdAndSkuId(shopId, skuId);
-            if (stockOpt.isPresent()) {
-                totalQty = stockOpt.get().getTotalQuantity();
-            } else {
-                log.warn("DB inventory_stock not found for shopId={}, skuId={}, setting total=0", shopId, skuId);
-            }
-        } catch (Exception e) {
-            log.error("Failed to load totalQuantity from DB for shopId={}, skuId={}", shopId, skuId, e);
-        }
+        long authoritativeTotal = authoritativeRedisTotal(shopId, skuId);
 
         // SETNX: 仅在 key 不存在时设置（避免并发覆盖）
-        Boolean set = redisTemplate.opsForValue().setIfAbsent(totalKey, String.valueOf(totalQty));
+        Boolean set = redisTemplate.opsForValue().setIfAbsent(totalKey, String.valueOf(authoritativeTotal));
         if (Boolean.TRUE.equals(set)) {
             // version 与 total 同生（SETNX 0，不覆盖已存在的 version）
             String versionKey = redisManager.getVersionKeyV2(shopId, skuId);
             redisTemplate.opsForValue().setIfAbsent(versionKey, "0");
-            log.info("Initialized Redis total key: {}={}", totalKey, totalQty);
+            log.info("Initialized Redis total key: {}={}", totalKey, authoritativeTotal);
         }
     }
 }

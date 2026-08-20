@@ -85,6 +85,21 @@ public class InventoryReconcileJob {
             saveLog(shopId, skuId, snap, "ALERT_DB_OVERSOLD", null);
             return true;
         }
+
+        // Missing V2 keys (e.g., Redis flush/restart): (re)initialize from authoritative DB targets.
+        // SETNX semantics — never clobbers an existing key; a concurrent business write wins (no-op).
+        if (snap.getRedisTotal() == null || snap.getRedisDeducted() == null || snap.getRedisVersion() == null) {
+            boolean applied = deductGateway.initState(shopId, skuId, snap.getTargetTotal(), snap.getTargetDeducted());
+            if (applied) {
+                metricsPort.reconcileRepaired();
+                saveLog(shopId, skuId, snap, "INITIALIZED_KEYS", "TOTAL,DEDUCTED,VERSION");
+                return true;
+            }
+            // 并发其它实例/业务已补建：本轮无动作，下轮重新评估
+            saveLog(shopId, skuId, snap, "CAS_SKIPPED", "INIT");
+            return true;
+        }
+
         if (snap.isNegativeAvailable()) {
             // Inconsistent state (deducted > total); conservative repair would worsen over-reject. Alert only.
             metricsPort.reconcileAlert();

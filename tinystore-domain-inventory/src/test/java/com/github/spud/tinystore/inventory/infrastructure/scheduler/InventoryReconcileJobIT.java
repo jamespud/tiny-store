@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.inventory.infrastructure.scheduler;
 
 import com.github.spud.tinystore.inventory.InventoryApplication;
+import com.github.spud.tinystore.inventory.domain.port.InventoryDeductGateway;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.entity.InventoryReconcileLogEntity;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.entity.InventoryReservationEntity;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.entity.InventoryStockEntity;
@@ -25,6 +26,7 @@ import org.testcontainers.utility.DockerImageName;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -59,6 +61,7 @@ class InventoryReconcileJobIT {
     }
 
     @Autowired private InventoryReconcileJob job;
+    @Autowired private InventoryDeductGateway deductGateway;
     @Autowired private JpaInventoryStockRepository stockRepository;
     @Autowired private JpaInventoryReservationRepository reservationRepository;
     @Autowired private JpaInventoryReconcileLogRepository logRepository;
@@ -96,6 +99,7 @@ class InventoryReconcileJobIT {
     void oversell_totalTooHigh_repairedByDecrby() {
         seedStock(100); // targetTotal = 100 + 0 = 100
         redisTemplate.opsForValue().set(TOTAL, "150"); // too high -> oversell risk
+        redisTemplate.opsForValue().set(DEDUCTED, "0");
         redisTemplate.opsForValue().set(VERSION, "0"); // version key 必须存在（CAS 修复前置）
 
         job.reconcile();
@@ -130,6 +134,8 @@ class InventoryReconcileJobIT {
     void lostSales_totalTooLow_alertNoRepair() {
         seedStock(100); // targetTotal = 100
         redisTemplate.opsForValue().set(TOTAL, "80"); // too low -> lost-sales
+        redisTemplate.opsForValue().set(DEDUCTED, "0");
+        redisTemplate.opsForValue().set(VERSION, "0");
 
         job.reconcile();
 
@@ -145,6 +151,7 @@ class InventoryReconcileJobIT {
         seedStock(100); // targetTotal=100, targetDeducted=0
         redisTemplate.opsForValue().set(TOTAL, "100");
         redisTemplate.opsForValue().set(DEDUCTED, "0"); // in sync
+        redisTemplate.opsForValue().set(VERSION, "0");
 
         job.reconcile();
 
@@ -220,5 +227,51 @@ class InventoryReconcileJobIT {
         long finalVersion = Long.parseLong(redisTemplate.opsForValue().get(VERSION));
         assertThat(finalVersion).isBetween(6L, 7L);
         // 关键不变量：无丢更新（version 与写次数一致）
+    }
+
+    @Test
+    @DisplayName("flushRecovery_totalKeyReinitializedWithConfirmed_afterRedisFlush")
+    void flushRecovery_totalKeyReinitializedWithConfirmed_afterRedisFlush() {
+        // 100 初始，5 已 CONFIRMED -> DB total_quantity=95, confirmed=5
+        seedStock(95);
+        reservationRepository.save(new InventoryReservationEntity()
+                .setReservationId("CFM-" + System.nanoTime())
+                .setShopId(SHOP).setSkuId(SKU).setQuantity(5).setStatus("CONFIRMED")
+                .setExpireAt(OffsetDateTime.now().plusMinutes(30)).setTradeId("t").setOperationId("op"));
+        // 模拟 Redis flush：删除所有库存键
+        var k = redisTemplate.keys("inventory:*");
+        if (k != null && !k.isEmpty()) redisTemplate.delete(k);
+
+        // 业务路径触发重建：preDeduct -> ensureTotalKeyInitialized
+        Optional<String> member = deductGateway.preDeduct(SHOP, SKU, 10, "order-flush-recovery");
+
+        assertThat(member).isPresent();
+        // 权威 Redis total 必须包含 confirmed：dbTotal(95) + confirmed(5) = 100
+        assertThat(redisTemplate.opsForValue().get(TOTAL)).isEqualTo("100");
+        // preDeduct bump 后 version = init(0) + 1
+        assertThat(redisTemplate.opsForValue().get(VERSION)).isEqualTo("1");
+    }
+
+    @Test
+    @DisplayName("missingKeys_reconcileInitializesAuthoritativeState")
+    void missingKeys_reconcileInitializesAuthoritativeState() {
+        // 95 remaining + 5 confirmed -> authoritative total=100, deducted=5
+        seedStock(95);
+        reservationRepository.save(new InventoryReservationEntity()
+                .setReservationId("CFM2-" + System.nanoTime())
+                .setShopId(SHOP).setSkuId(SKU).setQuantity(5).setStatus("CONFIRMED")
+                .setExpireAt(OffsetDateTime.now().plusMinutes(30)).setTradeId("t").setOperationId("op"));
+        // 模拟 Redis flush
+        var k = redisTemplate.keys("inventory:*");
+        if (k != null && !k.isEmpty()) redisTemplate.delete(k);
+
+        job.reconcile();
+
+        assertThat(redisTemplate.opsForValue().get(TOTAL)).isEqualTo("100");
+        assertThat(redisTemplate.opsForValue().get(DEDUCTED)).isEqualTo("5");
+        assertThat(redisTemplate.opsForValue().get(VERSION)).isEqualTo("0");
+        List<InventoryReconcileLogEntity> rows = logRepository.findAll();
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).getAction()).isEqualTo("INITIALIZED_KEYS");
     }
 }
