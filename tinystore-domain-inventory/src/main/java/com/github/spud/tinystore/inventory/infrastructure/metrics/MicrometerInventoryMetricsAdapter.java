@@ -20,6 +20,7 @@ public class MicrometerInventoryMetricsAdapter implements InventoryMetricsPort {
     private final Counter adjustCount;
     private final Counter reconcileRepair;
     private final Counter reconcileAlert;
+    private final Counter reconcileLogFail;
 
     public MicrometerInventoryMetricsAdapter(MeterRegistry registry) {
         this.reserveSuccess = Counter.builder("tinystore.inventory.reserve.success.total").register(registry);
@@ -30,6 +31,7 @@ public class MicrometerInventoryMetricsAdapter implements InventoryMetricsPort {
         this.adjustCount = Counter.builder("tinystore.inventory.adjust.total").register(registry);
         this.reconcileRepair = Counter.builder("tinystore.inventory.reconcile.repair.total").register(registry);
         this.reconcileAlert = Counter.builder("tinystore.inventory.reconcile.alert.total").register(registry);
+        this.reconcileLogFail = Counter.builder("tinystore.inventory.reconcile.log.failed.total").register(registry);
     }
 
     @Override public void reserveSuccess() { reserveSuccess.increment(); }
@@ -40,4 +42,5 @@ public class MicrometerInventoryMetricsAdapter implements InventoryMetricsPort {
     @Override public void adjustSuccess() { adjustCount.increment(); }
     @Override public void reconcileRepaired() { reconcileRepair.increment(); }
     @Override public void reconcileAlert() { reconcileAlert.increment(); }
+    @Override public void reconcileLogFailed() { reconcileLogFail.increment(); }
 }

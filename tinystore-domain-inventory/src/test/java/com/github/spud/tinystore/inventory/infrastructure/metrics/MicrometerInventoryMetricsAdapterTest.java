@@ -65,4 +65,11 @@ class MicrometerInventoryMetricsAdapterTest {
         assertThat(registry.find("tinystore.inventory.reconcile.repair.total").counter().count()).isEqualTo(1.0);
         assertThat(registry.find("tinystore.inventory.reconcile.alert.total").counter().count()).isEqualTo(1.0);
     }
+
+    @Test
+    @DisplayName("reconcileLogFailed_incrementsCounter")
+    void reconcileLogFailed_incrementsCounter() {
+        adapter.reconcileLogFailed();
+        assertThat(registry.find("tinystore.inventory.reconcile.log.failed.total").counter().count()).isEqualTo(1.0);
+    }
 }
