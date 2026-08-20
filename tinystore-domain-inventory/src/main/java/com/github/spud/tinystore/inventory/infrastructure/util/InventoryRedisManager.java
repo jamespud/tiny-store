@@ -301,6 +301,34 @@ public class InventoryRedisManager {
             return 1
             """;
 
+    /**
+     * 脚本9：V2 权威状态初始化（reconcile 补建缺失键，SETNX 语义）。
+     * 仅初始化缺失的 total / deducted / version；已存在的键绝不覆盖（幂等、多实例安全）。
+     * version 缺失时初始化为 0（与"尚无写入"语义一致）。
+     * @return 1 = 至少补建了一个键，0 = 所有键已存在
+     */
+    private static final String INIT_V2_STATE_SCRIPT = """
+            local total_key = KEYS[1]
+            local deducted_key = KEYS[2]
+            local version_key = KEYS[3]
+            local total = tonumber(ARGV[1]) or 0
+            local deducted = tonumber(ARGV[2]) or 0
+            local applied = 0
+            if redis.call('exists', total_key) == 0 then
+                redis.call('set', total_key, total)
+                applied = 1
+            end
+            if redis.call('exists', deducted_key) == 0 then
+                redis.call('set', deducted_key, deducted)
+                applied = 1
+            end
+            if redis.call('exists', version_key) == 0 then
+                redis.call('set', version_key, 0)
+                applied = 1
+            end
+            return applied
+            """;
+
     // ========================== 初始化（序列化配置） ==========================
     /**
      * 初始化RedisTemplate序列化器（避免key/value乱码）
@@ -709,6 +737,33 @@ public class InventoryRedisManager {
         }
     }
 
+
+    /**
+     * V2：权威状态初始化（reconcile 补建缺失键）。
+     * SETNX 语义：仅补建缺失的 total/deducted/version；已存在键不覆盖。
+     * 多实例/并发安全：并发业务写先建键则本调用 no-op（返回 false），由下轮对账评估。
+     *
+     * @return true 当至少补建了一个键
+     */
+    public boolean initStateV2(String shopId, String skuId, long targetTotal, long targetDeducted) {
+        Assert.hasText(shopId, "shopId不能为空");
+        Assert.hasText(skuId, "skuId不能为空");
+        String totalKey = String.format(KEY_V2_TOTAL, shopId, skuId);
+        String deductedKey = String.format(KEY_V2_DEDUCTED, shopId, skuId);
+        String versionKey = String.format(KEY_V2_VERSION, shopId, skuId);
+        List<String> keys = Arrays.asList(totalKey, deductedKey, versionKey);
+        try {
+            DefaultRedisScript<Long> script = new DefaultRedisScript<>(INIT_V2_STATE_SCRIPT, Long.class);
+            Long result = redisTemplate.execute(script, keys, String.valueOf(targetTotal), String.valueOf(targetDeducted));
+            boolean applied = result != null && result == 1L;
+            log.info("V2 initState: shopId={}, skuId={}, targetTotal={}, targetDeducted={}, applied={}",
+                    shopId, skuId, targetTotal, targetDeducted, applied);
+            return applied;
+        } catch (Exception e) {
+            log.error("V2 initState failed: shopId={}, skuId={}", shopId, skuId, e);
+            return false;
+        }
+    }
     @Data
     @AllArgsConstructor
     @NoArgsConstructor

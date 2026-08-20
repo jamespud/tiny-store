@@ -39,6 +39,16 @@ public interface InventoryDeductGateway {
     boolean addTotal(String shopId, String skuId, long delta);
 
     /**
+     * Atomically (re)initialize missing V2 keys from DB-authoritative targets (reconcile).
+     * SETNX semantics — never overwrites an existing key. version key initialized to 0 when absent.
+     *
+     * @param targetTotal     authoritative Redis total = dbTotal + confirmed
+     * @param targetDeducted  authoritative Redis deducted = dbPreDeducted + confirmed
+     * @return true if at least one key was newly created (an action was taken)
+     */
+    boolean initState(String shopId, String skuId, long targetTotal, long targetDeducted);
+
+    /**
      * DECRBY Redis total by amount (reconcile repair, conservative direction).
      * Additive: does not clobber concurrent addTotal INCR.
      * @return true if applied (version matched), false on CAS skip or Redis failure

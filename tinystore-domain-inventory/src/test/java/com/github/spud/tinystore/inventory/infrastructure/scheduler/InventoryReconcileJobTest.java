@@ -218,14 +218,50 @@ class InventoryReconcileJobTest {
     }
 
     @Test
-    @DisplayName("versionNull_skipsRepairEntirely_noLog")
-    void versionNull_skipsRepairEntirely_noLog() {
+    @DisplayName("versionMissing_initializesStateForCasRepair")
+    void versionMissing_initializesStateForCasRepair() {
         when(reconciliationPort.snapshot(SHOP, SKU))
                 .thenReturn(snap(100, 0, 0, 150L, 0L, null));  // version key 缺失
+        when(deductGateway.initState(SHOP, SKU, 100L, 0L)).thenReturn(true);
 
         boolean acted = job.reconcileOne(SHOP, SKU);
 
-        assertThat(acted).isFalse();  // 不尝试修复、不写日志
+        // 缺失 version -> 权威初始化补建（Fix 1），不再"跳过且不写日志"
+        assertThat(acted).isTrue();
+        verify(deductGateway).initState(SHOP, SKU, 100L, 0L);
         verify(deductGateway, never()).decreaseTotal(any(), any(), anyLong(), anyLong());
+        verify(logRepository).save(argThat(e -> "INITIALIZED_KEYS".equals(e.getAction())));
+    }
+
+    // ===== Fix 1: missing V2 keys (Redis flush recovery) -> authoritative init =====
+
+    @Test
+    @DisplayName("missingKeys_triggersInitStateAndLogsInitialized")
+    void missingKeys_triggersInitStateAndLogsInitialized() {
+        seedOneSku();
+        // confirmed=5, keys all absent (Redis flush): targetTotal=100, targetDeducted=5
+        when(reconciliationPort.snapshot(SHOP, SKU))
+                .thenReturn(snap(95, 5, 0, null, null, null));
+        when(deductGateway.initState(SHOP, SKU, 100L, 5L)).thenReturn(true);
+
+        job.reconcile();
+
+        verify(deductGateway).initState(SHOP, SKU, 100L, 5L);
+        verify(logRepository).save(argThat(e -> "INITIALIZED_KEYS".equals(e.getAction())));
+        verify(metricsPort).reconcileRepaired();
+    }
+
+    @Test
+    @DisplayName("missingKeys_concurrentInitWon_noRepairMetric")
+    void missingKeys_concurrentInitWon_noRepairMetric() {
+        seedOneSku();
+        when(reconciliationPort.snapshot(SHOP, SKU))
+                .thenReturn(snap(100, 0, 0, null, null, null));
+        when(deductGateway.initState(SHOP, SKU, 100L, 0L)).thenReturn(false); // 并发已建
+
+        job.reconcile();
+
+        verify(deductGateway).initState(SHOP, SKU, 100L, 0L);
+        verify(metricsPort, never()).reconcileRepaired();
     }
 }
