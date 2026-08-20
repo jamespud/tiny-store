@@ -49,16 +49,13 @@ public interface InventoryDeductGateway {
     boolean initState(String shopId, String skuId, long targetTotal, long targetDeducted);
 
     /**
-     * DECRBY Redis total by amount (reconcile repair, conservative direction).
-     * Additive: does not clobber concurrent addTotal INCR.
+     * Atomic dual-field oversell repair (reconcile, conservative direction).
+     * One version-CAS applies BOTH totalDelta (<=0, lower total) and deductedDelta (>=0, raise
+     * deducted) in a single Lua script — no partial repair, idempotent, multi-instance safe.
+     *
+     * @param totalDelta    &lt;=0: totalTooHigh excess to remove, else 0
+     * @param deductedDelta &gt;=0: deductedTooLow deficit to add, else 0
      * @return true if applied (version matched), false on CAS skip or Redis failure
      */
-    boolean decreaseTotal(String shopId, String skuId, long amount, long expectVersion);
-
-    /**
-     * INCRBY Redis deducted by amount with version CAS (reconcile repair, conservative direction).
-     * version 匹配才应用；不匹配 no-op。幂等：多实例并发修复同 SKU 仅一个生效。
-     * @return true if applied (version matched), false on CAS skip or Redis failure
-     */
-    boolean increaseDeducted(String shopId, String skuId, long amount, long expectVersion);
+    boolean repairOversell(String shopId, String skuId, long totalDelta, long deductedDelta, long expectVersion);
 }

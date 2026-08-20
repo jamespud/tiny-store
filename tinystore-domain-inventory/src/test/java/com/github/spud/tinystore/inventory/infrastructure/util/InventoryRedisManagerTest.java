@@ -176,105 +176,47 @@ class InventoryRedisManagerTest {
     // ===== Task 3: version-CAS repair (decreaseTotalV2 / increaseDeductedV2) =====
 
     @Test
-    @DisplayName("decreaseTotalV2 version matches: apply DECRBY + INCR version, return true")
-    void decreaseTotalV2_versionMatches_shouldApplyAndBump() {
-        set("inventory:total:shop:sku", "120");
+    @DisplayName("repairOversellV2 version matches: apply DECRBY total + INCRBY deducted, bump once")
+    void repairOversellV2_versionMatches_shouldApplyBothAndBumpOnce() {
+        set("inventory:total:shop:sku", "150");
+        set("inventory:deducted:shop:sku", "2");
         set("inventory:version:shop:sku", "5");
 
-        boolean applied = redisManager.decreaseTotalV2("shop", "sku", 20L, 5L);
-
-        assertThat(applied).isTrue();
-        assertThat(get("inventory:total:shop:sku")).isEqualTo("100");
-        assertThat(get("inventory:version:shop:sku")).isEqualTo("6");
-    }
-
-    @Test
-    @DisplayName("decreaseTotalV2 version mismatch: no-op, return false")
-    void decreaseTotalV2_versionMismatch_shouldNoop() {
-        set("inventory:total:shop:sku", "120");
-        set("inventory:version:shop:sku", "6");  // 已被业务 bump
-
-        boolean applied = redisManager.decreaseTotalV2("shop", "sku", 20L, 5L);  // 旧 snapshot version=5
-
-        assertThat(applied).isFalse();
-        assertThat(get("inventory:total:shop:sku")).isEqualTo("120");
-        assertThat(get("inventory:version:shop:sku")).isEqualTo("6");
-    }
-
-    @Test
-    @DisplayName("decreaseTotalV2 version key missing: no-op, return false")
-    void decreaseTotalV2_versionKeyMissing_shouldNoop() {
-        set("inventory:total:shop:sku", "120");
-        // version key 不存在
-
-        boolean applied = redisManager.decreaseTotalV2("shop", "sku", 20L, 5L);
-
-        assertThat(applied).isFalse();
-        assertThat(get("inventory:total:shop:sku")).isEqualTo("120");
-    }
-
-    @Test
-    @DisplayName("increaseDeductedV2 version matches: apply INCRBY + INCR version, return true")
-    void increaseDeductedV2_versionMatches_shouldApplyAndBump() {
-        set("inventory:deducted:shop:sku", "0");
-        set("inventory:version:shop:sku", "5");
-
-        boolean applied = redisManager.increaseDeductedV2("shop", "sku", 10L, 5L);
-
-        assertThat(applied).isTrue();
-        assertThat(get("inventory:deducted:shop:sku")).isEqualTo("10");
-        assertThat(get("inventory:version:shop:sku")).isEqualTo("6");
-    }
-
-    @Test
-    @DisplayName("increaseDeductedV2 version mismatch: no-op, return false")
-    void increaseDeductedV2_versionMismatch_shouldNoop() {
-        set("inventory:deducted:shop:sku", "0");
-        set("inventory:version:shop:sku", "7");
-
-        boolean applied = redisManager.increaseDeductedV2("shop", "sku", 10L, 5L);
-
-        assertThat(applied).isFalse();
-        assertThat(get("inventory:deducted:shop:sku")).isEqualTo("0");
-    }
-
-    @Test
-    @DisplayName("initStateV2 all keys missing: SETNX authoritative total/deducted/version, return true")
-    void initStateV2_allMissing_shouldInitialize() {
-        boolean applied = redisManager.initStateV2("shop", "sku", 100L, 5L);
+        boolean applied = redisManager.repairOversellV2("shop", "sku", -50L, 3L, 5L);
 
         assertThat(applied).isTrue();
         assertThat(get("inventory:total:shop:sku")).isEqualTo("100");
         assertThat(get("inventory:deducted:shop:sku")).isEqualTo("5");
-        assertThat(get("inventory:version:shop:sku")).isEqualTo("0");
+        assertThat(get("inventory:version:shop:sku")).isEqualTo("6"); // 只 bump 一次
     }
 
     @Test
-    @DisplayName("initStateV2 keys already present: never clobber, return false")
-    void initStateV2_keysPresent_shouldNoop() {
-        set("inventory:total:shop:sku", "95");
-        set("inventory:deducted:shop:sku", "5");
+    @DisplayName("repairOversellV2 version mismatch: no-op both fields, return false")
+    void repairOversellV2_versionMismatch_shouldNoop() {
+        set("inventory:total:shop:sku", "150");
+        set("inventory:deducted:shop:sku", "2");
+        set("inventory:version:shop:sku", "7"); // 已被业务 bump
+
+        boolean applied = redisManager.repairOversellV2("shop", "sku", -50L, 3L, 5L);
+
+        assertThat(applied).isFalse();
+        assertThat(get("inventory:total:shop:sku")).isEqualTo("150");
+        assertThat(get("inventory:deducted:shop:sku")).isEqualTo("2");
+        assertThat(get("inventory:version:shop:sku")).isEqualTo("7");
+    }
+
+    @Test
+    @DisplayName("repairOversellV2 single-field delta: only that field changes, bump once")
+    void repairOversellV2_singleFieldDelta_shouldChangeOnlyThatField() {
+        set("inventory:total:shop:sku", "150");
+        set("inventory:deducted:shop:sku", "0");
         set("inventory:version:shop:sku", "3");
 
-        boolean applied = redisManager.initStateV2("shop", "sku", 100L, 5L);
-
-        assertThat(applied).isFalse();
-        assertThat(get("inventory:total:shop:sku")).isEqualTo("95"); // 不覆盖已存在值
-        assertThat(get("inventory:deducted:shop:sku")).isEqualTo("5");
-        assertThat(get("inventory:version:shop:sku")).isEqualTo("3");
-    }
-
-    @Test
-    @DisplayName("initStateV2 partial keys missing: only init missing ones, keep existing")
-    void initStateV2_partialMissing_shouldInitMissingOnly() {
-        set("inventory:total:shop:sku", "100");
-        // deducted + version 缺失（Redis flush 后部分重建场景）
-
-        boolean applied = redisManager.initStateV2("shop", "sku", 100L, 5L);
+        boolean applied = redisManager.repairOversellV2("shop", "sku", -50L, 0L, 3L);
 
         assertThat(applied).isTrue();
-        assertThat(get("inventory:total:shop:sku")).isEqualTo("100"); // 不覆盖
-        assertThat(get("inventory:deducted:shop:sku")).isEqualTo("5");
-        assertThat(get("inventory:version:shop:sku")).isEqualTo("0");
+        assertThat(get("inventory:total:shop:sku")).isEqualTo("100");
+        assertThat(get("inventory:deducted:shop:sku")).isEqualTo("0");
+        assertThat(get("inventory:version:shop:sku")).isEqualTo("4");
     }
 }
