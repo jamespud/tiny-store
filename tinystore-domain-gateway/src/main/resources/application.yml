@@ -18,12 +18,11 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          jwk-set-uri: ${JWKS_URI:https://auth.dev.tinystore.com/.well-known/jwks.json}
+          jwk-set-uri: ${JWKS_URI:}
   data:
     redis:
       host: ${REDIS_HOST:redis}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
 
 gateway:
   dynamic:
