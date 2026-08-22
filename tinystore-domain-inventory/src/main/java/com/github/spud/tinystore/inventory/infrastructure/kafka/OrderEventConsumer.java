@@ -8,6 +8,7 @@ import com.github.spud.tinystore.inventory.domain.enums.AdjustmentReason;
 import com.github.spud.tinystore.inventory.domain.service.InventoryAdjustmentDomainService;
 import com.github.spud.tinystore.inventory.domain.service.InventoryReservationDomainService;
 import com.github.spud.tinystore.inventory.domain.value.AdjustmentResult;
+import com.github.spud.tinystore.inventory.domain.value.ReservationResult;
 import com.github.spud.tinystore.inventory.domain.value.OccupyPair;
 import com.github.spud.tinystore.inventory.infrastructure.kafka.dto.OrderDomainEventDto;
 import com.github.spud.tinystore.inventory.infrastructure.persistence.jpa.entity.ConsumerEventLogEntity;
@@ -37,15 +38,18 @@ public class OrderEventConsumer {
     private final InventoryReservationDomainService reservationDomainService;
     private final InventoryAdjustmentDomainService adjustmentDomainService;
     private final JpaConsumerEventLogRepository consumerEventLogRepository;
+    private final InventoryEventPublisher inventoryEventPublisher;
     private final ObjectMapper objectMapper;
 
     public OrderEventConsumer(InventoryReservationDomainService reservationDomainService,
                                InventoryAdjustmentDomainService adjustmentDomainService,
                                JpaConsumerEventLogRepository consumerEventLogRepository,
+                               InventoryEventPublisher inventoryEventPublisher,
                                ObjectMapper objectMapper) {
         this.reservationDomainService = reservationDomainService;
         this.adjustmentDomainService = adjustmentDomainService;
         this.consumerEventLogRepository = consumerEventLogRepository;
+        this.inventoryEventPublisher = inventoryEventPublisher;
         this.objectMapper = objectMapper;
     }
 
@@ -126,7 +130,19 @@ public class OrderEventConsumer {
                                 .build())
                         .toList())
                 .build();
-        reservationDomainService.confirm(command);
+        ReservationResult result = reservationDomainService.confirm(command);
+        if (result.isSuccess()) {
+            inventoryEventPublisher.publishConfirmAck(
+                    UUID.randomUUID().toString(), "INVENTORY_CONFIRMED",
+                    command.getTradeId(), command.getOrderId(),
+                    result.getResultingStatus().getCode(), null);
+        } else {
+            inventoryEventPublisher.publishConfirmAck(
+                    UUID.randomUUID().toString(), "INVENTORY_CONFIRM_CONFLICT",
+                    command.getTradeId(), command.getOrderId(),
+                    result.getConflictReservationIds().isEmpty() ? "CONFLICT" : "RESERVATION_CONFLICT",
+                    result.getMessage());
+        }
     }
 
     @SuppressWarnings("unchecked")
