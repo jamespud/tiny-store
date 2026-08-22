@@ -8,7 +8,11 @@ import com.github.spud.tinystore.order.domain.exception.IdempotencyConflictExcep
 import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
 import com.github.spud.tinystore.order.domain.event.OrderEventType;
 import com.github.spud.tinystore.order.domain.model.AfterSaleCase;
+import com.github.spud.tinystore.order.domain.model.ShopOrder;
+import com.github.spud.tinystore.order.domain.model.Trade;
 import com.github.spud.tinystore.order.domain.repository.AfterSaleCaseRepository;
+import com.github.spud.tinystore.order.domain.repository.ShopOrderRepository;
+import com.github.spud.tinystore.order.domain.repository.TradeRepository;
 import com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService;
 import com.github.spud.tinystore.order.infrastructure.idempotency.IdempotencyService;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.PaymentIntentJpaRepository;
@@ -43,6 +47,12 @@ public class AfterSaleApplicationService {
     private PaymentIntentJpaRepository paymentIntentJpaRepository;
 
     @Autowired
+    private TradeRepository tradeRepository;
+
+    @Autowired
+    private ShopOrderRepository shopOrderRepository;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     /**
@@ -66,10 +76,21 @@ public class AfterSaleApplicationService {
                 return;
             }
 
+            String buyerId = tradeRepository.findByTradeId(tradeId)
+                .map(Trade::getBuyerId)
+                .orElseThrow(() -> new DomainConflictException("TRADE_NOT_FOUND",
+                    "Trade not found for after-sale: " + tradeId));
+            String sellerId = shopOrderRepository.findByOrderId(orderId)
+                .map(ShopOrder::getSellerId)
+                .orElseThrow(() -> new DomainConflictException("SHOP_ORDER_NOT_FOUND",
+                    "Shop order not found for after-sale: " + orderId));
+
             AfterSaleCase caseEntity = AfterSaleCase.builder()
                 .caseId(caseId)
                 .tradeId(tradeId)
                 .orderId(orderId)
+                .buyerId(buyerId)
+                .sellerId(sellerId)
                 .caseType(AfterSaleType.valueOf(aftersaleType))
                 .caseStatus(AfterSaleStatus.APPLIED)
                 .createdAt(LocalDateTime.now())

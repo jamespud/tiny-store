@@ -21,7 +21,9 @@ public class AfterSaleCase {
     private String caseId;
     private String tradeId;
     private String orderId;
-    
+    private String buyerId;
+    private String sellerId;
+
     private AfterSaleType caseType;
     private AfterSaleStatus caseStatus;
     

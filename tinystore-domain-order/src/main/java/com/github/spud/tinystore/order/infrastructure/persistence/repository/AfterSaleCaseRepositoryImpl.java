@@ -63,9 +63,12 @@ public class AfterSaleCaseRepositoryImpl implements AfterSaleCaseRepository {
 
     private AfterSaleCaseEntity toEntity(AfterSaleCase afterSaleCase) {
         return AfterSaleCaseEntity.builder()
+            .id(afterSaleCase.getId())
             .caseId(afterSaleCase.getCaseId())
             .tradeId(afterSaleCase.getTradeId())
             .orderId(afterSaleCase.getOrderId())
+            .buyerId(afterSaleCase.getBuyerId())
+            .sellerId(afterSaleCase.getSellerId())
             .caseType(afterSaleCase.getCaseType() != null ? afterSaleCase.getCaseType().getCode() : null)
             .caseStatus(afterSaleCase.getCaseStatus() != null ? afterSaleCase.getCaseStatus().getCode() : null)
             .refundId(afterSaleCase.getRefundId())
@@ -78,9 +81,12 @@ public class AfterSaleCaseRepositoryImpl implements AfterSaleCaseRepository {
 
     private AfterSaleCase toDomain(AfterSaleCaseEntity entity) {
         return AfterSaleCase.builder()
+            .id(entity.getId())
             .caseId(entity.getCaseId())
             .tradeId(entity.getTradeId())
             .orderId(entity.getOrderId())
+            .buyerId(entity.getBuyerId())
+            .sellerId(entity.getSellerId())
             .caseType(entity.getCaseType() != null ? AfterSaleType.valueOf(entity.getCaseType()) : null)
             .caseStatus(entity.getCaseStatus() != null ? AfterSaleStatus.valueOf(entity.getCaseStatus()) : null)
             .refundId(entity.getRefundId())
