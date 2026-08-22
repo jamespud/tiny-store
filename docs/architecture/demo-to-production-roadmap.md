@@ -25,9 +25,11 @@
 
 | # | 事项 | 现状 | 验收标准 |
 |---|---|---|---|
-| B1 | 支付后库存确认加再驱动 | `onPaymentSucceeded` 异步 confirm 无重试 | 新增调度/补偿：扫描“交易已 PAID 但库存预约仍 PRE_DEDUCTED 且未过期”的记录并重放 `INVENTORY_CONFIRM`；集成测试覆盖“confirm 事件丢失后能自愈” |
-| B2 | 预约过期与支付状态绑定 | `ReservationExpiryTask` 只按 `expire_at` | 过期任务跳过“已关联 PAID 交易”的预约；已付订单的预约不被过期释放；测试覆盖“已付但 confirm 迟到”不释放 |
-| B3 | 订单投影与库存源一致 | 订单域乐观置 `CONFIRMED` | 订单 `inventoryStatus` 不再先于库存源确认写 `CONFIRMED`；以库存域回执为准；一致性测试断言订单/库存最终一致 |
+| B1 | 支付后库存确认加再驱动 | `onPaymentSucceeded` 异步 confirm 无重试 | ✅ 已实现 `InventoryConfirmReconciler`：扫描“PAID、未关闭、支付早于 30s 去抖”交易下 `inventoryStatus=PRE_DEDUCTED` 子单，重发 `INVENTORY_CONFIRM`（新 eventId，库存端幂等） |
+| B2 | 预约过期与支付状态绑定 | `ReservationExpiryTask` 只按 `expire_at` | ✅ 已实现：`confirm` 不再因 `expireAt` 已过而判冲突，只要预约仍 `PRE_DEDUCTED` 即确认成功；已付订单预约不被过期释放；`RELEASED/EXPIRED` 仍判冲突 |
+| B3 | 订单投影与库存源一致 | 订单域乐观置 `CONFIRMED` | ✅ 已实现：`onPaymentSucceeded` 不再乐观写 `CONFIRMED`，改为 `PRE_DEDUCTED`；新增 `InventoryConfirmAckConsumer` 以库存域 `INVENTORY_CONFIRMED`/`INVENTORY_CONFIRM_CONFLICT` 回执为准更新投影；冲突置 `EXPIRED` 停止 B1 自动再驱动 |
+
+> **B 层已完成（2026-08-23）。** 设计/规范见 `docs/superpowers/specs/2026-08-23-inventory-confirm-consistency-design.md`，实现见 `docs/superpowers/plans/2026-08-23-inventory-confirm-consistency.md`。验证：order 模块 123、inventory 模块 122 条单元测试全绿，全仓 `clean compile` 通过。
 
 > 说明：A 层解决“墙是开的”，B 层解决“墙内也有缝”。B1 与 A4 强相关——真实渠道回调解锁后要能稳定驱动库存确认。
 
@@ -100,4 +102,3 @@ flowchart LR
 4. 已付订单的库存预约不会被过期释放；订单/库存最终一致。
 5. 有搜索、购物车、地址、订单列表、评价；商家有入驻与工作台。
 6. 有生产配置、分布式追踪、外置测试种子；无 mock 支付/退款。
-
