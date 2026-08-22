@@ -11,10 +11,12 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import com.github.spud.tinystore.tests.api.support.SeedData;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -43,6 +45,12 @@ import org.springframework.http.ResponseEntity;
  * - These tags are validated via EndpointCoverageContractTest
  */
 class MallE2EIT {
+
+    @BeforeAll
+    static void seedE2E() {
+        // Seed fixture externalized out of the core Flyway chain (see demo-to-production E4).
+        SeedData.applyIfMissing();
+    }
 
     private TestRestTemplate restTemplate;
     private String gatewayBaseUrl;
