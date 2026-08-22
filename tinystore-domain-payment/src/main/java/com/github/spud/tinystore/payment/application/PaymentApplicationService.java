@@ -41,6 +41,9 @@ public class PaymentApplicationService {
     @Autowired
     private OrderClient orderClient;
 
+    @Autowired
+    private PaymentChannel paymentChannel;
+
     /**
      * 从订单事件创建支付单（PAYMENT_INTENT_CREATED 事件消费）
      * 
@@ -316,11 +319,11 @@ public class PaymentApplicationService {
         result.put("status", paymentOrder.getStatus());
         result.put("expireAt", paymentOrder.getExpireAt() != null ? paymentOrder.getExpireAt().toString() : null);
         
-        // 短期返回模拟收银台链接，长期应对接具体渠道生成真实参数
-        result.put("cashierUrl", "https://mock-cashier.example.com/pay/" + paymentOrder.getPaymentOrderId());
+        // A4: 收银台参数由渠道端口生成（默认 Mock 渠道，真实渠道替换实现即可）。
+        result.putAll(paymentChannel.createChannelPayment(
+            paymentOrder.getPayChannel(), paymentOrder.getPaymentOrderId(), paymentOrder.getAmountCents()));
 
         return result;
     }
 
 }
-
