@@ -122,7 +122,9 @@ class TradeApplicationServicePaymentFlowTest {
         ArgumentCaptor<ShopOrder> shopOrderCaptor = ArgumentCaptor.forClass(ShopOrder.class);
         verify(shopOrderRepository).save(shopOrderCaptor.capture());
         assertThat(shopOrderCaptor.getValue().getOrderStatus()).isEqualTo(OrderStatus.PENDING_SHIP);
-        assertThat(shopOrderCaptor.getValue().getInventoryStatus()).isEqualTo(InventoryStatus.CONFIRMED.getCode());
+        // B3: order must NOT optimistically claim CONFIRMED before inventory confirms —
+        // it stays PRE_DEDUCTED (accurate, still held) until the INVENTORY_CONFIRMED ack.
+        assertThat(shopOrderCaptor.getValue().getInventoryStatus()).isEqualTo(InventoryStatus.PRE_DEDUCTED.getCode());
 
         ArgumentCaptor<PaymentIntentEntity> paymentIntentCaptor = ArgumentCaptor.forClass(PaymentIntentEntity.class);
         verify(paymentIntentJpaRepository).save(paymentIntentCaptor.capture());
