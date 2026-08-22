@@ -98,6 +98,12 @@ server:
   port: 13000
 
 management:
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:}
   endpoints:
     web:
       exposure:
