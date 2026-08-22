@@ -57,6 +57,13 @@
             <version>4.2.1</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- Direct PostgreSQL access for E2E seed fixture & strong DB assertions -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
