@@ -54,6 +54,14 @@ payment:
     notification-retry-interval: 120000
     notification-retry-batch-size: 50
 
+wechat:
+  pay:
+    # 微信支付 v3 回调验签/解密所需（生产从密钥管理注入，切勿硬编码）
+    # api-v3-key: ${WECHAT_PAY_API_V3_KEY:}
+    # platform-cert-pem: ${WECHAT_PAY_PLATFORM_CERT_PEM:}
+    channel:
+      type: ${WECHAT_PAY_CHANNEL_TYPE:mock}
+
 server:
   port: 8083
 
