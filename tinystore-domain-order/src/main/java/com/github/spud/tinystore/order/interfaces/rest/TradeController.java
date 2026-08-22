@@ -3,6 +3,8 @@ package com.github.spud.tinystore.order.interfaces.rest;
 import com.github.spud.tinystore.order.application.command.CreateTradeCommand;
 import com.github.spud.tinystore.order.application.command.CancelTradeCommand;
 import com.github.spud.tinystore.order.application.command.PaymentSucceededCommand;
+import com.github.spud.tinystore.order.application.security.CallbackSignatureException;
+import com.github.spud.tinystore.order.application.security.PaymentSignatureVerifier;
 import com.github.spud.tinystore.order.application.service.TradeApplicationService;
 import com.github.spud.tinystore.order.application.service.PaymentApplicationService;
 import com.github.spud.tinystore.order.application.query.TradeQueryService;
@@ -12,6 +14,7 @@ import com.github.spud.tinystore.order.interfaces.dto.request.*;
 import com.github.spud.tinystore.order.interfaces.dto.response.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -35,22 +38,48 @@ public class TradeController {
     @Autowired
     private TradeQueryService tradeQueryService;
 
+    @Autowired
+    private PaymentSignatureVerifier paymentSignatureVerifier;
+
+    @Value("${order.authz.require-authenticated-buyer:true}")
+    private boolean requireAuthenticatedBuyer;
+
+    @Value("${order.payment.callback-verify-enabled:true}")
+    private boolean callbackVerifyEnabled;
+
     /**
      * POST /order/trades - 创建交易
      */
     @PostMapping
     public ResponseEntity<OrderHttpResponse<CreateTradeData>> createTrade(
         @jakarta.validation.Valid @RequestBody CreateTradeRequest request,
+        @RequestHeader(value = "X-Tinystore-Sub", required = false) String authSub,
         @RequestHeader("Idempotency-Key") String idempotencyKey) throws IdempotencyServiceUnavailableException {
 
         try {
             java.util.List<String> platformCodes = request.getPlatformCouponCodes();
             java.util.Map<String, java.util.List<String>> shopCodesMap = request.getShopCouponCodesByShop();
 
+            // A2: 绑定认证主体为买家，拒绝“身份来自请求体”的伪造。
+            String buyerId;
+            if (authSub != null && !authSub.isBlank()) {
+                if (request.getBuyerId() != null && !request.getBuyerId().isBlank()
+                        && !authSub.equals(request.getBuyerId())) {
+                    return ResponseEntity.status(403).body(
+                        OrderHttpResponse.fail(403, "buyerId mismatch with authenticated principal"));
+                }
+                buyerId = authSub;
+            } else if (requireAuthenticatedBuyer) {
+                return ResponseEntity.status(401).body(
+                    OrderHttpResponse.fail(401, "Authenticated buyer is required"));
+            } else {
+                buyerId = request.getBuyerId();
+            }
+
             // 构建 CreateTradeCommand
             CreateTradeCommand.CreateTradeCommandBuilder commandBuilder = CreateTradeCommand.builder()
                 .tradeId(request.getTradeId())
-                .buyerId(request.getBuyerId())
+                .buyerId(buyerId)
                 .buyerNick(request.getBuyerNick())
                 .addressId(request.getAddressId())
                 .platformCouponCodes(platformCodes)
@@ -118,9 +147,14 @@ public class TradeController {
     public ResponseEntity<OrderHttpResponse<Void>> cancelTrade(
         @PathVariable String tradeId,
         @RequestBody(required = false) CancelTradeRequest request,
+        @RequestHeader(value = "X-Tinystore-Sub", required = false) String authSub,
         @RequestHeader("Idempotency-Key") String idempotencyKey) {
 
         try {
+            ResponseEntity<OrderHttpResponse<Void>> ownerError = ownerOrError(tradeId, authSub);
+            if (ownerError != null) {
+                return ownerError;
+            }
             String reason = (request != null && request.getReason() != null) 
                 ? request.getReason() : "User cancel";
             String traceId = (request != null && request.getTraceId() != null)
@@ -155,6 +189,13 @@ public class TradeController {
         @RequestHeader("Idempotency-Key") String idempotencyKey) throws Exception {
 
         try {
+            // A4: 验签入口——未通过渠道验签的回调不得推进支付状态。
+            if (callbackVerifyEnabled) {
+                paymentSignatureVerifier.verifyPaymentCallback(
+                    tradeId, request.getPaymentIntentId(), request.getAmountCents(),
+                    request.getTimestamp(), request.getSignature());
+            }
+
             PaymentSucceededCommand command = PaymentSucceededCommand.builder()
                 .paymentId(request.getPaymentIntentId())
                 .tradeId(tradeId)
@@ -173,6 +214,9 @@ public class TradeController {
                     OrderHttpResponse.fail(409, e.getMessage()));
             }
             throw e;
+        } catch (CallbackSignatureException e) {
+            return ResponseEntity.status(401).body(
+                OrderHttpResponse.fail(401, "Payment callback signature invalid: " + e.getMessage()));
         } catch (Exception e) {
             // rethrow：统一由 GlobalExceptionHandler 映射（乐观锁冲突→409 等），避免吞异常返回 500
             log.error("Payment callback failed: tradeId={}", tradeId, e);
@@ -190,6 +234,12 @@ public class TradeController {
         @RequestHeader("Idempotency-Key") String idempotencyKey) {
 
         try {
+            if (callbackVerifyEnabled) {
+                paymentSignatureVerifier.verifyRefundCallback(
+                    tradeId, request.getRefundId(), request.getRefundAmountCents(),
+                    request.getTimestamp(), request.getSignature());
+            }
+
             if (request.getRefundId() == null || request.getRefundStatus() == null) {
                 return ResponseEntity.status(400).body(
                     OrderHttpResponse.fail(400, "Missing required fields: refundId or refundStatus"));
@@ -219,6 +269,9 @@ public class TradeController {
 
             return ResponseEntity.ok(OrderHttpResponse.ok("Refund callback received"));
 
+        } catch (CallbackSignatureException e) {
+            return ResponseEntity.status(401).body(
+                OrderHttpResponse.fail(401, "Refund callback signature invalid: " + e.getMessage()));
         } catch (Exception e) {
             log.error("Refund callback failed: tradeId={}", tradeId, e);
             return ResponseEntity.status(500).body(
@@ -233,9 +286,14 @@ public class TradeController {
     public ResponseEntity<OrderHttpResponse<Void>> confirmReceipt(
         @PathVariable String tradeId,
         @RequestBody(required = false) ConfirmReceiptRequest request,
+        @RequestHeader(value = "X-Tinystore-Sub", required = false) String authSub,
         @RequestHeader("Idempotency-Key") String idempotencyKey) {
 
         try {
+            ResponseEntity<OrderHttpResponse<Void>> ownerError = ownerOrError(tradeId, authSub);
+            if (ownerError != null) {
+                return ownerError;
+            }
             String traceId = (request != null && request.getTraceId() != null) 
                 ? request.getTraceId() : UUID.randomUUID().toString();
 
@@ -248,6 +306,31 @@ public class TradeController {
             log.error("Confirm receipt failed: tradeId={}", tradeId, e);
             return ResponseEntity.status(500).body(
                 OrderHttpResponse.fail(500, "Confirm receipt failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * A2: 交易操作所有权校验（取消/确认收货需为交易买家）。合法返回 null，否则返回带状态码的错误响应。
+     */
+    private ResponseEntity<OrderHttpResponse<Void>> ownerOrError(String tradeId, String authSub) {
+        if (authSub == null || authSub.isBlank()) {
+            if (requireAuthenticatedBuyer) {
+                return ResponseEntity.status(401).body(
+                    OrderHttpResponse.fail(401, "Authentication required"));
+            }
+            return null;
+        }
+        try {
+            com.github.spud.tinystore.order.interfaces.dto.response.TradeDetailData detail =
+                tradeQueryService.getTradeDetail(tradeId);
+            if (detail == null || authSub.equals(detail.getBuyerId())) {
+                return null;
+            }
+            return ResponseEntity.status(403).body(
+                OrderHttpResponse.fail(403, "Not the owner of trade: " + tradeId));
+        } catch (Exception e) {
+            // 查询失败交由下游处理（404/500），此处不打断授权判断
+            return null;
         }
     }
 }
