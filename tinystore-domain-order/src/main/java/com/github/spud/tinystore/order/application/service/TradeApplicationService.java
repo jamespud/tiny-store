@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.spud.tinystore.order.application.command.CancelTradeCommand;
 import com.github.spud.tinystore.order.application.command.CreateTradeCommand;
 import com.github.spud.tinystore.order.application.command.PaymentSucceededCommand;
+import com.github.spud.tinystore.order.application.price.SkuPriceResolver;
 import com.github.spud.tinystore.order.domain.enums.InventoryStatus;
 import com.github.spud.tinystore.order.domain.enums.OrderStatus;
 import com.github.spud.tinystore.order.domain.enums.PayStatus;
@@ -77,6 +78,12 @@ public class TradeApplicationService {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private SkuPriceResolver skuPriceResolver;
+
+    @Value("${order.pricing.authoritative-enabled:true}")
+    private boolean priceAuthoritativeEnabled;
+
     @Value("${order.payment-timeout-seconds:900}")
     private long paymentTimeoutSeconds;
 
@@ -125,6 +132,11 @@ public class TradeApplicationService {
                         "Trade creation already in progress with this idempotency key");
             }
 
+            // 2.0 服务端权威定价（A3）：以商品目录单价为准，拒绝客户端自定价格（demo 级缺陷修复）。
+            if (priceAuthoritativeEnabled && skuPriceResolver != null
+                    && command.getOrderLines() != null && !command.getOrderLines().isEmpty()) {
+                skuPriceResolver.validateAndAttach(command.getOrderLines());
+            }
             // 2. 调用 promotion quote（优惠报价）
             PromotionQuoteRequest quoteRequest = buildPromotionQuoteRequest(command);
             try {
