@@ -53,6 +53,12 @@ public class ShopContextFilter implements Filter {
 			chain.doFilter(request, response);
 			return;
 		}
+		// Trusted internal endpoints (e.g. order -> product SKU price lookup) carry an explicit
+		// shopId parameter; they must not be forced to present a client-controlled X-Shop-Id header.
+		if (httpRequest.getRequestURI().startsWith("/internal/")) {
+			chain.doFilter(request, response);
+			return;
+		}
 		// Validate: X-Shop-Id header is required for business endpoints.
 		String shopId = httpRequest.getHeader(SHOP_HEADER);
 		if (!StringUtils.hasText(shopId)) {

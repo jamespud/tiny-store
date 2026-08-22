@@ -1,6 +1,8 @@
 package com.github.spud.tinystore.product.interfaces.internal.rest;
 
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -40,11 +42,32 @@ class InternalSkuControllerTest {
 		InternalSkuBatchQueryResponse resp = new InternalSkuBatchQueryResponse();
 		resp.setSkuMap(Map.of("sku1", dto));
 
-		when(internalSkuQueryService.batchGetSkuInfo(Set.of("sku1"))).thenReturn(resp);
+		when(internalSkuQueryService.batchGetSkuInfo(isNull(), eq(Set.of("sku1")))).thenReturn(resp);
 
 		mockMvc.perform(get("/internal/restful/sku/batch").queryParam("skuIds", "sku1"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.skuMap.sku1.skuId").value("sku1"))
 			.andExpect(jsonPath("$.skuMap.sku1.unitPrice").value(123));
+	}
+
+	@Test
+	@DisplayName("GET .../batch with explicit shopId + comma CSV should pass shop-scoped skuId set")
+	void batchGetSkuInfo_withExplicitShopIdAndCsv() throws Exception {
+		InternalSkuDTO dto = new InternalSkuDTO();
+		dto.setSkuId("sku2");
+		dto.setAvailable(true);
+		dto.setUnitPrice(456);
+
+		InternalSkuBatchQueryResponse resp = new InternalSkuBatchQueryResponse();
+		resp.setSkuMap(Map.of("sku2", dto));
+
+		when(internalSkuQueryService.batchGetSkuInfo(eq("SHOP_A"), eq(Set.of("sku2", "sku3")))).thenReturn(resp);
+
+		mockMvc.perform(get("/internal/restful/sku/batch")
+				.queryParam("shopId", "SHOP_A")
+				.queryParam("skuIds", "sku2,sku3"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.skuMap.sku2.skuId").value("sku2"))
+			.andExpect(jsonPath("$.skuMap.sku2.unitPrice").value(456));
 	}
 }

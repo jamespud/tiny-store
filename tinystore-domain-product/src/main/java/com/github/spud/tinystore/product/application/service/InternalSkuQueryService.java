@@ -19,15 +19,22 @@ public class InternalSkuQueryService {
 	private final JpaSkuRepository jpaSkuRepository;
 	private final ShopRepositoryConfig.ShopContext shopContext;
 
-	public InternalSkuBatchQueryResponse batchGetSkuInfo(Set<String> skuIds) {
+	/**
+	 * 按指定店铺批量查询 SKU 信息（A3 权威定价）。shopId 为空时回退到请求级 ShopContext。
+	 *
+	 * @param shopId 店铺 ID（可空）
+	 * @param skuIds SKU ID 集合
+	 * @return 批量 SKU 信息（skuMap 以 skuId 为键）
+	 */
+	public InternalSkuBatchQueryResponse batchGetSkuInfo(String shopId, Set<String> skuIds) {
 		InternalSkuBatchQueryResponse resp = new InternalSkuBatchQueryResponse();
 		Map<String, InternalSkuDTO> skuMap = new HashMap<>();
 		resp.setSkuMap(skuMap);
 		if (skuIds == null || skuIds.isEmpty()) {
 			return resp;
 		}
-		String shopId = shopContext.getShopId();
-		List<SkuEntity> entities = jpaSkuRepository.findByShopIdAndSkuIdIn(shopId, skuIds);
+		String effectiveShopId = (shopId != null && !shopId.isBlank()) ? shopId : shopContext.getShopId();
+		List<SkuEntity> entities = jpaSkuRepository.findByShopIdAndSkuIdIn(effectiveShopId, skuIds);
 		for (SkuEntity e : entities) {
 			if (e == null || e.getSkuId() == null) {
 				continue;
@@ -45,5 +52,8 @@ public class InternalSkuQueryService {
 		}
 		return resp;
 	}
-}
 
+	public InternalSkuBatchQueryResponse batchGetSkuInfo(Set<String> skuIds) {
+		return batchGetSkuInfo(null, skuIds);
+	}
+}
