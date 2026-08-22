@@ -254,16 +254,10 @@ public class InventoryReservationDomainService {
                 log.warn("Confirm conflict: reservationId={} is in terminal state {}", reservationId, currentStatus);
                 conflictIds.add(reservationId);
             } else if (currentStatus == InventoryReservationStatus.PRE_DEDUCTED) {
-                // 逻辑过期检查：expiry scheduler 有 5s 调度窗口，confirm 可能抢先成功——
-                // 直接拒绝已过期（expireAt < now）但状态未流转的 reservation
-                Optional<java.time.OffsetDateTime> expireAtOpt =
-                        reservationRepository.findExpireAtByReservationId(reservationId);
-                if (expireAtOpt.isPresent()
-                        && expireAtOpt.get().isBefore(java.time.OffsetDateTime.now())) {
-                    log.warn("Confirm conflict: reservationId={} is logically expired (expireAt={})",
-                            reservationId, expireAtOpt.get());
-                    conflictIds.add(reservationId);
-                }
+                // 支付成功是权威信号：只要预约仍被持有（PRE_DEDUCTED），confirm 应赢过定时器，
+                // 不应因 expireAt 已过而判冲突，否则已付订单的库存会被过期调度器释放。
+                // 过期释放只应由 ReservationExpiryTask 针对真正未支付预约产生。
+                // B2：见 docs/superpowers/specs/2026-08-23-inventory-confirm-consistency-design.md
             }
             // CONFIRMED and PRE_DEDUCTED items proceed to pass 2
         }
