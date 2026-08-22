@@ -3,6 +3,8 @@ package com.github.spud.tinystore.order.interfaces.rest;
 import com.github.spud.tinystore.order.application.service.TradeApplicationService;
 import com.github.spud.tinystore.order.application.service.PaymentApplicationService;
 import com.github.spud.tinystore.order.application.query.TradeQueryService;
+import com.github.spud.tinystore.order.application.security.CallbackSignatureException;
+import com.github.spud.tinystore.order.application.security.PaymentSignatureVerifier;
 import com.github.spud.tinystore.order.domain.exception.DomainConflictException;
 import com.github.spud.tinystore.order.domain.exception.IdempotencyServiceUnavailableException;
 import com.github.spud.tinystore.order.interfaces.error.GlobalExceptionHandler;
@@ -58,6 +60,9 @@ class TradeControllerTest {
     @MockitoBean
     private PaymentApplicationService paymentApplicationService;
 
+    @MockitoBean
+    private PaymentSignatureVerifier paymentSignatureVerifier;
+
     @Test
     @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades")
     @DisplayName("POST /api/order/trades - valid request returns 200")
@@ -107,6 +112,7 @@ class TradeControllerTest {
         // When & Then: valid request reaches controller, handled by GlobalExceptionHandler
         mockMvc.perform(post("/order/trades")
                 .header("Idempotency-Key", "idem-redis-down-001")
+                .header("X-Tinystore-Sub", "buyer-redis-001")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"tradeId\":\"trade-redis-down-001\"," +
                          "\"buyerId\":\"buyer-redis-001\"," +
@@ -157,6 +163,7 @@ class TradeControllerTest {
         // When & Then: POST
         mockMvc.perform(post("/order/trades/trade-123/cancel")
                 .header("Idempotency-Key", "idem-cancel")
+                .header("X-Tinystore-Sub", "user-1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"reason\":\"User cancel\"}"))
             .andExpect(status().isOk());
@@ -171,6 +178,7 @@ class TradeControllerTest {
 
         mockMvc.perform(post("/order/trades/trade-123/cancel")
                 .header("Idempotency-Key", "idem-cancel-conflict")
+                .header("X-Tinystore-Sub", "user-1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"reason\":\"User cancel\"}"))
             .andExpect(status().isConflict())
@@ -186,6 +194,7 @@ class TradeControllerTest {
 
         mockMvc.perform(post("/order/trades/trade-123/cancel")
                 .header("Idempotency-Key", "idem-cancel-failure")
+                .header("X-Tinystore-Sub", "user-1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"reason\":\"User cancel\"}"))
             .andExpect(status().isInternalServerError())
@@ -206,6 +215,20 @@ class TradeControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"paymentIntentId\":\"pay-intent-123\",\"amountCents\":9900,\"traceId\":\"trace-123\"}"))
             .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("POST /order/trades/{tradeId}/pay/callback with invalid signature returns 401")
+    void paymentCallback_invalidSignature_returns401() throws Exception {
+        doThrow(new CallbackSignatureException("Invalid callback signature"))
+            .when(paymentSignatureVerifier).verifyPaymentCallback(anyString(), anyString(), any(), any(), anyString());
+
+        mockMvc.perform(post("/order/trades/trade-pay-123/pay/callback")
+                .header("Idempotency-Key", "idem-payment-callback-invalid")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"paymentIntentId\":\"pay-intent-123\",\"amountCents\":9900,"
+                    + "\"timestamp\":1234567890,\"signature\":\"bad-signature\"}"))
+            .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -264,8 +287,70 @@ class TradeControllerTest {
         // When & Then: POST confirm receipt
         mockMvc.perform(post("/order/trades/trade-confirm-123/confirm-receipt")
                 .header("Idempotency-Key", "idem-confirm-receipt")
+                .header("X-Tinystore-Sub", "user-1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{}"))
             .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("createTrade with matching authenticated buyer returns 200")
+    void createTrade_authenticatedBuyer_returns200() throws Exception {
+        CreateTradeData createTradeData = CreateTradeData.builder()
+            .tradeId("trade-auth-123")
+            .payableAmountCents(9900L)
+            .paymentIntentId("payment-intent-auth")
+            .build();
+        when(tradeApplicationService.createTrade(anyString(), any())).thenReturn(createTradeData);
+
+        mockMvc.perform(post("/order/trades")
+                .header("Idempotency-Key", "idem-auth")
+                .header("X-Tinystore-Sub", "user-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tradeId\":\"trade-auth-123\",\"buyerId\":\"user-1\"," +
+                    "\"orderLines\":[{\"skuId\":\"SKU_A\",\"shopId\":\"SHOP_A\"," +
+                    "\"sellerId\":\"seller-A\",\"quantity\":1,\"priceCents\":9900}]}"))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("createTrade with mismatched buyer against authenticated principal returns 403")
+    void createTrade_mismatchedAuthenticatedBuyer_returns403() throws Exception {
+        mockMvc.perform(post("/order/trades")
+                .header("Idempotency-Key", "idem-mismatch")
+                .header("X-Tinystore-Sub", "user-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tradeId\":\"trade-mismatch\",\"buyerId\":\"user-2\"," +
+                    "\"orderLines\":[{\"skuId\":\"SKU_A\",\"shopId\":\"SHOP_A\"," +
+                    "\"sellerId\":\"seller-A\",\"quantity\":1,\"priceCents\":9900}]}"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("createTrade without authentication returns 401")
+    void createTrade_unauthenticated_returns401() throws Exception {
+        mockMvc.perform(post("/order/trades")
+                .header("Idempotency-Key", "idem-noauth")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tradeId\":\"trade-noauth\",\"buyerId\":\"user-1\"," +
+                    "\"orderLines\":[{\"skuId\":\"SKU_A\",\"shopId\":\"SHOP_A\"," +
+                    "\"sellerId\":\"seller-A\",\"quantity\":1,\"priceCents\":9900}]}"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("cancelTrade by non-owner returns 403")
+    void cancelTrade_nonOwner_returns403() throws Exception {
+        com.github.spud.tinystore.order.interfaces.dto.response.TradeDetailData detail =
+            new com.github.spud.tinystore.order.interfaces.dto.response.TradeDetailData();
+        detail.setBuyerId("owner-user");
+        when(tradeQueryService.getTradeDetail("trade-owned-123")).thenReturn(detail);
+
+        mockMvc.perform(post("/order/trades/trade-owned-123/cancel")
+                .header("Idempotency-Key", "idem-cancel-nonowner")
+                .header("X-Tinystore-Sub", "attacker-user")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"User cancel\"}"))
+            .andExpect(status().isForbidden());
     }
 }
