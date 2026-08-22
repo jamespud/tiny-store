@@ -845,7 +845,7 @@ public class TradeApplicationService {
                         .shopId(shopOrder.getShopId())
                         .sellerId(shopOrder.getSellerId())
                         .orderStatus(OrderStatus.PENDING_SHIP)
-                        .inventoryStatus(InventoryStatus.CONFIRMED.getCode())
+                        .inventoryStatus(InventoryStatus.PRE_DEDUCTED.getCode()) // B3: 以库存域回执为准，不再乐观置 CONFIRMED
                         .promotionStatus(shopOrder.getPromotionStatus())
                         .inventoryReservationRefs(shopOrder.getInventoryReservationRefs())
                         .totalAmountCents(shopOrder.getTotalAmountCents())
@@ -1052,6 +1052,92 @@ public class TradeApplicationService {
             throw new DomainConflictException("TRADE_NOT_READY_FOR_PAYMENT",
                     "Trade promotion commit status is " + trade.getPromotionCommitStatus()
                             + ", only COMMITTED trades are payable");
+        }
+    }
+
+    /**
+     * B3: 以库存域 INVENTORY_CONFIRMED 回执把子单库存投影置为 CONFIRMED（权威来源）。
+     */
+    @Transactional
+    public void markShopOrderInventoryConfirmed(String orderId) {
+        ShopOrder shopOrder = shopOrderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new DomainConflictException("SHOP_ORDER_NOT_FOUND",
+                        "ShopOrder not found: " + orderId));
+        ShopOrder updated = ShopOrder.builder()
+                .id(shopOrder.getId()).orderId(shopOrder.getOrderId()).tradeId(shopOrder.getTradeId())
+                .shopId(shopOrder.getShopId()).sellerId(shopOrder.getSellerId())
+                .orderStatus(shopOrder.getOrderStatus())
+                .inventoryStatus(InventoryStatus.CONFIRMED.getCode())
+                .promotionStatus(shopOrder.getPromotionStatus())
+                .inventoryReservationRefs(shopOrder.getInventoryReservationRefs())
+                .totalAmountCents(shopOrder.getTotalAmountCents())
+                .orderLines(shopOrder.getOrderLines())
+                .createdAt(shopOrder.getCreatedAt()).updatedAt(LocalDateTime.now())
+                .acceptedAt(shopOrder.getAcceptedAt()).build();
+        shopOrderRepository.save(updated);
+        log.info("Marked shopOrder inventory confirmed via ack: orderId={}", orderId);
+    }
+
+    /**
+     * B3: 库存确认冲突（预约已被释放/过期）时，把子单库存投影置为 EXPIRED，
+     * 使 B1 自动再驱动停止，交由人工/对账兜底。
+     */
+    @Transactional
+    public void markShopOrderInventoryConflict(String orderId) {
+        ShopOrder shopOrder = shopOrderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new DomainConflictException("SHOP_ORDER_NOT_FOUND",
+                        "ShopOrder not found: " + orderId));
+        ShopOrder updated = ShopOrder.builder()
+                .id(shopOrder.getId()).orderId(shopOrder.getOrderId()).tradeId(shopOrder.getTradeId())
+                .shopId(shopOrder.getShopId()).sellerId(shopOrder.getSellerId())
+                .orderStatus(shopOrder.getOrderStatus())
+                .inventoryStatus(InventoryStatus.EXPIRED.getCode())
+                .promotionStatus(shopOrder.getPromotionStatus())
+                .inventoryReservationRefs(shopOrder.getInventoryReservationRefs())
+                .totalAmountCents(shopOrder.getTotalAmountCents())
+                .orderLines(shopOrder.getOrderLines())
+                .createdAt(shopOrder.getCreatedAt()).updatedAt(LocalDateTime.now())
+                .acceptedAt(shopOrder.getAcceptedAt()).build();
+        shopOrderRepository.save(updated);
+        log.warn("Marked shopOrder inventory EXPIRED via conflict ack: orderId={}", orderId);
+    }
+
+    /**
+     * B1: 对“已支付但库存尚未确认（未收到 INVENTORY_CONFIRMED 回执）”的子单重发
+     * INVENTORY_CONFIRM。以新 eventId 写入 outbox，库存端按 eventId 幂等；
+     * 已确认的预约会走“已 CONFIRMED → 幂等 ok”分支，不会二次扣减。
+     */
+    @Transactional
+    public void redriveInventoryConfirm(ShopOrder shopOrder) {
+        if (shopOrder.getInventoryReservationRefs() == null
+                || shopOrder.getInventoryReservationRefs().isEmpty()) {
+            log.warn("redriveInventoryConfirm skipped: no reservation refs, orderId={}", shopOrder.getOrderId());
+            return;
+        }
+        String paymentId = paymentIntentJpaRepository.findByTradeId(shopOrder.getTradeId())
+                .map(PaymentIntentEntity::getPaymentId).orElse(shopOrder.getOrderId());
+        try {
+            OrderDomainEvent confirmEvent = OrderDomainEvent.builder()
+                    .eventId(UUID.randomUUID().toString())
+                    .eventType(OrderEventType.INVENTORY_CONFIRM)
+                    .aggregateType("INVENTORY")
+                    .aggregateId(shopOrder.getOrderId())
+                    .occurredAt(LocalDateTime.now())
+                    .traceId("redrive-" + UUID.randomUUID())
+                    .payloadJson(objectMapper.writeValueAsString(Map.of(
+                            "paymentId", paymentId,
+                            "tradeId", shopOrder.getTradeId(),
+                            "orderId", shopOrder.getOrderId(),
+                            "occupyPairs", shopOrder.getInventoryReservationRefs().stream()
+                                    .map(r -> Map.of("shopId", r.getShopId(), "skuId", r.getSkuId(),
+                                            "occupyId", r.getReservationId()))
+                                    .collect(java.util.stream.Collectors.toList()))))
+                    .build();
+            outboxEventService.saveEvent(confirmEvent);
+            log.info("Redrived inventory confirm: orderId={}, tradeId={}", shopOrder.getOrderId(), shopOrder.getTradeId());
+        } catch (Exception e) {
+            log.error("Failed to redrive inventory confirm: orderId={}, error={}",
+                    shopOrder.getOrderId(), e.getMessage(), e);
         }
     }
 

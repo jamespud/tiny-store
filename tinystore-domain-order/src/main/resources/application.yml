@@ -71,6 +71,7 @@ order:
     topic:
       general: tinystore.order.general
       promotion-events: tinystore.promotion.general
+      inventory-events: tinystore.inventory.general
     consumer:
       retry:
         max-attempts: 5
