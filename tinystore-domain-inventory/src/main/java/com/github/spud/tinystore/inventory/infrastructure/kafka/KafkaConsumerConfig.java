@@ -64,6 +64,7 @@ public class KafkaConsumerConfig {
 
         ExponentialBackOff backOff = new ExponentialBackOff(initialInterval, multiplier);
         backOff.setMaxInterval(maxInterval);
+        backOff.setMaxAttempts(maxAttempts);
 
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
         errorHandler.addNotRetryableExceptions(

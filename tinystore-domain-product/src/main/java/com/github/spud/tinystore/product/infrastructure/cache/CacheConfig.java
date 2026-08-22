@@ -23,7 +23,7 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
  * CacheConfig - Redis cache configuration for Product Service
  * <p>
  * Configures distributed caching with Redis for: - Product entities (30 min TTL) - SKU entities (30
-	 * min TTL)
+ * min TTL)
  * <p>
  * Features: - JSON serialization with Jackson for human-readable cache values - Dynamic TTL
  * configuration via application properties - Cache key prefixing for multi-service deployment -

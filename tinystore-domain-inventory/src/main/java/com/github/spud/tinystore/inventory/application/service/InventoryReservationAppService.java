@@ -37,7 +37,7 @@ public class InventoryReservationAppService {
 
     private final InventoryReservationDomainService domainService;
 
-    @Value("${inventory.reservation.expiry.default-minutes:30}")
+    @Value("${inventory.reservation.expiry.default-minutes:15}")
     private int defaultExpiryMinutes;
 
     public InventoryReservationAppService(InventoryReservationDomainService domainService) {

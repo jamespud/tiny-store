@@ -94,10 +94,10 @@ public class KafkaConsumerConfig {
      * - 不可重试异常：立即进 DLT（毒消息，如 JSON 解析/字段校验失败）
      * <p>
      * 重试次数控制：
-     * Spring Kafka 3.x 的 DefaultErrorHandler 通过 BackOff 策略隐式控制重试次数。
-     * ExponentialBackOff 会根据 initialInterval、multiplier、maxInterval 自然耗尽。
-     * 实际重试次数取决于 backoff 序列总时长，约等于配置的 max-attempts。
-     * 若需精确控制，可切换为 FixedBackOff(interval, maxAttempts)。
+     * DefaultErrorHandler 通过 BackOff 策略控制重试；这里用
+     * ExponentialBackOff.setMaxAttempts(maxAttempts) 把重试精确限制为 max-attempts 次，
+     * 达到上限后交由 DeadLetterPublishingRecoverer 进 DLT。
+     * 若只想固定间隔退避，可改用 FixedBackOff(interval, maxAttempts)。
      *
      * @param kafkaTemplate Kafka 生产者模板
      * @return 统一错误处理器
@@ -116,13 +116,12 @@ public class KafkaConsumerConfig {
             destinationResolver
         );
 
-        // Exponential backoff 配置
-        // 重试次数隐式受 backoff 序列限制：
-        // 例如 initialInterval=500, multiplier=2.0, maxInterval=10000
-        // 序列为：500, 1000, 2000, 4000, 8000, 10000, 10000, ...
-        // 约 5-7 次重试（取决于 maxAttempts 配置，但此处通过 backoff 自然限制）
+        // Exponential backoff 配置（initialInterval=500, multiplier=2.0, maxInterval=10000）
+        // 序列：500, 1000, 2000, 4000, 8000, ... 封顶 10000。
+        // setMaxAttempts(maxAttempts) 精确限制重试次数为 max-attempts，达上限后进 DLT。
         ExponentialBackOff backOff = new ExponentialBackOff(initialInterval, multiplier);
         backOff.setMaxInterval(maxInterval);
+        backOff.setMaxAttempts(maxAttempts);
 
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
 

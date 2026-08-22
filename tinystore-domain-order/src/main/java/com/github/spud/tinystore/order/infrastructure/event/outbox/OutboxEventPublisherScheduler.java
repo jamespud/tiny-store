@@ -48,7 +48,7 @@ public class OutboxEventPublisherScheduler {
 
     /**
      * 定时轮询 Outbox 待发布事件
-     * 默认每 5 秒扫描一次，每批最多 100 条记录
+     * 默认每 5 秒扫描一次，每批最多 1000 条记录
      */
     @Scheduled(fixedDelayString = "${order.outbox.poll-interval:5000}", scheduler = "outboxTaskScheduler")
     public void pollAndPublishPendingEvents() {

@@ -28,6 +28,9 @@ import java.util.function.BiFunction;
 public class OrderKafkaConsumerConfig {
 
 
+    @Value("${order.kafka.consumer.retry.max-attempts:5}")
+    private int maxAttempts;
+
     @Value("${order.kafka.consumer.retry.backoff.initial-ms:500}")
     private long initialInterval;
 
@@ -60,6 +63,7 @@ public class OrderKafkaConsumerConfig {
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate, destinationResolver);
         ExponentialBackOff backOff = new ExponentialBackOff(initialInterval, multiplier);
         backOff.setMaxInterval(maxInterval);
+        backOff.setMaxAttempts(maxAttempts);
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
         // 毒消息（解析/字段失败）立即进 DLT，不重试
         errorHandler.addNotRetryableExceptions(

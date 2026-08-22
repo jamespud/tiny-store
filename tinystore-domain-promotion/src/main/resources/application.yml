@@ -68,6 +68,8 @@ promotion:
     topic:
       order-events: tinystore.order.general
       ack-events: tinystore.promotion.general
+  idempotency:
+    ttl-seconds: 600
 server:
   port: 1200
 

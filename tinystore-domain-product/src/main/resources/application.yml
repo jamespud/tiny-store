@@ -68,9 +68,10 @@ tinystore:
   product:
     cache:
       enabled: ${TINYSTORE_PRODUCT_CACHE_ENABLED:true}
+      key-prefix: product-service
       ttl:
-        product: ${CACHE_TTL_PRODUCT:3600}      # 1 hour
-        sku: ${CACHE_TTL_SKU:3600}              # 1 hour
+        product: ${CACHE_TTL_PRODUCT:1800}      # 30 minutes
+        sku: ${CACHE_TTL_SKU:1800}              # 30 minutes
         channel: ${CACHE_TTL_CHANNEL:600}       # 10 minutes
         
   # Kafka topics
