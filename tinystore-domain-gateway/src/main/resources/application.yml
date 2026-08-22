@@ -55,4 +55,5 @@ management:
 tinystore:
   security:
     resource-server:
-      enabled: false
+      # 生产默认开启鉴权（A1）。测试栈通过环境变量 TINYSTORE_SECURITY_RESOURCESERVER_ENABLED=false 显式关闭。
+      enabled: true

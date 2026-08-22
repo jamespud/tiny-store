@@ -10,8 +10,10 @@ import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 
 @Configuration
-// @EnableWebFluxSecurity  // Temporarily disabled for testing
-@ConditionalOnProperty(prefix = "tinystore.security.resourceserver", name = "enabled", havingValue = "true", matchIfMissing = false)
+@EnableWebFluxSecurity
+// 默认开启（matchIfMissing=true）：生产/本地默认强制 JWT 鉴权；
+// 测试栈通过 TINYSTORE_SECURITY_RESOURCESERVER_ENABLED=false 显式关闭以保持 hermetic。
+@ConditionalOnProperty(prefix = "tinystore.security.resourceserver", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SecurityConfig {
 
 	@Bean
