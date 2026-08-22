@@ -50,6 +50,9 @@ payment:
   kafka:
     topic:
       order-events: tinystore.order.general
+  scheduler:
+    notification-retry-interval: 120000
+    notification-retry-batch-size: 50
 
 server:
   port: 8083

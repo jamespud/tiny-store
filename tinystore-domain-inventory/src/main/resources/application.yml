@@ -59,6 +59,17 @@ tinystore:
   security:
     resource-server:
       enabled: ${TINYSTORE_SECURITY_RESOURCESERVER_ENABLED:false}
+  kafka:
+    consumer:
+      retry:
+        max-attempts: 5
+        backoff:
+          initial-ms: 500
+          multiplier: 2.0
+          max-ms: 10000
+      dlt:
+        enabled: true
+        suffix: .DLT
 
 # ============================================================
 # Inventory Configuration
@@ -80,17 +91,6 @@ inventory:
     enabled: ${INVENTORY_RECONCILIATION_ENABLED:true}
     # Spring Duration format; default 10 minutes
     fixed-delay: ${INVENTORY_RECONCILIATION_FIXED_DELAY:PT10M}
-  kafka:
-    consumer:
-      retry:
-        max-attempts: 5
-        backoff:
-          initial-ms: 500
-          multiplier: 2.0
-          max-ms: 10000
-      dlt:
-        enabled: true
-        suffix: .DLT
 server:
   port: 13000
 

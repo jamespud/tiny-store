@@ -70,9 +70,29 @@ order:
   kafka:
     topic:
       general: tinystore.order.general
+      promotion-events: tinystore.promotion.general
+    consumer:
+      retry:
+        max-attempts: 5
+        backoff:
+          initial-ms: 500
+          multiplier: 2.0
+          max-ms: 10000
+  reservation:
+    ttl-minutes: 15
+  promotion:
+    commit-async-enabled: false
+    pending-timeout-check-ms: 10000
+    pending-timeout-batch-size: 200
+    pending-timeout-seconds: 30
   outbox:
-    poll-interval: 1000
-    batch-size: 5000
+    poll-interval: 5000
+    batch-size: 1000
+    publisher-pool-size: 2
+    cleanup:
+      enabled: true
+      retention-days: 7
+      cron: "0 0 3 * * ?"
 
   # ============================================================
   # Inventory Integration Feature Flags (RFC-001 Canonical Reservation)
@@ -86,6 +106,7 @@ order:
       retention-days: 7
   scheduler:
     payment-timeout-interval: 60000
+    auto-receive-interval: 3600000
 
 server:
   port: 28080
