@@ -27,4 +27,7 @@ public interface ShopOrderJpaRepository extends JpaRepository<ShopOrderEntity, L
 
     @Query("SELECT o FROM ShopOrderEntity o WHERE o.orderStatus = :orderStatus AND o.createdAt < :threshold")
     List<ShopOrderEntity> findPendingReceiveByTimeout(@Param("orderStatus") String orderStatus, @Param("threshold") LocalDateTime threshold);
+
+    @Query("SELECT o FROM ShopOrderEntity o WHERE o.tradeId = :tradeId AND o.inventoryStatus = :inventoryStatus ORDER BY o.id ASC")
+    List<ShopOrderEntity> findByTradeIdAndInventoryStatus(@Param("tradeId") String tradeId, @Param("inventoryStatus") String inventoryStatus);
 }

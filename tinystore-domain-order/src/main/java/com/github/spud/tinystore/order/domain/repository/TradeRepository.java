@@ -22,4 +22,10 @@ public interface TradeRepository {
      * （PENDING 超时兜底调度器使用）。
      */
     List<String> findStalePendingCommit(LocalDateTime threshold);
+
+    /**
+     * 查找已支付（PAID）、未关闭且支付时间早于阈值的 tradeId 列表
+     * （B1：订单域库存确认再驱动调度器使用）。
+     */
+    List<String> findPaidTradeIdsSince(LocalDateTime before);
 }
