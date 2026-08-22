@@ -47,6 +47,11 @@ public class TradeRepositoryImpl implements TradeRepository {
     public List<String> findStalePendingCommit(LocalDateTime threshold) {
         return jpaRepository.findStalePendingCommitTradeIds(threshold);
     }
+
+    @Override
+    public List<String> findPaidTradeIdsSince(LocalDateTime before) {
+        return jpaRepository.findPaidTradeIdsSince(before);
+    }
     
     private TradeEntity toEntity(Trade trade) {
         return TradeEntity.builder()

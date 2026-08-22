@@ -15,6 +15,11 @@ public interface ShopOrderRepository {
     Optional<ShopOrder> findByOrderId(String orderId);
     
     List<ShopOrder> findByTradeId(String tradeId);
+
+    /**
+     * 按 tradeId + inventoryStatus 查找子单（B1：再驱动未确认库存的子单）。
+     */
+    List<ShopOrder> findByTradeIdAndInventoryStatus(String tradeId, String inventoryStatus);
     
     Boolean saveAll(List<ShopOrder> orders);
 }

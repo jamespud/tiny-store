@@ -116,6 +116,20 @@ public class ShopOrderRepositoryImpl implements ShopOrderRepository {
     }
 
     @Override
+    public List<ShopOrder> findByTradeIdAndInventoryStatus(String tradeId, String inventoryStatus) {
+        List<ShopOrderEntity> entities = shopOrderJpaRepository.findByTradeIdAndInventoryStatus(tradeId, inventoryStatus);
+        return entities.stream()
+            .map(entity -> {
+                List<OrderLineEntity> lineEntities = orderLineJpaRepository.findByOrderId(entity.getOrderId());
+                List<OrderLine> lines = lineEntities.stream()
+                    .map(this::toOrderLineDomain)
+                    .collect(Collectors.toList());
+                return toDomain(entity, lines);
+            })
+            .collect(Collectors.toList());
+    }
+
+    @Override
     public Boolean saveAll(List<ShopOrder> orders) {
         orders.forEach(this::save);
         return true;
