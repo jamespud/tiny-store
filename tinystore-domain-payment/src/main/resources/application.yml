@@ -66,6 +66,12 @@ server:
   port: 8083
 
 management:
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:}
   endpoints:
     web:
       exposure:

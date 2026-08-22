@@ -41,6 +41,12 @@ security:
     cache-ttl: ${JWKS_CACHE_TTL:PT5M}
 
 management:
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:}
   endpoints:
     web:
       exposure:
