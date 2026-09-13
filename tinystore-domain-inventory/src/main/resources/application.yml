@@ -78,6 +78,10 @@ inventory:
   kafka:
     topic:
       general: tinystore.inventory.general
+  uncommit:
+    # 未提交预扣的回收超时（兜底：预扣已记账但对应订单/预约从未建立）。
+    # 配置不变量：必须 > 订单侧最大合法预约 TTL，否则会提前释放仍然合法的预约。
+    timeout: ${INVENTORY_UNCOMMIT_TIMEOUT:PT30M}
   reservation:
     expiry:
       # Enable/disable the reservation expiry scheduler

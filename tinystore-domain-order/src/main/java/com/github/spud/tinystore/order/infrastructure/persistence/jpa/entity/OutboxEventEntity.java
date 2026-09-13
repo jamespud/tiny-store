@@ -63,6 +63,10 @@ public class OutboxEventEntity {
     @Column(name = "claimed_at")
     private LocalDateTime claimedAt;
 
+    /** 下次可认领时间；NULL 表示立即可认领（传输失败后的退避重试，见 C12）。 */
+    @Column(name = "next_attempt_at")
+    private LocalDateTime nextAttemptAt;
+
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {

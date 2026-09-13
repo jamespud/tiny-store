@@ -28,6 +28,7 @@ public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventEntit
      * 请使用 {@code OutboxEventService.claimPendingEvents(...)}，不要直接调用本方法。
      */
     @Query(value = "SELECT * FROM tinystore_order.order_outbox WHERE status = :status "
+            + "AND (next_attempt_at IS NULL OR next_attempt_at <= now()) "
             + "ORDER BY created_at ASC LIMIT :limit FOR UPDATE SKIP LOCKED", nativeQuery = true)
     List<OutboxEventEntity> findPendingEvents(@Param("status") String status, @Param("limit") int limit);
 
