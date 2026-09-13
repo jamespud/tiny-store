@@ -13,6 +13,8 @@ import com.github.spud.tinystore.order.domain.repository.ShopOrderRepository;
 import com.github.spud.tinystore.order.domain.repository.TradeRepository;
 import com.github.spud.tinystore.order.infrastructure.acl.PromotionClient;
 import com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService;
+import com.github.spud.tinystore.order.infrastructure.idempotency.IdempotencyService;
+import com.github.spud.tinystore.order.infrastructure.tx.StateTransitionRetry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,6 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -61,6 +64,9 @@ class TradeApplicationServiceAutoCancelTest {
     @Mock
     private PromotionClient promotionClient;
 
+    @Mock
+    private IdempotencyService idempotencyService;
+
     private TradeApplicationService tradeApplicationService;
 
     @BeforeEach
@@ -71,6 +77,13 @@ class TradeApplicationServiceAutoCancelTest {
         ReflectionTestUtils.setField(tradeApplicationService, "outboxEventService", outboxEventService);
         ReflectionTestUtils.setField(tradeApplicationService, "promotionClient", promotionClient);
         ReflectionTestUtils.setField(tradeApplicationService, "objectMapper", new ObjectMapper());
+        // C6：取消动作现在按 trade 认领；单测里直接放行，专注取消流程本身。
+        ReflectionTestUtils.setField(tradeApplicationService, "idempotencyService", idempotencyService);
+        lenient().when(idempotencyService.acquire(anyString(), anyString(), anyString()))
+            .thenReturn(IdempotencyService.AcquireResult.ACQUIRED);
+        // C2：状态迁移重试模板在单测里直通执行。
+        ReflectionTestUtils.setField(tradeApplicationService, "optimisticRetryTemplate",
+            new com.github.spud.tinystore.order.testsupport.PassthroughStateTransitionRetry());
     }
 
     @Test
