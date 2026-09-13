@@ -54,10 +54,14 @@ public interface JpaUserCouponRepository extends JpaRepository<UserCouponEntity,
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT uc FROM UserCouponEntity uc WHERE uc.userId = :userId AND uc.couponId = :couponId AND uc.useStatus = :unused")
-    Optional<UserCouponEntity> findFirstByUserIdAndCouponIdAndUseStatusForUpdate(String userId, UUID id, String unused);
+    Optional<UserCouponEntity> findFirstByUserIdAndCouponIdAndUseStatusForUpdate(
+        @Param("userId") String userId,
+        @Param("couponId") UUID couponId,
+        @Param("unused") String unused);
 
     @Modifying
     @Query("UPDATE UserCouponEntity uc SET uc.useStatus = :used, uc.usedTradeId = :tradeId, uc.usedTime = :now1, uc.updatedAt = :now " +
            "WHERE uc.id = :id AND uc.useStatus = :unused")
-    int markAsUsed(UUID id, String unused, String used, String tradeId, LocalDateTime now, LocalDateTime now1);
+    int markAsUsed(@Param("id") UUID id, @Param("unused") String unused, @Param("used") String used,
+        @Param("tradeId") String tradeId, @Param("now") LocalDateTime now, @Param("now1") LocalDateTime now1);
 }

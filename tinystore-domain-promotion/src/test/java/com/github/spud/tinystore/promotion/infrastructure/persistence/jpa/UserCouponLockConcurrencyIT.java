@@ -144,5 +144,45 @@ class UserCouponLockConcurrencyIT {
 			pool.shutdownNow();
 		}
 	}
-}
 
+	@Test
+	void findFirstByUserIdAndCouponIdAndUseStatusForUpdate_shouldReturnUnusedCoupon() {
+		LocalDateTime now = LocalDateTime.now();
+		UUID couponId = UUID.randomUUID();
+		CouponEntity coupon = new CouponEntity();
+		coupon.setId(couponId);
+		coupon.setCouponNo("C" + couponId.toString().substring(0, 8));
+		coupon.setCouponType("PLATFORM_FULL_REDUCTION");
+		coupon.setScopeType("PLATFORM");
+		coupon.setShopId(null);
+		coupon.setTotalStock(100);
+		coupon.setUsedStock(0);
+		coupon.setStartTime(now.minusDays(1));
+		coupon.setEndTime(now.plusDays(1));
+		coupon.setMutexGroup("G2");
+		coupon.setPriority(0);
+		coupon.setStatus("ACTIVE");
+		coupon.setCreatedAt(now);
+		coupon.setUpdatedAt(now);
+		couponRepository.save(coupon);
+
+		UserCouponEntity userCoupon = new UserCouponEntity();
+		userCoupon.setId(UUID.randomUUID());
+		userCoupon.setUserId("U2");
+		userCoupon.setCouponId(couponId);
+		userCoupon.setCouponNo(coupon.getCouponNo());
+		userCoupon.setReceiveTime(now);
+		userCoupon.setUseStatus("UNUSED");
+		userCoupon.setCreatedAt(now);
+		userCoupon.setUpdatedAt(now);
+		userCouponRepository.save(userCoupon);
+
+		TransactionTemplate tx = new TransactionTemplate(transactionManager);
+		UserCouponEntity found = tx.execute(status ->
+			userCouponRepository.findFirstByUserIdAndCouponIdAndUseStatusForUpdate("U2", couponId, "UNUSED").orElse(null));
+
+		assertThat(found).isNotNull();
+		assertThat(found.getCouponId()).isEqualTo(couponId);
+		assertThat(found.getUseStatus()).isEqualTo("UNUSED");
+	}
+}
