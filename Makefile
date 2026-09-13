@@ -416,6 +416,23 @@ load-multi: build ## Run the k6 load matrix against the N-replica stack (+ per-r
 	if [ $$k6_status -ne 0 ]; then echo "k6 load matrix exited $$k6_status"; exit $$k6_status; fi; \
 	echo "Distributed load matrix complete"
 
+load-compare: build ## k6 ladder on 1 replica vs N replicas: distributed scaling report (throughput + p95/p99 + per-replica split)
+	@echo "Starting distributed scaling comparison (1x vs $(MULTI_REPLICAS)x replicas, same k6 ladder)..."
+	@echo "Knobs: VUS_LEVELS (as in make load-matrix) / DURATION / REPEAT (median of N passes) / ORDER=single-first|multi-first / WARMUP_VUS / WARMUP_DURATION."
+	@bash perf/k6/load_compare.sh \
+		--compose-test $(COMPOSE_TEST) \
+		--compose-multi $(COMPOSE_MULTI) \
+		--services "$(MULTI_SERVICES)" \
+		--replicas "$(MULTI_REPLICAS)" \
+		--levels "$${VUS_LEVELS:-100 300 600}" \
+		--duration "$${DURATION:-30s}" \
+		--stock "$${STOCK_PER_SKU:-500000}" \
+		--order "$${ORDER:-single-first}" \
+		--warmup-vus "$${WARMUP_VUS:-30}" \
+		--warmup-duration "$${WARMUP_DURATION:-10s}" \
+		--repeat "$${REPEAT:-1}" \
+		--outdir perf/reports
+
 retry-multi: build ## Probe the order-placement failure path: is a same-key retry accepted after a 5xx?
 	@echo "Starting multi-instance environment for the order retry probe..."
 	@set -e; \
