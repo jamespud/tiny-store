@@ -61,8 +61,45 @@ public class TradeApplicationService {
     /** create-trade 的幂等作用域。 */
     private static final String IDEMPOTENCY_SCOPE = "trade:create";
 
+    /** 取消动作的幂等作用域（C6：按 trade 认领，保证同一笔交易只被一个 worker 取消）。 */
+    private static final String CANCEL_SCOPE = "trade:cancel";
+
+    /** 取消认领键前缀（键内容为 tradeId）。 */
+    private static final String CANCEL_KEY_PREFIX = "trade-cancel:";
+
     @Autowired
     private TradeRepository tradeRepository;
+
+    /** C2/C8：纯数据库状态迁移的乐观锁冲突重试（每次尝试独立事务）。 */
+    @Autowired
+    private com.github.spud.tinystore.order.infrastructure.tx.StateTransitionRetry optimisticRetryTemplate;
+
+    /** 序列化 outbox 载荷；失败属于编程错误，统一转成非受检异常，便于在 lambda 内使用。 */
+    private String toJson(Object payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize outbox payload", e);
+        }
+    }
+
+    /**
+     * 取消失败（事务回滚）时释放认领，使同一个键可以重新尝试。
+     */
+    private void registerCancelClaimRelease(String tradeId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        String key = CANCEL_KEY_PREFIX + tradeId;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
+                    idempotencyService.releaseLock(CANCEL_SCOPE, key);
+                }
+            }
+        });
+    }
 
     @Autowired
     private ShopOrderRepository shopOrderRepository;
@@ -721,6 +758,23 @@ public class TradeApplicationService {
      * + promotion release（同步 Feign，异步化不在本计划范围）。
      */
     private void cancelTradeInternal(String idempotencyKey, CancelTradeCommand command) throws Exception {
+        // C6：取消动作按 **trade 派生的稳定键** 认领。
+        // REST 取消、支付超时取消、促销提交超时取消三个入口最终都走到这里；
+        // 用同一个键认领，保证同一笔交易在任何时刻只有一个实例在执行取消，
+        // 另一个副本扫到同一行时直接跳过（而不是重复释放库存/重复写关闭事件）。
+        // 失败时通过回滚同步器释放认领，因此"失败后重试"依然可行。
+        switch (idempotencyService.acquire(CANCEL_SCOPE, CANCEL_KEY_PREFIX + command.getTradeId(),
+                command.getTradeId())) {
+            case FINGERPRINT_CONFLICT -> throw new IdempotencyConflictException(
+                    "Cancellation already claimed for a different trade", command.getTradeId());
+            case IN_PROGRESS, REPLAY -> {
+                log.info("Trade cancellation already claimed, skipping: tradeId={}",
+                        command.getTradeId());
+                return;
+            }
+            case ACQUIRED -> registerCancelClaimRelease(command.getTradeId());
+        }
+
         // 获取 Trade 聚合根（公共 cancelTrade 已校验过；此处供 autoCancelTrade 直接复用，
         // 同一事务内二次查找命中同一持久化上下文）
         Trade trade = tradeRepository.findByTradeId(command.getTradeId())
@@ -738,44 +792,60 @@ public class TradeApplicationService {
                     shopOrder);
         }
 
-        // 所有 release 成功后，才更新本地关闭态与关闭事件
-        trade.closeTrade();
-        tradeRepository.save(trade);
+        // 所有 release 成功后，才更新本地关闭态与关闭事件。
+        //
+        // C2：这一段是**纯数据库状态迁移**，而异步的促销提交回执
+        // （PromotionAckConsumer → applyPromotionCommitResult）也会写同一个 trade 行。
+        // 多副本下两条路径在不同 JVM 里各自加载、各自写，后写者会因 @Version 失配失败；
+        // 这里让冲突在新事务里重新加载后重试，而不是把 500 抛给用户。
+        // 外部调用（库存/优惠释放）已经在上面完成，不在重试范围内。
+        optimisticRetryTemplate.execute("close trade " + command.getTradeId(), () -> {
+            Trade fresh = tradeRepository.findByTradeId(command.getTradeId())
+                    .orElseThrow(() -> new DomainConflictException("TRADE_NOT_FOUND",
+                            "Trade not found: " + command.getTradeId()));
+            if (fresh.isClosed()) {
+                log.info("Trade already closed by a concurrent writer, skipping close: {}",
+                        command.getTradeId());
+                return Boolean.TRUE;
+            }
+            fresh.closeTrade();
+            tradeRepository.save(fresh);
 
-        for (ShopOrder shopOrder : shopOrders) {
-            // Mark inventory status as RELEASED before closing the order
-            shopOrder.markInventoryReleased();
-            shopOrder.close();
-            shopOrderRepository.save(shopOrder);
-        }
+            List<ShopOrder> freshOrders = shopOrderRepository.findByTradeId(command.getTradeId());
+            for (ShopOrder shopOrder : freshOrders) {
+                // Mark inventory status as RELEASED before closing the order
+                shopOrder.markInventoryReleased();
+                shopOrder.close();
+                shopOrderRepository.save(shopOrder);
+            }
 
-        OrderDomainEvent tradeClosedEvent = OrderDomainEvent.builder()
-                .eventId(UUID.randomUUID().toString())
-                .eventType(OrderEventType.TRADE_CLOSED)
-                .aggregateType("TRADE")
-                .aggregateId(trade.getTradeId())
-                .occurredAt(LocalDateTime.now())
-                .traceId(command.getTraceId())
-                .payloadJson(objectMapper.writeValueAsString(Map.of(
-                        "tradeId", trade.getTradeId(),
-                        "reason", command.getReason())))
-                .build();
-        outboxEventService.saveEvent(tradeClosedEvent);
-
-        for (ShopOrder shopOrder : shopOrders) {
-            OrderDomainEvent orderClosedEvent = OrderDomainEvent.builder()
+            outboxEventService.saveEvent(OrderDomainEvent.builder()
                     .eventId(UUID.randomUUID().toString())
-                    .eventType(OrderEventType.ORDER_CLOSED)
-                    .aggregateType("ORDER")
-                    .aggregateId(shopOrder.getOrderId())
+                    .eventType(OrderEventType.TRADE_CLOSED)
+                    .aggregateType("TRADE")
+                    .aggregateId(fresh.getTradeId())
                     .occurredAt(LocalDateTime.now())
                     .traceId(command.getTraceId())
-                    .payloadJson(objectMapper.writeValueAsString(Map.of(
-                            "orderId", shopOrder.getOrderId(),
-                            "tradeId", shopOrder.getTradeId())))
-                    .build();
-            outboxEventService.saveEvent(orderClosedEvent);
-        }
+                    .payloadJson(toJson(Map.of(
+                            "tradeId", fresh.getTradeId(),
+                            "reason", command.getReason())))
+                    .build());
+
+            for (ShopOrder shopOrder : freshOrders) {
+                outboxEventService.saveEvent(OrderDomainEvent.builder()
+                        .eventId(UUID.randomUUID().toString())
+                        .eventType(OrderEventType.ORDER_CLOSED)
+                        .aggregateType("ORDER")
+                        .aggregateId(shopOrder.getOrderId())
+                        .occurredAt(LocalDateTime.now())
+                        .traceId(command.getTraceId())
+                        .payloadJson(toJson(Map.of(
+                                "orderId", shopOrder.getOrderId(),
+                                "tradeId", shopOrder.getTradeId())))
+                        .build());
+            }
+            return Boolean.TRUE;
+        });
 
         // 释放促销优惠
         try {
@@ -1074,39 +1144,61 @@ public class TradeApplicationService {
     @Transactional
     public void confirmTradeReceipt(String tradeId, String traceId) throws Exception {
         try {
-            Trade trade = tradeRepository.findByTradeId(tradeId)
-                    .orElseThrow(() -> new DomainConflictException("TRADE_NOT_FOUND",
-                            "Trade not found: " + tradeId));
+            List<String> notAdvanced;
+            try {
+                // C8：这一段是纯数据库状态迁移，与"包裹签收"路径（同样会把订单推到 SUCCESS）
+                // 争抢同一行；冲突时在新事务里重新加载后重试，而不是直接失败。
+                notAdvanced = optimisticRetryTemplate.execute("confirm receipt " + tradeId, () -> {
+                    Trade trade = tradeRepository.findByTradeId(tradeId)
+                            .orElseThrow(() -> new DomainConflictException("TRADE_NOT_FOUND",
+                                    "Trade not found: " + tradeId));
 
-            // 查找该交易下的所有店铺订单
-            List<ShopOrder> shopOrders = shopOrderRepository.findByTradeId(tradeId);
-            if (shopOrders.isEmpty()) {
-                log.warn("No shop orders found for trade: tradeId={}", tradeId);
-                return;
+                    List<ShopOrder> shopOrders = shopOrderRepository.findByTradeId(tradeId);
+                    if (shopOrders.isEmpty()) {
+                        log.warn("No shop orders found for trade: tradeId={}", tradeId);
+                        return List.<String>of();
+                    }
+
+                    for (ShopOrder shopOrder : shopOrders) {
+                        if (OrderStatus.PENDING_RECEIVE.equals(shopOrder.getOrderStatus())) {
+                            shopOrder.markAsSuccess();
+                            shopOrderRepository.save(shopOrder);
+
+                            outboxEventService.saveEvent(OrderDomainEvent.builder()
+                                    .eventId(UUID.randomUUID().toString())
+                                    .eventType(OrderEventType.ORDER_SUCCESS)
+                                    .aggregateType("ORDER")
+                                    .aggregateId(shopOrder.getOrderId())
+                                    .occurredAt(LocalDateTime.now())
+                                    .traceId(traceId)
+                                    .payloadJson(toJson(Map.of(
+                                            "orderId", shopOrder.getOrderId(),
+                                            "tradeId", tradeId)))
+                                    .build());
+
+                            log.info("Shop order receipt confirmed: orderId={}",
+                                    shopOrder.getOrderId());
+                        }
+                    }
+
+                    // 复核：只有所有子单都处于成功终态，才允许对外报告成功。
+                    List<String> pending = new ArrayList<>();
+                    for (ShopOrder shopOrder : shopOrderRepository.findByTradeId(tradeId)) {
+                        if (!OrderStatus.SUCCESS.equals(shopOrder.getOrderStatus())) {
+                            pending.add(shopOrder.getOrderId() + "=" + shopOrder.getOrderStatus());
+                        }
+                    }
+                    return pending;
+                });
+            } catch (DomainConflictException e) {
+                throw e;
             }
 
-            // 逐个订单确认收货（使用聚合根方法）
-            for (ShopOrder shopOrder : shopOrders) {
-                if (OrderStatus.PENDING_RECEIVE.equals(shopOrder.getOrderStatus())) {
-                    shopOrder.markAsSuccess();
-                    shopOrderRepository.save(shopOrder);
-
-                    // 发布订单完成事件
-                    OrderDomainEvent orderSuccessEvent = OrderDomainEvent.builder()
-                            .eventId(UUID.randomUUID().toString())
-                            .eventType(OrderEventType.ORDER_SUCCESS)
-                            .aggregateType("ORDER")
-                            .aggregateId(shopOrder.getOrderId())
-                            .occurredAt(LocalDateTime.now())
-                            .traceId(traceId)
-                            .payloadJson(objectMapper.writeValueAsString(Map.of(
-                                    "orderId", shopOrder.getOrderId(),
-                                    "tradeId", tradeId)))
-                            .build();
-                    outboxEventService.saveEvent(orderSuccessEvent);
-
-                    log.info("Shop order receipt confirmed: orderId={}", shopOrder.getOrderId());
-                }
+            if (!notAdvanced.isEmpty()) {
+                // 绝不静默 200：部分子单没有推进时必须让调用方知道（客户端可重试）。
+                throw new DomainConflictException("RECEIPT_PARTIAL",
+                        "Trade receipt not fully confirmed for tradeId=" + tradeId
+                                + ", pending shop orders: " + String.join(", ", notAdvanced));
             }
 
             log.info("Trade receipt confirmed: tradeId={}", tradeId);
@@ -1291,7 +1383,8 @@ public class TradeApplicationService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void autoCancelTrade(String tradeId, String reason, String traceId) {
-        String internalKey = "auto-cancel-" + tradeId + "-" + System.nanoTime();
+        // 稳定键：同一笔交易的自动取消只应被认领一次（原先拼 System.nanoTime()，每次都不同）。
+        String internalKey = "auto-cancel:" + tradeId;
         CancelTradeCommand command = CancelTradeCommand.builder()
                 .tradeId(tradeId)
                 .reason(reason)

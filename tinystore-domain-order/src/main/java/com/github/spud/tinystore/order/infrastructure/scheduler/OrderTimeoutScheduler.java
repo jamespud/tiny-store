@@ -89,7 +89,9 @@ public class OrderTimeoutScheduler {
                         .build();
 
                     tradeApplicationService.cancelTrade(
-                        UUID.randomUUID().toString(), // 幂等键
+                        // C6：稳定幂等键。原先用随机 UUID，等于主动放弃去重信号；
+                        // 多副本同时扫到同一笔超时订单时会各自执行一次取消。
+                        "timeout-cancel:" + trade.getTradeId(),
                         command
                     );
 

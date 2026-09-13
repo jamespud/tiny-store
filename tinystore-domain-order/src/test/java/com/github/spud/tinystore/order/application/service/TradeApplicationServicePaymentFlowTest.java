@@ -93,6 +93,9 @@ class TradeApplicationServicePaymentFlowTest {
         ReflectionTestUtils.setField(tradeApplicationService, "promotionClient", promotionClient);
         ReflectionTestUtils.setField(tradeApplicationService, "inventoryClient", inventoryClient);
         ReflectionTestUtils.setField(tradeApplicationService, "objectMapper", new ObjectMapper());
+        // C2/C8：状态迁移重试模板在单测里直通执行（无真实事务管理器）。
+        ReflectionTestUtils.setField(tradeApplicationService, "optimisticRetryTemplate",
+            new com.github.spud.tinystore.order.testsupport.PassthroughStateTransitionRetry());
     }
 
     @Test
