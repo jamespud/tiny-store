@@ -59,7 +59,10 @@ routes:
             capacity: 5
             refillRate: 5
       idempotency:
-        enabled: true
+        # 下单的业务幂等由订单域单独负责（原子 acquire + 请求指纹 + afterCommit 落库）。
+        # 网关再维护一套 PROCESSING/COMPLETED 生命周期会与订单域冲突：
+        # 网关把下游 5xx 也标记为 COMPLETED，导致失败后同键重试被 409 拒绝（见 C9）。
+        enabled: false
         keyTemplate: "idempotent:tinystore:order:create:{unique}"
   - id: pay-service
     uri: lb://pay-service
@@ -139,4 +142,3 @@ routes:
         refillRate: 50
       idempotency:
         enabled: false
-

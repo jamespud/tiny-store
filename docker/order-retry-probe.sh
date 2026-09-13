@@ -1,126 +1,131 @@
 #!/usr/bin/env bash
-# Deterministic probe of the order-placement idempotency semantics.
+# Order-placement idempotency acceptance probe (C9 + C11).
 #
-# Check 1 (C9): after POST /api/order/trades fails with 5xx, may the client retry the
-#   identical request with the SAME Idempotency-Key? A client that receives a 5xx is
-#   expected to retry; if the failed attempt consumed the key and cached no response,
-#   the retry is rejected and the order can never be placed until the key expires.
+# The order domain owns business idempotency: an atomic acquire binds the idempotency key to a
+# request fingerprint, SUCCEEDED is only written after commit, and a rolled-back attempt releases
+# its record. This probe asserts the three externally visible consequences:
 #
-# Check 2 (C11): is the idempotency key bound to the request body? A duplicate key that
-#   carries a DIFFERENT payload must be rejected -- never answered with 200 plus the
-#   previous order's identifiers. Probed directly against an order replica, because the
-#   gateway's 5-minute key TTL would otherwise mask the order-domain behaviour.
+#   Check 1 — a failed attempt must not burn the key: retrying the SAME key + SAME body must
+#             actually re-execute (reach the order domain), not be rejected as a duplicate.
+#   Check 2 — the key is bound to the body: same key + DIFFERENT body must be rejected and must
+#             NOT create the second trade.
+#   Check 3 — a successful request replays deterministically: same key + same body returns the
+#             ORIGINAL tradeId / paymentIntentId.
 #
-# The failures are forced deterministically (re-posting an existing tradeId with a new
-# key = same failure class as a duplicate-ID collision), so no random collision is needed.
-#
-# Usage: order-retry-probe.sh <gateway-port> [order-replica-port]
-# Exit:  0 = both semantics correct, 2 = at least one defect reproduced, 1 = inconclusive.
+# Usage: order-retry-probe.sh <gateway-port>
+# Exit:  0 = all three checks pass, 2 = at least one defect reproduced, 1 = could not run.
 set -uo pipefail
 
-GW="${1:?usage: order-retry-probe.sh <gateway-port> [order-replica-port]}"
-ORDER_PORT="${2:-}"
+GW="${1:?usage: order-retry-probe.sh <gateway-port>}"
+BASE="http://localhost:${GW}/api/order/trades"
+BODY_FILE="$(mktemp)"
+FAILED=0
 
-redis_get() { docker exec tinystore-redis-test redis-cli get "$1" 2>/dev/null; }
-redis_exists() { [ -n "$(redis_get "$1")" ]; }
-
-create_body() {
+body_for() {
+  # $1 = tradeId, $2 = buyerId
   printf '{"tradeId":"%s","buyerId":"%s","buyerNick":"probe","addressId":"addr-001","traceId":"probe-%s","orderLines":[{"skuId":"SKU_A","productId":"prod-1","productName":"P","shopId":"SHOP_A","sellerId":"seller-A","quantity":1,"priceCents":1000,"weightGrams":0}]}' "$1" "$2" "$1"
 }
 
-# posts and echoes the HTTP status; the response body lands in $PROBE_BODY_FILE
-PROBE_BODY_FILE="$(mktemp)"
-post_capture() {
-  curl -s -o "$PROBE_BODY_FILE" -w '%{http_code}' --max-time 30 \
-    -X POST "$1" \
+post_create() {
+  # $1 = idempotency key, $2 = body -> echoes status, body lands in $BODY_FILE
+  curl -s -o "$BODY_FILE" -w '%{http_code}' --max-time 30 -X POST "$BASE" \
     -H 'Content-Type: application/json' \
-    -H "Idempotency-Key: $2" \
-    -d "$3" || true
+    -H "Idempotency-Key: $1" \
+    -d "$2" || true
 }
 
-gw_url="http://localhost:${GW}/api/order/trades"
+psql_t() { docker exec -i tinystore-postgres-test psql -U postgres -d tinystore -t -A -c "$1" 2>/dev/null | tr -d '[:space:]'; }
+field() { grep -o "\"$1\":\"[^\"]*\"" "$BODY_FILE" | head -1 | cut -d'"' -f4; }
+
 ts="$(date +%s%N)"
-trade="retryprobe-${ts}"
-key_ok="k-ok-${ts}"
-key_failed="k-fail-${ts}"
-body="$(create_body "$trade" "buyer-${ts}")"
-retry_blocked=0
+echo "=== Order-placement idempotency probe ==="
 
-echo "=== Check 1: retry after a failed placement (C9) ==="
-step1="$(post_capture "$gw_url" "$key_ok" "$body")"
-echo "  1) first placement                     : ${step1}"
-if [ "$step1" != "200" ]; then
-  echo "  VERDICT: inconclusive (baseline placement did not return 200)."
-  rm -f "$PROBE_BODY_FILE"
-  exit 1
-fi
+# ---------------------------------------------------------------- Check 1 (C9)
+anchor="probe-anchor-${ts}"
+anchor_key="k-anchor-${ts}"
+failed_key="k-failed-${ts}"
+anchor_body="$(body_for "$anchor" "buyer-${ts}")"
 
-step2="$(post_capture "$gw_url" "$key_failed" "$body")"
-echo "  2) forced failure (same tradeId, new key): ${step2}"
-if [ "$step2" = "200" ]; then
-  echo "  VERDICT: inconclusive (the failure could not be forced)."
-  rm -f "$PROBE_BODY_FILE"
-  exit 1
-fi
-
-same_via_gateway="$(post_capture "$gw_url" "$key_failed" "$body")"
-echo "  3) retry with the SAME key, same body  : ${same_via_gateway}"
-
-order_lock="idempotency:trade:create:${key_failed}"
-order_response="idempotency:response:trade:create:${key_failed}"
-gateway_key="idempotent:order-service:${key_failed}"
-order_layer_blocked=0
-if redis_exists "$order_lock" && ! redis_exists "$order_response"; then
-  order_layer_blocked=1
-fi
-
-echo "  Redis left behind: ${gateway_key}=$(redis_get "$gateway_key") | ${order_lock}=$(redis_get "$order_lock") | response=$([ -n "$(redis_get "$order_response")" ] && echo present || echo ABSENT)"
-if [ "$same_via_gateway" != "200" ] || [ "$order_layer_blocked" -eq 1 ]; then
-  retry_blocked=1
-  echo "  --> BLOCKED: the failed attempt consumed the key; a same-key retry cannot succeed."
-  [ "$same_via_gateway" != "200" ] && echo "      * gateway layer answered ${same_via_gateway} (key marked COMPLETED despite the 5xx)."
-  [ "$order_layer_blocked" -eq 1 ] && echo "      * order layer still holds the lock with NO cached response."
-else
-  echo "  --> OK: the failed attempt released its idempotency key."
-fi
-
-# ---------------------------------------------------------------------------
-fingerprint_blocked=0
-if [ -n "$ORDER_PORT" ]; then
-  ts2="$(date +%s%N)"
-  k2="fp-${ts2}"
-  ta="fpA-${ts2}"
-  tb="fpB-${ts2}"
-  direct_url="http://localhost:${ORDER_PORT}/order/trades"
-  ca="$(post_capture "$direct_url" "$k2" "$(create_body "$ta" "buyer-${ts2}")")"
-  cb="$(post_capture "$direct_url" "$k2" "$(create_body "$tb" "buyer-${ts2}")")"
-  served="$(grep -o '"tradeId":"[^"]*"' "$PROBE_BODY_FILE" 2>/dev/null | head -1 | cut -d'"' -f4)"
-  created_b="$(docker exec tinystore-postgres-test psql -U postgres -d tinystore -t -A \
-    -c "select count(*) from tinystore_order.trade where trade_id='${tb}';" 2>/dev/null | tr -d '[:space:]')"
-
-  echo ""
-  echo "=== Check 2: is the key bound to the request body? (C11) ==="
-  echo "  key=${k2}  bodyA->${ta}  bodyB->${tb}"
-  echo "  1) key + body A            : ${ca}"
-  echo "  2) SAME key + body B       : ${cb} (served tradeId=${served:-n/a})"
-  echo "  3) trades actually created with tradeId=${tb}: ${created_b:-unknown}"
-
-  if [ "$cb" = "200" ] && [ "${created_b:-1}" = "0" ]; then
-    fingerprint_blocked=1
-    echo "  --> FALSE SUCCESS: answered 200 while body B was never created;"
-    echo "      the request fingerprint is stored but never compared."
-  elif [ "$cb" != "200" ]; then
-    echo "  --> OK: the duplicate key with a different body was rejected (${cb})."
-  else
-    echo "  --> OK: the second request was genuinely created."
-  fi
-fi
-
-rm -f "$PROBE_BODY_FILE"
+first="$(post_create "$anchor_key" "$anchor_body")"
 echo ""
-if [ "$retry_blocked" -eq 0 ] && [ "$fingerprint_blocked" -eq 0 ]; then
-  echo "VERDICT: order-placement idempotency semantics are correct."
-  exit 0
+echo "Check 1 — a failed attempt must not burn the idempotency key"
+echo "  1) baseline placement                         : ${first}"
+if [ "$first" != "200" ]; then
+  echo "  VERDICT: inconclusive (baseline placement did not succeed)"
+  rm -f "$BODY_FILE"; exit 1
 fi
-echo "VERDICT: defects reproduced (retry_blocked=${retry_blocked}, fingerprint_blocked=${fingerprint_blocked})."
-exit 2
+
+forced="$(post_create "$failed_key" "$anchor_body")"   # same tradeId, new key -> business failure
+echo "  2) forced failure (same tradeId, new key)     : ${forced}"
+retry="$(post_create "$failed_key" "$anchor_body")"    # same key + same body again
+retry_body="$(cat "$BODY_FILE")"
+echo "  3) SAME key + SAME body retry                 : ${retry}"
+
+if printf '%s' "$retry_body" | grep -qi "idempotent_conflict\|already in progress"; then
+  echo "  FAIL: the key was still held after the failed attempt (retry blocked by idempotency)"
+  FAILED=1
+elif [ "$retry" = "000" ]; then
+  echo "  FAIL: retry produced no HTTP response (${retry})"
+  FAILED=1
+else
+  echo "  PASS: the retry re-executed instead of being rejected as a duplicate"
+fi
+
+# ---------------------------------------------------------------- Check 2 (C11)
+fp_key="k-fingerprint-${ts}"
+fp_a="probe-fpA-${ts}"
+fp_b="probe-fpB-${ts}"
+
+echo ""
+echo "Check 2 — the key is bound to the request body"
+status_a="$(post_create "$fp_key" "$(body_for "$fp_a" "buyer-${ts}")")"
+status_b="$(post_create "$fp_key" "$(body_for "$fp_b" "buyer-${ts}")")"
+served="$(field tradeId)"
+created_b="$(psql_t "select count(*) from tinystore_order.trade where trade_id='${fp_b}';")"
+echo "  1) key + body A                               : ${status_a}"
+echo "  2) SAME key + body B                          : ${status_b} (served tradeId=${served:-n/a})"
+echo "  3) trades actually created with body B's id   : ${created_b:-unknown}"
+
+if [ "$status_b" = "200" ] && [ "${created_b:-1}" = "0" ]; then
+  echo "  FAIL: false success — answered 200 while body B was never created"
+  FAILED=1
+elif [ "${created_b:-0}" != "0" ]; then
+  echo "  FAIL: the second body was actually created (key not bound to the body)"
+  FAILED=1
+else
+  echo "  PASS: the different body was rejected (${status_b}) and never created"
+fi
+
+# ---------------------------------------------------------------- Check 3
+replay_key="k-replay-${ts}"
+replay_trade="probe-replay-${ts}"
+replay_body="$(body_for "$replay_trade" "buyer-${ts}")"
+
+echo ""
+echo "Check 3 — a successful request replays deterministically"
+ok_first="$(post_create "$replay_key" "$replay_body")"
+first_trade="$(field tradeId)"
+first_payment="$(field paymentIntentId)"
+ok_again="$(post_create "$replay_key" "$replay_body")"
+again_trade="$(field tradeId)"
+again_payment="$(field paymentIntentId)"
+echo "  1) first attempt                              : ${ok_first} tradeId=${first_trade:-n/a}"
+echo "  2) same key + same body                       : ${ok_again} tradeId=${again_trade:-n/a}"
+
+if [ "$ok_first" = "200" ] && [ "$ok_again" = "200" ] \
+   && [ -n "$first_trade" ] && [ "$first_trade" = "$again_trade" ] \
+   && [ "$first_payment" = "$again_payment" ]; then
+  echo "  PASS: replayed the original tradeId and paymentIntentId"
+else
+  echo "  FAIL: replay did not return the original identifiers"
+  FAILED=1
+fi
+
+rm -f "$BODY_FILE"
+echo ""
+if [ "$FAILED" -ne 0 ]; then
+  echo "VERDICT: order-placement idempotency semantics are NOT satisfied."
+  exit 2
+fi
+echo "VERDICT: order-placement idempotency semantics hold (failed retry re-executes, body is bound, success replays)."
+exit 0

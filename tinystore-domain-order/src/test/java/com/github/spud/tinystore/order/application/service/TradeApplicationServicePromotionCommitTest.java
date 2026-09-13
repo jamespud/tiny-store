@@ -129,7 +129,8 @@ class TradeApplicationServicePromotionCommitTest {
 
         // 幂等性：允许创建，成功路径不缓存已存在响应
         IdempotencyService idempotencyService = mock(IdempotencyService.class);
-        when(idempotencyService.tryAcquire(any(), any(), any())).thenReturn(true);
+        when(idempotencyService.acquire(any(), any(), any()))
+            .thenReturn(IdempotencyService.AcquireResult.ACQUIRED);
         ReflectionTestUtils.setField(service, "idempotencyService", idempotencyService);
 
         // promotion quote：OK 状态 + 有效 snapshot

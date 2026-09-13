@@ -13,6 +13,7 @@ import com.github.spud.tinystore.order.domain.enums.PromotionStatus;
 import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
 import com.github.spud.tinystore.order.domain.event.OrderEventType;
 import com.github.spud.tinystore.order.domain.exception.DomainConflictException;
+import com.github.spud.tinystore.order.domain.exception.IdempotencyConflictException;
 import com.github.spud.tinystore.order.domain.model.InventoryReservationRef;
 import com.github.spud.tinystore.order.domain.model.OrderLine;
 import com.github.spud.tinystore.order.domain.model.ShopOrder;
@@ -43,6 +44,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -54,6 +57,9 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class TradeApplicationService {
+
+    /** create-trade 的幂等作用域。 */
+    private static final String IDEMPOTENCY_SCOPE = "trade:create";
 
     @Autowired
     private TradeRepository tradeRepository;
@@ -115,23 +121,29 @@ public class TradeApplicationService {
         PromotionQuoteResponse quoteResponse = null;
         List<ShopOrder> updatedOrders = new ArrayList<>();
         boolean compensationRequired = false;
+        // 幂等收尾：必须在取得处理权之后立刻注册，否则中途失败时没有东西会释放记录。
+        String[] idempotencyResponseHolder = new String[1];
         try {
+            // 1. 幂等：请求指纹必须在生成服务端 tradeId **之前**计算，
+            //    否则"同键不同请求体"无法被识别（服务端 ID 每次都不同）。
+            String fingerprint = TradeRequestFingerprint.of(command);
+            switch (idempotencyService.acquire(IDEMPOTENCY_SCOPE, idempotencyKey, fingerprint)) {
+                case FINGERPRINT_CONFLICT -> throw new IdempotencyConflictException(
+                        "Idempotency key reused with a different request body", idempotencyKey);
+                case IN_PROGRESS -> throw new DomainConflictException("IDEMPOTENT_CONFLICT",
+                        "Trade creation already in progress with this idempotency key");
+                case REPLAY -> {
+                    return replayStoredTrade(IDEMPOTENCY_SCOPE, idempotencyKey);
+                }
+                case ACQUIRED -> {
+                    // 取得处理权：立刻登记提交/回滚收尾，保证任何后续失败都会释放记录。
+                    registerIdempotencyCompletion(idempotencyKey, fingerprint, idempotencyResponseHolder);
+                }
+            }
+
             tradeId = (command.getTradeId() != null && !command.getTradeId().isEmpty())
                     ? command.getTradeId()
                     : TradeIdGenerator.generateTradeId();
-
-            // 1. 幂等性检查与获取缓存
-            String fingerprint = tradeId + ":" + command.getBuyerId();
-            if (!idempotencyService.tryAcquire("trade:create", idempotencyKey, fingerprint)) {
-                String cachedResponse = idempotencyService.getCachedResponse("trade:create",
-                        idempotencyKey);
-                if (cachedResponse != null) {
-                    log.info("Idempotent trade creation: returning cached response");
-                    return objectMapper.readValue(cachedResponse, CreateTradeData.class);
-                }
-                throw new DomainConflictException("IDEMPOTENT_CONFLICT",
-                        "Trade creation already in progress with this idempotency key");
-            }
 
             // 2.0 服务端权威定价（A3）：以商品目录单价为准，拒绝客户端自定价格（demo 级缺陷修复）。
             if (priceAuthoritativeEnabled && skuPriceResolver != null
@@ -468,9 +480,14 @@ public class TradeApplicationService {
                     .paymentIntentId(paymentId)
                     .build();
 
-            // 缓存幂等响应
-            idempotencyService.storeResponse("trade:create", idempotencyKey,
-                    objectMapper.writeValueAsString(result));
+            // 幂等收尾：记录响应内容。真正写入 Redis 的时机由前面登记的同步器决定
+            // （事务提交后写 SUCCEEDED；回滚则删除记录）。
+            idempotencyResponseHolder[0] = objectMapper.writeValueAsString(result);
+            if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+                // 非事务上下文（单测直接驱动应用服务）：立即落库，保持行为可预期。
+                idempotencyService.markSucceeded(IDEMPOTENCY_SCOPE, idempotencyKey, fingerprint,
+                        idempotencyResponseHolder[0]);
+            }
 
             log.info("Trade creation succeeded: tradeId={}, paymentId={}", trade.getTradeId(), paymentId);
             return result;
@@ -514,6 +531,52 @@ public class TradeApplicationService {
             cause = cause.getCause();
         }
         return failure;
+    }
+
+    /**
+     * 重放上一次成功请求的响应（幂等键 + 相同请求指纹）。
+     */
+    private CreateTradeData replayStoredTrade(String scope, String idempotencyKey)
+            throws JsonProcessingException {
+        String cachedResponse = idempotencyService.getStoredResponse(scope, idempotencyKey);
+        if (cachedResponse != null) {
+            log.info("Idempotent trade creation: replaying stored response");
+            return objectMapper.readValue(cachedResponse, CreateTradeData.class);
+        }
+        throw new DomainConflictException("IDEMPOTENT_CONFLICT",
+                "Trade creation already completed for this idempotency key but its response is unavailable");
+    }
+
+    /**
+     * 幂等收尾：成功只在事务提交后落库（SUCCEEDED + 响应），回滚则释放本次请求占用的记录。
+     *
+     * <p>提交前不写 SUCCEEDED，是为了避免"事务回滚了、客户端却拿到成功"。
+     * 回滚时删除记录，是为了让"失败后同键重试"可以真正重新执行——这正是 C9 修复的核心。
+     */
+    private void registerIdempotencyCompletion(String idempotencyKey, String fingerprint,
+            String[] responseHolder) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            // 非事务上下文（例如直接驱动应用服务的单测）：由成功路径直接落库。
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                if (responseHolder[0] != null) {
+                    idempotencyService.markSucceeded(IDEMPOTENCY_SCOPE, idempotencyKey, fingerprint,
+                            responseHolder[0]);
+                }
+            }
+
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
+                    log.info("Trade creation rolled back, releasing idempotency record: key={}",
+                            idempotencyKey);
+                    idempotencyService.releaseLock(IDEMPOTENCY_SCOPE, idempotencyKey);
+                }
+            }
+        });
     }
 
     /**
