@@ -23,7 +23,14 @@ public class UserService implements UserDetailsService {
   private final AccountServiceFeignClient accountServiceFeignClient;
 
   public MallUser getOrCreateByPhone(String phone) {
-    AccountServiceFeignClient.UserCoreDto dto = accountServiceFeignClient.getUserByPhone(phone);
+    // 账号域对"查不到用户"返回 404，Feign 会直接抛 FeignException.NotFound；
+    // 这正是"新用户首次 OTP 登录"的正常路径，必须当成 null 处理，否则首次登录必然失败。
+    AccountServiceFeignClient.UserCoreDto dto;
+    try {
+      dto = accountServiceFeignClient.getUserByPhone(phone);
+    } catch (feign.FeignException.NotFound notFound) {
+      dto = null;
+    }
     if (dto != null) {
       MallUser user = convertToMallUser(dto);
       return ensureNotFrozen(user);
@@ -66,8 +73,14 @@ public class UserService implements UserDetailsService {
 
   @Override
   public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-    AccountServiceFeignClient.UserCoreDto userCoreDto = accountServiceFeignClient.getUserByUsername(
-      username);
+    // 同上：账号域的 404 表示"用户名不存在"，应转成 UsernameNotFoundException，
+    // 而不是把 Feign 异常原样抛给调用方。
+    AccountServiceFeignClient.UserCoreDto userCoreDto;
+    try {
+      userCoreDto = accountServiceFeignClient.getUserByUsername(username);
+    } catch (feign.FeignException.NotFound notFound) {
+      throw new UsernameNotFoundException("User not found: " + username);
+    }
     if (userCoreDto == null) {
       throw new UsernameNotFoundException("User not found: " + username);
     }
