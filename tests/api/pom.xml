@@ -18,7 +18,21 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!--
+          Single-instance defaults (match docker-compose-test.yml). Every value below can be
+          overridden with -D on the Maven command line; `make e2e-multi` overrides the replica
+          URL lists with one entry per replica so the distributed assertions scale with
+          MULTI_REPLICAS instead of assuming exactly two replicas.
+        -->
         <gateway.base.url>http://localhost:8080</gateway.base.url>
+        <product.base.url>http://localhost:8090</product.base.url>
+        <inventory.base.url>http://localhost:13000</inventory.base.url>
+        <promotion.base.url>http://localhost:1200</promotion.base.url>
+        <multi.instance.mode>false</multi.instance.mode>
+        <multi.instance.replicas>2</multi.instance.replicas>
+        <nacos.base.url>http://localhost:8849</nacos.base.url>
+        <gateway.replica.urls>http://localhost:38080</gateway.replica.urls>
+        <order.replica.urls>http://localhost:38280</order.replica.urls>
     </properties>
 
     <dependencies>
@@ -74,6 +88,14 @@
                 <configuration>
                     <systemPropertyVariables>
                         <gateway.base.url>${gateway.base.url}</gateway.base.url>
+                        <product.base.url>${product.base.url}</product.base.url>
+                        <inventory.base.url>${inventory.base.url}</inventory.base.url>
+                        <promotion.base.url>${promotion.base.url}</promotion.base.url>
+                        <multi.instance.mode>${multi.instance.mode}</multi.instance.mode>
+                        <multi.instance.replicas>${multi.instance.replicas}</multi.instance.replicas>
+                        <nacos.base.url>${nacos.base.url}</nacos.base.url>
+                        <gateway.replica.urls>${gateway.replica.urls}</gateway.replica.urls>
+                        <order.replica.urls>${order.replica.urls}</order.replica.urls>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
@@ -88,6 +110,14 @@
                     <failIfNoSpecifiedTests>true</failIfNoSpecifiedTests>
                     <systemPropertyVariables>
                         <gateway.base.url>${gateway.base.url}</gateway.base.url>
+                        <product.base.url>${product.base.url}</product.base.url>
+                        <inventory.base.url>${inventory.base.url}</inventory.base.url>
+                        <promotion.base.url>${promotion.base.url}</promotion.base.url>
+                        <multi.instance.mode>${multi.instance.mode}</multi.instance.mode>
+                        <multi.instance.replicas>${multi.instance.replicas}</multi.instance.replicas>
+                        <nacos.base.url>${nacos.base.url}</nacos.base.url>
+                        <gateway.replica.urls>${gateway.replica.urls}</gateway.replica.urls>
+                        <order.replica.urls>${order.replica.urls}</order.replica.urls>
                     </systemPropertyVariables>
                 </configuration>
                 <executions>

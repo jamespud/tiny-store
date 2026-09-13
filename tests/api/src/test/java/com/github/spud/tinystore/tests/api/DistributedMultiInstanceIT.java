@@ -16,6 +16,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -172,9 +173,10 @@ class DistributedMultiInstanceIT extends AbstractE2EBase {
 
     @Test
     void idempotencyKeyIsEnforcedAcrossDifferentGatewayReplicas() {
-        assertThat(GATEWAY_REPLICA_URLS)
-            .withFailMessage("Need at least two gateway replicas to prove shared idempotency")
-            .hasSizeGreaterThanOrEqualTo(2);
+        // N=1 is a supported stack shape (MULTI_REPLICAS=1), it just cannot prove that
+        // idempotency state is *shared* -- there is no second replica to replay against.
+        Assumptions.assumeTrue(GATEWAY_REPLICA_URLS.size() >= 2,
+            "Need at least two gateway replicas to prove shared idempotency; got " + GATEWAY_REPLICA_URLS.size());
 
         String tradeId = UUID.randomUUID().toString();
         String idempotencyKey = "idem-multi-" + tradeId;
