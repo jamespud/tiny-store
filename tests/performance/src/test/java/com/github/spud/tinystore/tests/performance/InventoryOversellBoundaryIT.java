@@ -7,6 +7,7 @@ import com.github.spud.tinystore.tests.performance.support.GatewayClient;
 import com.github.spud.tinystore.tests.performance.support.PostgresClient;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -25,6 +26,10 @@ import org.slf4j.LoggerFactory;
 /**
  * 超卖边界测试：C 个买家抢 stock S=C/10 的新 SKU，验证 Redis Lua 不超卖。
  * DB 强断言：PRE_DEDUCTED 计数 == S（恰好 S 个成功准入），成功+失败 == C。
+ *
+ * <p>多实例模式：设置 {@code -Dinventory.replica.urls=http://host:p1,http://host:p2} 后，
+ * 并发请求会轮询打到 <em>每个</em> inventory 副本上。单实例下退化为一台，行为不变。
+ * 这样"不超卖"这条单一权威的承诺才是在真分布式的条件下被验证的，而不是只压一个 JVM。
  */
 class InventoryOversellBoundaryIT {
 
@@ -37,7 +42,8 @@ class InventoryOversellBoundaryIT {
     private int concurrency;
     private int stock;
 
-    private GatewayClient gatewayClient;
+    /** One client per inventory replica; when not in multi-instance mode this holds a single client. */
+    private List<GatewayClient> gatewayClients;
     private PostgresClient pgClient;
 
     @BeforeEach
@@ -51,7 +57,20 @@ class InventoryOversellBoundaryIT {
         concurrency = Integer.parseInt(System.getProperty("perf.concurrency", "500"));
         stock = Integer.parseInt(System.getProperty("perf.oversell.stock", String.valueOf(concurrency / 10)));
 
-        gatewayClient = new GatewayClient(gatewayBaseUrl);
+        gatewayClients = new ArrayList<>();
+        String replicaUrls = System.getProperty("inventory.replica.urls");
+        if (replicaUrls != null && !replicaUrls.isBlank()) {
+            for (String url : replicaUrls.split(",")) {
+                if (!url.isBlank()) {
+                    gatewayClients.add(new GatewayClient(url.trim()));
+                }
+            }
+        }
+        if (gatewayClients.isEmpty()) {
+            gatewayClients.add(new GatewayClient(gatewayBaseUrl));
+        }
+        log.info("Oversell test will spread requests over {} inventory replica(s): {}",
+            gatewayClients.size(), gatewayClients);
         pgClient = new PostgresClient(pgUrl, pgUser, pgPassword);
     }
 
@@ -86,7 +105,10 @@ class InventoryOversellBoundaryIT {
                         "tradeId", tradeId,
                         "orderId", tradeId,
                         "items", List.of(Map.of("shopId", shopId, "skuId", skuId, "quantity", 1)));
-                    HttpResponse<String> resp = gatewayClient.reserveInventory(tradeId, body);
+                    // Round-robin across replicas so the "single authority" claim is tested
+                    // while every replica is concurrently admitting stock.
+                    GatewayClient client = gatewayClients.get(idx % gatewayClients.size());
+                    HttpResponse<String> resp = client.reserveInventory(tradeId, body);
                     responses.put(idx, resp);
                 } catch (Throwable t) {
                     // ignore; counted as failure
@@ -118,7 +140,7 @@ class InventoryOversellBoundaryIT {
             .filter(r -> r.statusCode() == 200)
             .filter(r -> {
                 try {
-                    Map<String, Object> parsed = gatewayClient.parseResponse(r.body());
+                    Map<String, Object> parsed = gatewayClients.get(0).parseResponse(r.body());
                     return Boolean.TRUE.equals(parsed.get("success"));
                 } catch (Exception e) { return false; }
             })

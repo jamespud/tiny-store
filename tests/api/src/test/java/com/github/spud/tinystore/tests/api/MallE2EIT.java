@@ -55,6 +55,24 @@ class MallE2EIT {
     private TestRestTemplate restTemplate;
     private String gatewayBaseUrl;
 
+    /**
+     * Direct per-service base URLs.
+     *
+     * <p>These used to be hardcoded {@code http://localhost:<fixed-port>}, which meant the suite
+     * could only ever run against the single-instance compose stack (one published host port per
+     * service). When services run as N replicas behind Nacos, each replica gets its own host port
+     * and the old constants point at a dead port. Override them per run, e.g.
+     * {@code -Dproduct.base.url=http://localhost:38090}.
+     *
+     * <p>Defaults keep the historical single-instance behaviour.
+     */
+    private static final String PRODUCT_BASE_URL =
+        System.getProperty("product.base.url", "http://localhost:8090");
+    private static final String INVENTORY_BASE_URL =
+        System.getProperty("inventory.base.url", "http://localhost:13000");
+    private static final String PROMOTION_BASE_URL =
+        System.getProperty("promotion.base.url", "http://localhost:1200");
+
     // Fixed seed data (contract with docker-compose-test init)
     private static final String SHOP_A = "SHOP_A";
     private static final String SHOP_B = "SHOP_B";
@@ -463,7 +481,7 @@ class MallE2EIT {
         headers.add("X-Shop-Id", shopId);
 
         ResponseEntity<String> response = restTemplate.exchange(
-            "http://localhost:8090/api/skus/" + skuId,
+            PRODUCT_BASE_URL + "/api/skus/" + skuId,
             HttpMethod.GET,
             new HttpEntity<>(headers),
             String.class
@@ -504,7 +522,7 @@ class MallE2EIT {
                     headers.add("Idempotency-Key", "seed-inv-" + UUID.randomUUID());
 
                     ResponseEntity<Map> response = restTemplate.exchange(
-                        "http://localhost:13000/api/inventory/reservations/reserve",
+                        INVENTORY_BASE_URL + "/api/inventory/reservations/reserve",
                         HttpMethod.POST,
                         new HttpEntity<>(reserveRequest, headers),
                         Map.class
@@ -542,7 +560,7 @@ class MallE2EIT {
                 releaseHeaders.add("Idempotency-Key", releaseIdempotencyKeyRef.get());
 
                 ResponseEntity<Map> releaseResponse = restTemplate.exchange(
-                    "http://localhost:13000/api/inventory/reservations/release",
+                    INVENTORY_BASE_URL + "/api/inventory/reservations/release",
                     HttpMethod.POST,
                     new HttpEntity<>(releaseRequest, releaseHeaders),
                     Map.class
@@ -583,7 +601,7 @@ class MallE2EIT {
         headers.add("Idempotency-Key", "seed-promo-" + UUID.randomUUID());
 
         ResponseEntity<Map> response = restTemplate.exchange(
-            "http://localhost:1200/api/promotion/checkout/quote",
+            PROMOTION_BASE_URL + "/api/promotion/checkout/quote",
             HttpMethod.POST,
             new HttpEntity<>(quoteRequest, headers),
             Map.class
@@ -613,7 +631,7 @@ class MallE2EIT {
         releaseHeaders.add("Idempotency-Key", "seed-promo-rel-" + UUID.randomUUID());
 
         restTemplate.exchange(
-            "http://localhost:1200/api/promotion/checkout/release",
+            PROMOTION_BASE_URL + "/api/promotion/checkout/release",
             HttpMethod.POST,
             new HttpEntity<>(releaseRequest, releaseHeaders),
             Map.class

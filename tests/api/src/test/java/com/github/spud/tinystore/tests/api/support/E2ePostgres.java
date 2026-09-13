@@ -35,6 +35,11 @@ public final class E2ePostgres implements AutoCloseable {
         return count(sql, tradeId);
     }
 
+    public long countTradesByTradeId(String tradeId) {
+        String sql = "SELECT COUNT(*) FROM tinystore_order.trade WHERE trade_id = ?";
+        return count(sql, tradeId);
+    }
+
     private long count(String sql, String... params) {
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             for (int i = 0; i < params.length; i++) {
