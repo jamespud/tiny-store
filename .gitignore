@@ -45,3 +45,7 @@ docker-*.log
 
 ### Superpowers SDD scratch (ledger, briefs, review packages) ###
 .superpowers/
+
+### Generated load-test reports ###
+perf/reports/
+__pycache__/
