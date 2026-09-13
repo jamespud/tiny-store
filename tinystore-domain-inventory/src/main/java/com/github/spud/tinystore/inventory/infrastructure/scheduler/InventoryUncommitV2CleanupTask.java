@@ -23,6 +23,15 @@ public class InventoryUncommitV2CleanupTask {
     private final StringRedisTemplate redisTemplate;
     private final InventoryRedisManager inventoryRedisManager;
 
+    /**
+     * 未提交预扣的回收超时。
+     *
+     * <p>配置不变量：<b>该值必须大于合法的最大预约 TTL</b>（订单侧 reservationTtlMinutes），
+     * 否则会把仍然合法的预扣提前释放。默认 30 分钟。
+     */
+    @org.springframework.beans.factory.annotation.Value("${inventory.uncommit.timeout:PT30M}")
+    private java.time.Duration uncommitTimeout;
+
     public InventoryUncommitV2CleanupTask(StringRedisTemplate redisTemplate,
                                           InventoryRedisManager inventoryRedisManager) {
         this.redisTemplate = redisTemplate;
@@ -68,7 +77,8 @@ public class InventoryUncommitV2CleanupTask {
                     String shopId = parts[2];
                     String skuId = parts[3];
 
-                    long cleaned = inventoryRedisManager.cleanTimeoutUncommitV2(shopId, skuId, null);
+                    long cleaned = inventoryRedisManager.cleanTimeoutUncommitV2(shopId, skuId,
+                            uncommitTimeout.toMillis());
                     if (cleaned > 0) {
                         cleanedCount++;
                         log.info("Cleaned {} uncommit members for shopId={}, skuId={}", cleaned, shopId, skuId);

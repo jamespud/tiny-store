@@ -29,6 +29,14 @@ public class OutboxEventService {
     @Autowired
     private ObjectMapper objectMapper;
 
+    /** 传输类失败后的初始退避秒数（指数增长）。 */
+    @org.springframework.beans.factory.annotation.Value("${order.outbox.retry.backoff-seconds:5}")
+    private long retryBackoffSeconds;
+
+    /** 退避上限，避免无限增长的等待。 */
+    @org.springframework.beans.factory.annotation.Value("${order.outbox.retry.max-backoff-seconds:60}")
+    private long maxRetryBackoffSeconds;
+
     /**
      * 保存事件到 Outbox
      *
@@ -161,22 +169,57 @@ public class OutboxEventService {
      * @param error 错误信息
      */
     public void markAsFailed(String eventId, String error) {
+        markAsFailed(eventId, error, null);
+    }
+
+    /**
+     * 标记事件发布失败并决定后续走向。
+     *
+     * <p>关键区分（C12）：
+     * <ul>
+     *   <li><b>不可恢复</b>（JSON 序列化 / 参数非法）：直接 FAILED，重试没有意义；</li>
+     *   <li><b>传输类失败</b>（Kafka 不可用、超时）：退回 PENDING 并设置 {@code next_attempt_at}
+     *       做指数退避，<b>不</b>因为几次 broker 连接失败就永久放弃事件——
+     *       否则一次几分钟的 Kafka 抖动就会让关键事件（如 INVENTORY_RESERVE_DB）永久丢失。</li>
+     * </ul>
+     */
+    public void markAsFailed(String eventId, String error, Throwable cause) {
         outboxEventJpaRepository.findByEventId(eventId).ifPresent(event -> {
             event.setRetryCount((event.getRetryCount() != null ? event.getRetryCount() : 0) + 1);
             event.setLastError(error);
-            // 认领失败后必须把行退回 PENDING 并释放认领，否则它既不会被重新认领，
-            // 也不会进入重试统计。
+            // 无论走哪条分支都释放认领，否则该行不会被重新认领。
             event.setClaimedBy(null);
             event.setClaimedAt(null);
-            if (event.getRetryCount() >= 3) {
+            if (isUnrecoverable(cause)) {
                 event.setStatus("FAILED");
+                event.setNextAttemptAt(null);
             } else {
                 event.setStatus("PENDING");
+                event.setNextAttemptAt(LocalDateTime.now().plusSeconds(backoffSeconds(event.getRetryCount())));
             }
             outboxEventJpaRepository.save(event);
             log.warn("Outbox event marked as failed: eventId={}, retryCount={}, error={}",
                 eventId, event.getRetryCount(), error);
         });
+    }
+
+    /** 载荷/校验类失败重试无益，直接终态；其余（传输类）都允许继续退避重试。 */
+    private boolean isUnrecoverable(Throwable cause) {
+        Throwable current = cause;
+        while (current != null) {
+            if (current instanceof com.fasterxml.jackson.core.JsonProcessingException
+                    || current instanceof IllegalArgumentException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private long backoffSeconds(int retryCount) {
+        long exponent = Math.min(Math.max(retryCount - 1, 0), 6);
+        long computed = retryBackoffSeconds * (1L << exponent);
+        return Math.min(computed, maxRetryBackoffSeconds);
     }
 
     /**

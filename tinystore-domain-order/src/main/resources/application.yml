@@ -28,6 +28,13 @@ spring:
     baseline-on-migrate: true
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      properties:
+        # 快速失败：broker 不可用时 send() 不再阻塞默认 60s，避免整个 outbox 轮询线程被拖住（C12）。
+        max.block.ms: ${KAFKA_PRODUCER_MAX_BLOCK_MS:3000}
+        # 明确的投递上限：超过即视为传输失败，交给退避重试而不是无限挂起。
+        delivery.timeout.ms: ${KAFKA_PRODUCER_DELIVERY_TIMEOUT_MS:10000}
+        request.timeout.ms: ${KAFKA_PRODUCER_REQUEST_TIMEOUT_MS:5000}
     consumer:
       group-id: ${KAFKA_CONSUMER_GROUP_ID:order-service}
       auto-offset-reset: earliest

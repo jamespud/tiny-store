@@ -93,7 +93,7 @@ public class OutboxEventPublisher {
                 })
                 .exceptionally(ex -> {
                     outboxPublishFailureCounter.increment();
-                    outboxEventService.markAsFailed(event.getEventId(), ex.getMessage());
+                    outboxEventService.markAsFailed(event.getEventId(), ex.getMessage(), ex);
                     log.error("Failed to publish Outbox event to Kafka: eventId={}, error={}",
                         event.getEventId(), ex.getMessage());
                     return null;
@@ -102,7 +102,7 @@ public class OutboxEventPublisher {
             log.error("Error preparing Outbox event for Kafka: eventId={}, error={}",
                 event.getEventId(), e.getMessage(), e);
             outboxPublishFailureCounter.increment();
-            outboxEventService.markAsFailed(event.getEventId(), e.getMessage());
+            outboxEventService.markAsFailed(event.getEventId(), e.getMessage(), e);
             return CompletableFuture.completedFuture(null);
         }
     }
