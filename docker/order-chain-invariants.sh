@@ -103,16 +103,38 @@ for i in 1 2 3; do
   [ "$(place "invC-k-${ts}-${i}" "invC-${ts}-${i}" "$line_c")" = "200" ] && ok3=$((ok3 + 1))
 done
 blocked="$(place "invC-over-${ts}" "invC-over-${ts}" "$line_c")"
+
+# The authoritative reservation row is written ASYNCHRONOUSLY: the order tx commits, then the
+# outbox publishes INVENTORY_RESERVE_DB, then the inventory consumer inserts the row. HTTP 200
+# only proves the synchronous Redis admission succeeded, so the rows can lag the 3 placements by
+# a few seconds. Wait for them before forcing expire_at, otherwise the UPDATE can match 0 rows
+# and the check fails for reasons that have nothing to do with the expiry behaviour.
+rows=""
+for i in $(seq 1 24); do
+  rows="$(psql_t "SELECT count(*) FROM tinystore_inventory.inventory_reservation
+                  WHERE trade_id LIKE 'invC-${ts}-%' AND status = 'PRE_DEDUCTED';")"
+  [ "$rows" = "3" ] && break
+  sleep 5
+done
+
 psql_q "UPDATE tinystore_inventory.inventory_reservation SET expire_at = now() - interval '2 minutes'
         WHERE trade_id LIKE 'invC-${ts}-%' AND status = 'PRE_DEDUCTED';"
-sleep 20
-expired="$(psql_t "SELECT count(*) FROM tinystore_inventory.inventory_reservation
-                   WHERE trade_id LIKE 'invC-${ts}-%' AND status = 'EXPIRED';")"
+
+# The expiry scheduler is periodic (PT5S in the test profile): poll instead of sleeping a fixed
+# amount, so a single slow tick cannot turn the gate red.
+expired=0
+for i in $(seq 1 24); do
+  expired="$(psql_t "SELECT count(*) FROM tinystore_inventory.inventory_reservation
+                     WHERE trade_id LIKE 'invC-${ts}-%' AND status = 'EXPIRED';")"
+  [ "$expired" = "3" ] && break
+  sleep 5
+done
 after="$(place "invC-after-${ts}" "invC-after-${ts}" "$line_c")"
 echo ""
 echo "3) expired (unpaid) reservations must return the inventory"
 echo "   3 orders filled stock=3 (placed=${ok3}), 4th was rejected with ${blocked};"
-echo "   after forcing expire_at into the past: EXPIRED reservations=${expired:-?}, new order -> ${after}"
+echo "   PRE_DEDUCTED rows observed=${rows:-?}; after forcing expire_at into the past:"
+echo "   EXPIRED reservations=${expired:-?}, new order -> ${after}"
 if [ "$ok3" != "3" ] || [ "$after" != "200" ]; then
   echo "   FAIL: stock was not returned after expiry"
   FAILED=1
