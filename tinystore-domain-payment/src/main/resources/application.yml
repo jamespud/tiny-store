@@ -31,6 +31,10 @@ spring:
       enable-auto-commit: false
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      # 消费者方法声明了 Acknowledgment 参数，容器必须是 MANUAL 才能注入它。
+      # 缺失该配置 = 每条消息在参数绑定阶段就抛异常（C1）。
+      ack-mode: manual
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -50,6 +54,12 @@ payment:
   kafka:
     topic:
       order-events: tinystore.order.general
+    consumer:
+      retry:
+        # 有界重试：1s × 5 次，超过后进 <topic>.DLT
+        max-attempts: ${PAYMENT_KAFKA_RETRY_MAX_ATTEMPTS:5}
+        backoff:
+          interval-ms: ${PAYMENT_KAFKA_RETRY_INTERVAL_MS:1000}
   scheduler:
     notification-retry-interval: 120000
     notification-retry-batch-size: 50
