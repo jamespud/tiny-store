@@ -24,6 +24,10 @@ import org.springframework.stereotype.Repository;
 @Primary
 public class JdbcOutboxAdapter implements OutboxPort {
 
+  /** 认领者标识：写进 auth_outbox.claimed_by，用于定位是哪个副本认领了事件。 */
+  private static final String INSTANCE_ID =
+    System.getenv().getOrDefault("HOSTNAME", "auth-unknown");
+
   private final JdbcTemplate jdbcTemplate;
 
   public JdbcOutboxAdapter(JdbcTemplate jdbcTemplate) {
@@ -76,7 +80,13 @@ public class JdbcOutboxAdapter implements OutboxPort {
   @Override
   public List<ConsentChangedEvent> fetchConsentChangedUnpublished(int batchSize) {
     return jdbcTemplate.query(
-      "select aggregate_id, client_id, added_scopes, removed_scopes, occurred_at from auth_outbox where event_type = 'ConsentChangedEvent' and published = false order by occurred_at asc limit ?",
+      "update auth_outbox set claimed_by = ?, claimed_at = now() "
+        + "where id in ("
+        + "  select id from auth_outbox "
+        + "  where event_type = 'ConsentChangedEvent' and published = false "
+        + "    and (claimed_at is null or claimed_at < now() - interval '2 minutes') "
+        + "  order by occurred_at asc limit ? for update skip locked"
+        + ") returning aggregate_id, client_id, added_scopes, removed_scopes, occurred_at",
       (rs, rowNum) -> {
         String userId = rs.getString("aggregate_id");
         String clientId = rs.getString("client_id");
@@ -101,7 +111,7 @@ public class JdbcOutboxAdapter implements OutboxPort {
           at
         );
       },
-      batchSize);
+      INSTANCE_ID, batchSize);
   }
 
   @Override
@@ -122,15 +132,23 @@ public class JdbcOutboxAdapter implements OutboxPort {
 
   @Override
   public List<RefreshTokenRevokedEvent> fetchUnpublished(int batchSize) {
+    // 原子认领：UPDATE ... WHERE id IN (SELECT ... FOR UPDATE SKIP LOCKED) RETURNING
+    // 单条语句即可在多副本之间互斥；超过 claim TTL 未被发布的认领会自动重新可认领。
     return jdbcTemplate.query(
-      "select aggregate_id, rt_version, reason, occurred_at from auth_outbox where published = false order by occurred_at asc limit ?",
+      "update auth_outbox set claimed_by = ?, claimed_at = now() "
+        + "where id in ("
+        + "  select id from auth_outbox "
+        + "  where published = false and event_type <> 'ConsentChangedEvent' "
+        + "    and (claimed_at is null or claimed_at < now() - interval '2 minutes') "
+        + "  order by occurred_at asc limit ? for update skip locked"
+        + ") returning aggregate_id, rt_version, reason, occurred_at",
       (rs, rowNum) -> new RefreshTokenRevokedEvent(
         UserId.of((String) rs.getObject("aggregate_id")),
         RtVersion.of(rs.getLong("rt_version")),
         rs.getString("reason"),
         rs.getObject("occurred_at", OffsetDateTime.class)
       ),
-      batchSize);
+      INSTANCE_ID, batchSize);
   }
 
   @Override

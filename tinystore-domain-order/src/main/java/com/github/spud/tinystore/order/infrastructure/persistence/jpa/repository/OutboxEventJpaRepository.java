@@ -21,11 +21,26 @@ public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventEntit
     Optional<OutboxEventEntity> findByEventId(String eventId);
 
     /**
-     * 分片抢占待发布事件：FOR UPDATE SKIP LOCKED 保证多实例发布会各自抢占不同批次。
+     * 读取待发布事件并加行锁（FOR UPDATE SKIP LOCKED）。
+     *
+     * <p>注意：行锁只在事务内有效。调用方 <b>必须</b> 在事务中调用，并在同一事务里把行改成
+     * PROCESSING —— 否则锁在语句结束时就释放，多副本仍会取到同一批行（这正是 C3 的根因）。
+     * 请使用 {@code OutboxEventService.claimPendingEvents(...)}，不要直接调用本方法。
      */
     @Query(value = "SELECT * FROM tinystore_order.order_outbox WHERE status = :status "
             + "ORDER BY created_at ASC LIMIT :limit FOR UPDATE SKIP LOCKED", nativeQuery = true)
     List<OutboxEventEntity> findPendingEvents(@Param("status") String status, @Param("limit") int limit);
+
+    /**
+     * 回收僵尸认领：PROCESSING 且认领时间早于阈值的事件重新回到 PENDING。
+     *
+     * <p>覆盖"认领成功 → JVM 崩溃 → 永远 PROCESSING"的场景。
+     */
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query("UPDATE OutboxEventEntity e SET e.status = 'PENDING', e.claimedBy = NULL, e.claimedAt = NULL "
+            + "WHERE e.status = 'PROCESSING' AND e.claimedAt < :claimedBefore")
+    int reclaimStaleClaims(@Param("claimedBefore") LocalDateTime claimedBefore);
 
     /**
      * 批量标记已发布（替代逐条 SELECT+UPDATE，一次往返）。

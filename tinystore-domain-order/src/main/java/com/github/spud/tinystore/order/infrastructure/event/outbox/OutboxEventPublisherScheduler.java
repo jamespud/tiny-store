@@ -1,5 +1,6 @@
 package com.github.spud.tinystore.order.infrastructure.event.outbox;
 
+import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.OutboxEventEntity;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -44,7 +45,15 @@ public class OutboxEventPublisherScheduler {
     private long pollInterval;
 
     @Value("${order.outbox.batch-size:1000}")
-    private int batchSize;
+   private int batchSize;
+
+    /** 认领超时（秒）：超过这个时间仍停留在 PROCESSING 的认领会被回收。 */
+    @Value("${order.outbox.claim-timeout-seconds:120}")
+    private long claimTimeoutSeconds;
+
+    /** 实例标识，写进 claimed_by，便于定位是哪个副本认领/发布了事件。 */
+    @Value("${INSTANCE_ID:${HOSTNAME:order-unknown}}")
+    private String instanceId;
 
     /**
      * 定时轮询 Outbox 待发布事件
@@ -53,14 +62,19 @@ public class OutboxEventPublisherScheduler {
     @Scheduled(fixedDelayString = "${order.outbox.poll-interval:5000}", scheduler = "outboxTaskScheduler")
     public void pollAndPublishPendingEvents() {
         try {
-            List pendingEvents = outboxEventService.getPendingEvents(batchSize);
-            
+            // 先把崩溃实例留下的僵尸认领退回 PENDING，再认领本轮的批次。
+            outboxEventService.reclaimStaleClaims(java.time.Duration.ofSeconds(claimTimeoutSeconds));
+
+            List<OutboxEventEntity> pendingEvents =
+                    outboxEventService.claimPendingEvents(batchSize, instanceId);
+
             if (pendingEvents == null || pendingEvents.isEmpty()) {
                 log.debug("No pending Outbox events to publish");
                 return;
             }
 
-            log.info("Found {} pending Outbox events, publishing to Kafka...", pendingEvents.size());
+            log.info("Claimed {} Outbox events, publishing to Kafka... (instance={})",
+                    pendingEvents.size(), instanceId);
             outboxEventPublisher.publishEvents(pendingEvents);
 
         } catch (Exception e) {

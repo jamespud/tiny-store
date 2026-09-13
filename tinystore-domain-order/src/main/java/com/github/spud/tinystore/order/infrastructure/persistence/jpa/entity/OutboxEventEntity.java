@@ -55,6 +55,14 @@ public class OutboxEventEntity {
     @Column(name = "last_error", columnDefinition = "TEXT")
     private String lastError;
 
+    /** 认领该事件的实例标识（claim 协议，多副本互斥）。 */
+    @Column(name = "claimed_by", length = 128)
+    private String claimedBy;
+
+    /** 认领时间，用于回收僵尸认领（实例崩溃后长期停留在 PROCESSING）。 */
+    @Column(name = "claimed_at")
+    private LocalDateTime claimedAt;
+
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {

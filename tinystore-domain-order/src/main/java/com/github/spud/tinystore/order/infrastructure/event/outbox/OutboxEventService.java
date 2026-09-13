@@ -88,6 +88,46 @@ public class OutboxEventService {
     }
 
     /**
+     * 原子认领一批待发布事件（多副本 claim 协议）。
+     *
+     * <p>读锁、状态迁移到 PROCESSING、写回 claimed_by/claimed_at 全部发生在**一个事务**内。
+     * 这是 C3 的修复要点：原先 {@code FOR UPDATE SKIP LOCKED} 跑在自动提交下，语句一结束锁就没了，
+     * 两个副本会取到同一批行并各自发布一次。
+     *
+     * <p>锁不跨越 Kafka 发送：事务提交后调用方才去发布。
+     */
+    @Transactional
+    public List<OutboxEventEntity> claimPendingEvents(int limit, String instanceId) {
+        List<OutboxEventEntity> events = outboxEventJpaRepository.findPendingEvents("PENDING", limit);
+        if (events == null || events.isEmpty()) {
+            return List.of();
+        }
+        LocalDateTime now = LocalDateTime.now();
+        for (OutboxEventEntity event : events) {
+            event.setStatus("PROCESSING");
+            event.setClaimedBy(instanceId);
+            event.setClaimedAt(now);
+        }
+        outboxEventJpaRepository.saveAllAndFlush(events);
+        log.debug("Claimed {} pending outbox events for instance={}", events.size(), instanceId);
+        return events;
+    }
+
+    /**
+     * 回收僵尸认领：认领后实例崩溃会让事件永远停在 PROCESSING，这里把它们退回 PENDING。
+     */
+    @Transactional
+    public int reclaimStaleClaims(java.time.Duration claimTimeout) {
+        int reclaimed = outboxEventJpaRepository.reclaimStaleClaims(
+                LocalDateTime.now().minus(claimTimeout));
+        if (reclaimed > 0) {
+            log.warn("Reclaimed {} stale PROCESSING outbox events (claim timeout {})",
+                    reclaimed, claimTimeout);
+        }
+        return reclaimed;
+    }
+
+    /**
      * 标记事件为已发布
      *
      * @param eventId 事件 ID
@@ -124,9 +164,14 @@ public class OutboxEventService {
         outboxEventJpaRepository.findByEventId(eventId).ifPresent(event -> {
             event.setRetryCount((event.getRetryCount() != null ? event.getRetryCount() : 0) + 1);
             event.setLastError(error);
-            // 重试超过 3 次标记为 FAILED
+            // 认领失败后必须把行退回 PENDING 并释放认领，否则它既不会被重新认领，
+            // 也不会进入重试统计。
+            event.setClaimedBy(null);
+            event.setClaimedAt(null);
             if (event.getRetryCount() >= 3) {
                 event.setStatus("FAILED");
+            } else {
+                event.setStatus("PENDING");
             }
             outboxEventJpaRepository.save(event);
             log.warn("Outbox event marked as failed: eventId={}, retryCount={}, error={}",
