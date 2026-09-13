@@ -41,7 +41,10 @@ public class JdbcAuditLogAdapter implements AuditLogPort {
       ps.setString(4, event.action());
       ps.setArray(5, createTextArray(con, event.scopes()));
       ps.setBoolean(6, event.success());
-      ps.setString(7, event.ip());
+      // auth_audit.ip 是 PostgreSQL inet 列：用 setString 会得到
+      // "column ip is of type inet but expression is of type character varying"，
+      // 导致 /otp/send 直接 500 并掩盖真实的 OTP 错误（C5）。
+      ps.setObject(7, event.ip(), java.sql.Types.OTHER);
       ps.setString(8, event.userAgent());
       ps.setString(9, event.detail());
       ps.setObject(10, event.occurredAt());
