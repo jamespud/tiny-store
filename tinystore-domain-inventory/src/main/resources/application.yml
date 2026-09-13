@@ -82,6 +82,11 @@ inventory:
     # 未提交预扣的回收超时（兜底：预扣已记账但对应订单/预约从未建立）。
     # 配置不变量：必须 > 订单侧最大合法预约 TTL，否则会提前释放仍然合法的预约。
     timeout: ${INVENTORY_UNCOMMIT_TIMEOUT:PT30M}
+    # 孤儿定向回收阈值（C12 safety net）：member 年龄超过该值且 DB 中不存在对应
+    # reservation_id 的，才判定为孤儿并释放。
+    # 配置不变量：必须 > Kafka 短暂中断时 outbox INVENTORY_RESERVE_DB 的最坏异步建库延迟
+    # （chaos SLA 5 分钟），否则合法预约会被误判释放；且应 < timeout 才有加速意义。
+    orphan-check-delay: ${INVENTORY_UNCOMMIT_ORPHAN_CHECK_DELAY:PT10M}
   reservation:
     expiry:
       # Enable/disable the reservation expiry scheduler
