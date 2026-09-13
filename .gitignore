@@ -42,3 +42,6 @@ PLAN-TEST.md
 ### Runtime logs ###
 docker-*.log
 *.log
+
+### Superpowers SDD scratch (ledger, briefs, review packages) ###
+.superpowers/
