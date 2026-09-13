@@ -19,6 +19,17 @@ public interface JpaInventoryReservationRepository extends JpaRepository<Invento
 	@Query("select r from InventoryReservationEntity r where r.reservationId = :reservationId")
 	Optional<InventoryReservationEntity> findByReservationIdForUpdate(@Param("reservationId") String reservationId);
 
+	/**
+	 * 孤儿判定（C12 safety net）：在候选预扣 member 中，找出 DB 里已经存在权威预约行的那些。
+	 *
+	 * <p>预扣的 Redis uncommit member 格式是 {@code <orderId>_<timestamp>_<amount>}，
+	 * 它<b>就是</b> reservation_id（{@code preDeduct} 返回的 member = occupyId = reservationId）。
+	 * 所以「member 是否已在 DB 建立预约」等价于「reservation_id 是否存在」。
+	 * 返回存在的那部分 id 后，调用方把「候选 - 存在」判定为真正的孤儿。
+	 */
+	@Query("select r.reservationId from InventoryReservationEntity r where r.reservationId in :reservationIds")
+	List<String> findExistingReservationIds(@Param("reservationIds") java.util.Collection<String> reservationIds);
+
 	@Query("select r from InventoryReservationEntity r where r.status = :status and r.expireAt < :now")
 	List<InventoryReservationEntity> findByStatusAndExpireAtBefore(@Param("status") String status, @Param("now") OffsetDateTime now);
 
@@ -50,4 +61,3 @@ public interface JpaInventoryReservationRepository extends JpaRepository<Invento
 	                     @Param("confirmedAt") OffsetDateTime confirmedAt,
 	                     @Param("releaseReason") String releaseReason);
 }
-

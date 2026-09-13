@@ -3,6 +3,7 @@ package com.github.spud.tinystore.inventory.infrastructure.util;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -218,5 +219,69 @@ class InventoryRedisManagerTest {
         assertThat(get("inventory:total:shop:sku")).isEqualTo("100");
         assertThat(get("inventory:deducted:shop:sku")).isEqualTo("0");
         assertThat(get("inventory:version:shop:sku")).isEqualTo("4");
+    }
+
+    // ===== Task 7 (C12 safety net): orphan-directed reclaim =====
+
+    @Test
+    @DisplayName("reclaimOrphanMembersV2: only the listed member is removed; deducted decremented; version bumped once")
+    void reclaimOrphanMembersV2_removesListedOnly() {
+        String uncommitKey = "inventory:uncommit:shop:sku";
+        set("inventory:total:shop:sku", "100");
+        set("inventory:deducted:shop:sku", "30");
+        set("inventory:version:shop:sku", "5");
+        redisTemplate.opsForZSet().add(uncommitKey, "orphan-1_1_10", 1);
+        redisTemplate.opsForZSet().add(uncommitKey, "legit-1_1_20", 2);
+
+        long reclaimed = redisManager.reclaimOrphanMembersV2("shop", "sku", List.of("orphan-1_1_10"));
+
+        assertThat(reclaimed).isEqualTo(1);
+        assertThat(get("inventory:deducted:shop:sku")).isEqualTo("20");
+        assertThat(get("inventory:version:shop:sku")).isEqualTo("6");
+        // 列表外的合法 member 绝不被触碰
+        assertThat(redisTemplate.opsForZSet().score(uncommitKey, "legit-1_1_20")).isNotNull();
+        assertThat(redisTemplate.opsForZSet().score(uncommitKey, "orphan-1_1_10")).isNull();
+    }
+
+    @Test
+    @DisplayName("reclaimOrphanMembersV2: unknown member is a no-op, no version bump")
+    void reclaimOrphanMembersV2_unknownMemberNoop() {
+        set("inventory:deducted:shop:sku", "10");
+        set("inventory:version:shop:sku", "5");
+
+        long reclaimed = redisManager.reclaimOrphanMembersV2("shop", "sku", List.of("ghost_1_10"));
+
+        assertThat(reclaimed).isEqualTo(0);
+        assertThat(get("inventory:deducted:shop:sku")).isEqualTo("10");
+        assertThat(get("inventory:version:shop:sku")).isEqualTo("5");
+    }
+
+    @Test
+    @DisplayName("reclaimOrphanMembersV2: malformed member is kept, never released")
+    void reclaimOrphanMembersV2_malformedMemberKept() {
+        String uncommitKey = "inventory:uncommit:shop:sku";
+        set("inventory:deducted:shop:sku", "10");
+        set("inventory:version:shop:sku", "5");
+        redisTemplate.opsForZSet().add(uncommitKey, "malformed", 1);
+
+        long reclaimed = redisManager.reclaimOrphanMembersV2("shop", "sku", List.of("malformed"));
+
+        assertThat(reclaimed).isEqualTo(0);
+        assertThat(get("inventory:deducted:shop:sku")).isEqualTo("10");
+        assertThat(get("inventory:version:shop:sku")).isEqualTo("5");
+        assertThat(redisTemplate.opsForZSet().score(uncommitKey, "malformed")).isNotNull();
+    }
+
+    @Test
+    @DisplayName("findUncommitMembersOlderThan: returns only members older than the cutoff")
+    void findUncommitMembersOlderThan_filtersByAge() {
+        String uncommitKey = "inventory:uncommit:shop:sku";
+        long now = System.currentTimeMillis();
+        redisTemplate.opsForZSet().add(uncommitKey, "old_1_5", now - 20 * 60_000L);
+        redisTemplate.opsForZSet().add(uncommitKey, "fresh_1_5", now);
+
+        List<String> older = redisManager.findUncommitMembersOlderThan("shop", "sku", 10 * 60_000L);
+
+        assertThat(older).containsExactly("old_1_5");
     }
 }
