@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 import com.github.spud.tinystore.infrastructure.rpc.dto.ProductSkuPrice;
 import com.github.spud.tinystore.infrastructure.rpc.dto.ProductSkuPriceResponse;
@@ -43,6 +44,8 @@ class TradeApplicationServiceAuthoritativePriceTest {
 	void setUp() {
 		service = new TradeApplicationService();
 		ReflectionTestUtils.setField(service, "idempotencyService", idempotencyService);
+		lenient().when(idempotencyService.acquire(anyString(), anyString(), anyString()))
+			.thenReturn(IdempotencyService.AcquireResult.ACQUIRED);
 		ReflectionTestUtils.setField(service, "skuPriceResolver", new SkuPriceResolver(productClient));
 		ReflectionTestUtils.setField(service, "priceAuthoritativeEnabled", true);
 	}
@@ -50,7 +53,6 @@ class TradeApplicationServiceAuthoritativePriceTest {
 	@Test
 	@DisplayName("tampered client price should be rejected by createTrade")
 	void tamperedClientPrice_createTrade_shouldReject() {
-		when(idempotencyService.tryAcquire(anyString(), anyString(), anyString())).thenReturn(true);
 		ProductSkuPriceResponse resp = new ProductSkuPriceResponse();
 		ProductSkuPrice price = new ProductSkuPrice();
 		price.setSkuId("SKU_A");

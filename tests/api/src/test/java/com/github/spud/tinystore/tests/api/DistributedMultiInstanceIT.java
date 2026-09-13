@@ -187,14 +187,24 @@ class DistributedMultiInstanceIT extends AbstractE2EBase {
                 first.getStatusCode(), first.getBody())
             .isEqualTo(HttpStatus.OK);
 
-        // Identical submission lands on replica #2. If idempotency were node-local, this
-        // would create a second trade / return 200 instead of being rejected.
+        // Identical submission lands on replica #2. The order domain owns business idempotency
+        // (Redis-backed, shared across replicas), so this must be a deterministic replay: same
+        // tradeId back, and exactly one trade row. If idempotency were node-local, replica #2
+        // would execute the placement again.
         ResponseEntity<Map> duplicate = postTrade(GATEWAY_REPLICA_URLS.get(1), create, idempotencyKey);
         assertThat(duplicate.getStatusCode())
-            .withFailMessage("Duplicate Idempotency-Key accepted on a different gateway replica "
-                + "(%s body=%s) -- idempotency state is node-local, not shared",
+            .withFailMessage("Replay on gateway replica #2 failed (%s body=%s)",
                 duplicate.getStatusCode(), duplicate.getBody())
-            .isEqualTo(HttpStatus.CONFLICT);
+            .isEqualTo(HttpStatus.OK);
+        assertThat(duplicate.getBody()).isNotNull();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> replayed =
+            (Map<String, Object>) duplicate.getBody().get("data");
+        assertThat(replayed).isNotNull();
+        assertThat(replayed.get("tradeId"))
+            .withFailMessage("Replay returned a different tradeId (%s) -- idempotency state is "
+                + "node-local, not shared", replayed.get("tradeId"))
+            .isEqualTo(tradeId);
 
         try (E2ePostgres pg = new E2ePostgres()) {
             assertThat(pg.countTradesByTradeId(tradeId))

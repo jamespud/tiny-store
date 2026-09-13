@@ -9,8 +9,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.scripting.support.ResourceScriptSource;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -36,12 +40,114 @@ public class IdempotencyService {
     @Value("${order.idempotency.fail-on-redis-error:true}")
     private boolean failOnRedisError;
 
+    private final DefaultRedisScript<String> acquireScript;
+    private final DefaultRedisScript<Long> succeedScript;
+
     public IdempotencyService(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
         this.idempotencyUnavailableCounter = Counter.builder("tinystore.idempotency.unavailable.total")
             .description("Count of idempotency service unavailable exceptions")
             .tag("service", "order")
             .register(meterRegistry);
+        this.acquireScript = new DefaultRedisScript<>();
+        this.acquireScript.setScriptSource(new ResourceScriptSource(
+            new ClassPathResource("scripts/idempotency_acquire.lua")));
+        this.acquireScript.setResultType(String.class);
+        this.succeedScript = new DefaultRedisScript<>();
+        this.succeedScript.setScriptSource(new ResourceScriptSource(
+            new ClassPathResource("scripts/idempotency_succeed.lua")));
+        this.succeedScript.setResultType(Long.class);
+    }
+
+    /**
+     * 幂等获取结果。
+     */
+    public enum AcquireResult {
+        /** 首次请求，调用方获得处理权，必须继续执行业务事务。 */
+        ACQUIRED,
+        /** 同键同指纹的请求正在处理中；调用方应返回冲突，让客户端稍后重试。 */
+        IN_PROGRESS,
+        /** 同键同指纹且上一次已成功；调用方应直接重放缓存响应。 */
+        REPLAY,
+        /** 同键但请求体不同；调用方必须拒绝，绝不能返回上一次的结果。 */
+        FINGERPRINT_CONFLICT
+    }
+
+    /**
+     * 原子获取幂等权（fingerprint 比对与状态写入在同一次 Redis 操作内完成）。
+     *
+     * @param scope 作用域，例如 {@code trade:create}
+     * @param idempotencyKey 幂等键
+     * @param fingerprint 请求指纹，见 {@code TradeRequestFingerprint}
+     * @return 见 {@link AcquireResult}
+     * @throws IdempotencyServiceUnavailableException Redis 不可用且 fail-on-redis-error=true
+     */
+    public AcquireResult acquire(String scope, String idempotencyKey, String fingerprint) {
+        String redisKey = buildRedisKey(scope, idempotencyKey);
+        try {
+            String result = redisTemplate.execute(acquireScript, List.of(redisKey),
+                fingerprint, String.valueOf(ttlSeconds));
+            return parseAcquireResult(result);
+        } catch (RedisConnectionFailureException | RedisSystemException e) {
+            return degradedAcquire(handleRedisException("acquire", idempotencyKey, e, null));
+        } catch (Exception e) {
+            log.error("[operation=acquire] [idempotencyKey={}] Unexpected exception during Redis operation",
+                idempotencyKey, e);
+            return degradedAcquire(handleRedisException("acquire", idempotencyKey, e, null));
+        }
+    }
+
+    private AcquireResult parseAcquireResult(String raw) {
+        if (raw == null) {
+            // 脚本没有返回状态：保守起见当作"未取得"，让调用方走冲突分支。
+            return AcquireResult.IN_PROGRESS;
+        }
+        return switch (raw) {
+            case "ACQUIRED" -> AcquireResult.ACQUIRED;
+            case "REPLAY" -> AcquireResult.REPLAY;
+            case "FINGERPRINT_CONFLICT" -> AcquireResult.FINGERPRINT_CONFLICT;
+            default -> AcquireResult.IN_PROGRESS;
+        };
+    }
+
+    private AcquireResult degradedAcquire(Object fallback) {
+        // 降级模式（fail-on-redis-error=false）下 fallback 为 null，视为放行。
+        return AcquireResult.ACQUIRED;
+    }
+
+    /**
+     * 读取上一次成功请求缓存的响应（仅在 {@link AcquireResult#REPLAY} 时使用）。
+     */
+    public String getStoredResponse(String scope, String idempotencyKey) {
+        String redisKey = buildRedisKey(scope, idempotencyKey);
+        try {
+            Object value = redisTemplate.opsForHash().get(redisKey, "response");
+            return value == null ? null : value.toString();
+        } catch (RedisConnectionFailureException | RedisSystemException e) {
+            return handleRedisException("getStoredResponse", idempotencyKey, e, null);
+        } catch (Exception e) {
+            log.error("[operation=getStoredResponse] [idempotencyKey={}] Unexpected exception",
+                idempotencyKey, e);
+            return handleRedisException("getStoredResponse", idempotencyKey, e, null);
+        }
+    }
+
+    /**
+     * 业务事务提交之后把幂等记录推进为 SUCCEEDED 并缓存响应。
+     *
+     * <p>必须在 afterCommit 调用：在提交前写入 SUCCEEDED 会让"事务回滚但客户端拿到成功"成为可能。
+     */
+    public void markSucceeded(String scope, String idempotencyKey, String fingerprint, String responseJson) {
+        String redisKey = buildRedisKey(scope, idempotencyKey);
+        try {
+            redisTemplate.execute(succeedScript, List.of(redisKey),
+                responseJson, String.valueOf(ttlSeconds), fingerprint);
+        } catch (RedisConnectionFailureException | RedisSystemException e) {
+            handleRedisException("markSucceeded", idempotencyKey, e, null);
+        } catch (Exception e) {
+            log.error("[operation=markSucceeded] [idempotencyKey={}] Unexpected exception", idempotencyKey, e);
+            handleRedisException("markSucceeded", idempotencyKey, e, null);
+        }
     }
 
     /**
