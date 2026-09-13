@@ -9,6 +9,7 @@ import com.github.spud.tinystore.order.application.service.TradeApplicationServi
 import com.github.spud.tinystore.order.application.service.PaymentApplicationService;
 import com.github.spud.tinystore.order.application.query.TradeQueryService;
 import com.github.spud.tinystore.order.domain.exception.DomainConflictException;
+import com.github.spud.tinystore.order.domain.exception.IdempotencyConflictException;
 import com.github.spud.tinystore.order.domain.exception.IdempotencyServiceUnavailableException;
 import com.github.spud.tinystore.order.interfaces.dto.request.*;
 import com.github.spud.tinystore.order.interfaces.dto.response.*;
@@ -117,10 +118,16 @@ public class TradeController {
         } catch (IdempotencyServiceUnavailableException e) {
             // 幂等服务不可用异常需要重新抛出，由 GlobalExceptionHandler 处理返回 503
             throw e;
+        } catch (DomainConflictException e) {
+            // 领域冲突（库存不足、幂等冲突、促销报价失败等）由 GlobalExceptionHandler 映射为 409
+            throw e;
+        } catch (IdempotencyConflictException e) {
+            // 幂等指纹冲突等由 GlobalExceptionHandler 映射为 409
+            throw e;
         } catch (Exception e) {
             log.error("Create trade failed", e);
             return ResponseEntity.status(500).body(
-                OrderHttpResponse.fail(500, "Create trade failed: " + e.getMessage()));
+                OrderHttpResponse.fail(500, "Internal server error"));
         }
     }
 

@@ -40,6 +40,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -487,8 +488,32 @@ public class TradeApplicationService {
                 }
             }
             log.error("Trade creation failed", e);
-            throw e;
+            throw translateCreateConflict(e, tradeId);
         }
+    }
+
+    /**
+     * 把"用户可解释的"数据库唯一冲突翻译成领域冲突。
+     *
+     * <p>例如同一 tradeId 被以不同幂等键重复提交时，数据库抛的是
+     * {@link DataIntegrityViolationException}；它反映的是调用方的冲突而不是服务端故障。
+     * 在应用层转成 {@link DomainConflictException} 之后，HTTP 层会返回 409，
+     * 且 PostgreSQL 的约束名/SQL 文本不会被暴露给调用方。
+     *
+     * <p>包级可见以便单测直接覆盖翻译规则。
+     */
+    Exception translateCreateConflict(Exception failure, String tradeId) {
+        Throwable cause = failure;
+        while (cause != null) {
+            if (cause instanceof DataIntegrityViolationException) {
+                DomainConflictException translated = new DomainConflictException("TRADE_CONFLICT",
+                        "Trade creation conflicts with an existing record: tradeId=" + tradeId);
+                translated.initCause(failure);
+                return translated;
+            }
+            cause = cause.getCause();
+        }
+        return failure;
     }
 
     /**

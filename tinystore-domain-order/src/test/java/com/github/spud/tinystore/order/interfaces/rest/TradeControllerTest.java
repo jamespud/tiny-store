@@ -6,6 +6,7 @@ import com.github.spud.tinystore.order.application.query.TradeQueryService;
 import com.github.spud.tinystore.order.application.security.CallbackSignatureException;
 import com.github.spud.tinystore.order.application.security.PaymentSignatureVerifier;
 import com.github.spud.tinystore.order.domain.exception.DomainConflictException;
+import com.github.spud.tinystore.order.domain.exception.IdempotencyConflictException;
 import com.github.spud.tinystore.order.domain.exception.IdempotencyServiceUnavailableException;
 import com.github.spud.tinystore.order.interfaces.error.GlobalExceptionHandler;
 import com.github.spud.tinystore.order.interfaces.dto.response.CreateTradeData;
@@ -352,5 +353,74 @@ class TradeControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"reason\":\"User cancel\"}"))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("createTrade with stock lack returns 409, not 500")
+    void createTrade_stockLack_returns409() throws Exception {
+        doThrow(new DomainConflictException("INVENTORY_DEDUCT_FAILED",
+                "Inventory deduct failed for trade: trade-stock-lack"))
+            .when(tradeApplicationService).createTrade(anyString(), any());
+
+        mockMvc.perform(post("/order/trades")
+                .header("Idempotency-Key", "idem-stock-lack")
+                .header("X-Tinystore-Sub", "user-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tradeId\":\"trade-stock-lack\",\"buyerId\":\"user-1\"," +
+                    "\"orderLines\":[{\"skuId\":\"SKU_A\",\"shopId\":\"SHOP_A\"," +
+                    "\"sellerId\":\"seller-A\",\"quantity\":1,\"priceCents\":9900}]}"))
+            .andExpect(status().isConflict())
+            .andExpect(content().string(containsString("Inventory deduct failed")));
+    }
+
+    @Test
+    @DisplayName("createTrade with idempotency conflict returns 409, not 500")
+    void createTrade_idempotencyConflict_returns409() throws Exception {
+        doThrow(new DomainConflictException("IDEMPOTENT_CONFLICT",
+                "Trade creation already in progress with this idempotency key"))
+            .when(tradeApplicationService).createTrade(anyString(), any());
+
+        mockMvc.perform(post("/order/trades")
+                .header("Idempotency-Key", "idem-in-progress")
+                .header("X-Tinystore-Sub", "user-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tradeId\":\"trade-idem\",\"buyerId\":\"user-1\"," +
+                    "\"orderLines\":[{\"skuId\":\"SKU_A\",\"shopId\":\"SHOP_A\"," +
+                    "\"sellerId\":\"seller-A\",\"quantity\":1,\"priceCents\":9900}]}"))
+            .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("createTrade with IdempotencyConflictException returns 409, not 500")
+    void createTrade_idempotencyConflictException_returns409() throws Exception {
+        doThrow(new IdempotencyConflictException("Fingerprint conflict", "idem-fingerprint-conflict"))
+            .when(tradeApplicationService).createTrade(anyString(), any());
+
+        mockMvc.perform(post("/order/trades")
+                .header("Idempotency-Key", "idem-fingerprint-conflict")
+                .header("X-Tinystore-Sub", "user-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tradeId\":\"trade-fp\",\"buyerId\":\"user-1\"," +
+                    "\"orderLines\":[{\"skuId\":\"SKU_A\",\"shopId\":\"SHOP_A\"," +
+                    "\"sellerId\":\"seller-A\",\"quantity\":1,\"priceCents\":9900}]}"))
+            .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("createTrade with unexpected failure returns 500 without leaking internal details")
+    void createTrade_unexpectedFailure_hidesInternalDetails() throws Exception {
+        doThrow(new RuntimeException("duplicate key value violates unique constraint shop_order_order_id_key"))
+            .when(tradeApplicationService).createTrade(anyString(), any());
+
+        mockMvc.perform(post("/order/trades")
+                .header("Idempotency-Key", "idem-unexpected")
+                .header("X-Tinystore-Sub", "user-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tradeId\":\"trade-unexpected\",\"buyerId\":\"user-1\"," +
+                    "\"orderLines\":[{\"skuId\":\"SKU_A\",\"shopId\":\"SHOP_A\"," +
+                    "\"sellerId\":\"seller-A\",\"quantity\":1,\"priceCents\":9900}]}"))
+            .andExpect(status().isInternalServerError())
+            .andExpect(content().string(not(containsString("duplicate key value"))))
+            .andExpect(content().string(not(containsString("shop_order_order_id_key"))));
     }
 }
