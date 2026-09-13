@@ -8,6 +8,7 @@
 #   1. a failed placement must not leak inventory
 #   2. a partial multi-shop failure must release the shop that did succeed
 #   3. expiry (unpaid reservation timeout) must return the inventory
+#   4. one one-time coupon used by N concurrent orders is arbitrated to exactly one winner
 #
 # Every check compares "how many orders can still be placed" against the SKU's real stock,
 # which is the only assertion that matters to the business.
@@ -22,6 +23,8 @@ FAILED=0
 
 psql_t() { docker exec -i tinystore-postgres-test psql -U postgres -d tinystore -t -A -c "$1" 2>/dev/null; }
 psql_q() { docker exec -i tinystore-postgres-test psql -U postgres -d tinystore -q -c "$1" >/dev/null 2>&1; }
+# -q so a RETURNING insert yields only the value (no "INSERT 0 1" command tag)
+psql_v() { docker exec -i tinystore-postgres-test psql -U postgres -d tinystore -q -t -A -c "$1" 2>/dev/null; }
 
 seed_stock() {
   psql_q "INSERT INTO tinystore_inventory.inventory_stock (shop_id, sku_id, total_quantity, reserved_quantity, version, created_at, updated_at)
@@ -36,6 +39,15 @@ place() {
     -H 'Content-Type: application/json' \
     -H "Idempotency-Key: $1" \
     -d "{\"tradeId\":\"$2\",\"buyerId\":\"inv-$2\",\"buyerNick\":\"inv\",\"addressId\":\"addr-001\",\"traceId\":\"inv-$2\",\"orderLines\":[$3]}" || true
+}
+
+place_with_coupon() {
+  # $1 = idempotency key, $2 = tradeId, $3 = buyerId, $4 = coupon no, $5 = order lines json
+  # trailing newline: callers append these to a file, one code per line
+  curl -s -o /dev/null -w '%{http_code}\n' --max-time 25 -X POST "$BASE" \
+    -H 'Content-Type: application/json' \
+    -H "Idempotency-Key: $1" \
+    -d "{\"tradeId\":\"$2\",\"buyerId\":\"$3\",\"buyerNick\":\"arb\",\"addressId\":\"addr-001\",\"traceId\":\"$2\",\"shopCouponCodesByShop\":{\"SHOP_A\":[\"$4\"]},\"orderLines\":[$5]}" || true
 }
 
 count_placements() {
@@ -137,6 +149,66 @@ echo "   PRE_DEDUCTED rows observed=${rows:-?}; after forcing expire_at into the
 echo "   EXPIRED reservations=${expired:-?}, new order -> ${after}"
 if [ "$ok3" != "3" ] || [ "$after" != "200" ]; then
   echo "   FAIL: stock was not returned after expiry"
+  FAILED=1
+else
+  echo "   PASS"
+fi
+
+# ---------------------------------------------------------------- 4
+# C13: one one-time coupon, N concurrent orders from the same buyer.
+#
+# The coupon is only claimed at (asynchronous) promotion-commit time, so all N orders legitimately
+# return 200 first — that window is a documented design property, not a bug. The invariant that
+# must hold is the FINAL arbitration: exactly ONE trade may keep the coupon; the losers must be
+# closed with their checkout quotes released, and the coupon must end up held by a single lock.
+coupon_no="ARBC-${ts}"
+buyer="arbc-${ts}"
+sku_arb="SKU-invD-${ts}"
+seed_stock SHOP_A "$sku_arb" 100
+line_arb="$(line_json "$sku_arb" prod-1 SHOP_A seller-A)"
+
+coupon_id="$(psql_v "INSERT INTO promotion.coupon
+  (id, coupon_no, coupon_type, scope_type, shop_id, threshold_amount, discount_amount, total_stock, used_stock,
+   start_time, end_time, priority, status)
+  VALUES (gen_random_uuid(), '$coupon_no', 'MERCHANT_FULL_REDUCTION', 'STORE', 'SHOP_A', 0, 1.00, 1, 0,
+          now() - interval '1 hour', now() + interval '1 hour', 0, 'ACTIVE') RETURNING id;" | tail -1 | tr -d '[:space:]')"
+psql_q "INSERT INTO promotion.user_coupon (id, user_id, coupon_id, coupon_no, use_status)
+        VALUES (gen_random_uuid(), '$buyer', '$coupon_id', '$coupon_no', 'UNUSED');"
+
+ok4=0
+pids=()
+codes_file="/tmp/chain-invD-${ts}.txt"
+: > "$codes_file"
+for i in 1 2 3 4 5; do
+  ( place_with_coupon "invD-k-${ts}-${i}" "invD-${ts}-${i}" "$buyer" "$coupon_no" "$line_arb" >> "$codes_file" ) &
+  pids+=("$!")
+done
+for p in "${pids[@]}"; do wait "$p"; done
+while read -r c; do [ "$c" = "200" ] && ok4=$((ok4 + 1)); done < "$codes_file"
+rm -f "$codes_file"
+
+# Poll for the asynchronous arbitration to settle (losers are cancelled by
+# PendingCommitTimeoutScheduler: pending-timeout-seconds=30, checked every 10s).
+committed=0
+closed=0
+for i in $(seq 1 24); do
+  committed="$(psql_t "SELECT count(*) FROM tinystore_order.trade
+                       WHERE trade_id LIKE 'invD-${ts}-%' AND promotion_commit_status = 'COMMITTED';")"
+  closed="$(psql_t "SELECT count(*) FROM tinystore_order.trade
+                    WHERE trade_id LIKE 'invD-${ts}-%' AND closed_at IS NOT NULL;")"
+  [ "$committed" = "1" ] && [ "$closed" = "4" ] && break
+  sleep 5
+done
+coupon_state="$(psql_t "SELECT use_status || ' lock_id=' || coalesce(lock_id, 'NULL') FROM promotion.user_coupon WHERE coupon_id='$coupon_id';")"
+quotes="$(psql_t "SELECT string_agg(status || '=' || cnt, ' ') FROM
+                  (SELECT status, count(*) cnt FROM promotion.checkout_quote WHERE user_id='$buyer' GROUP BY status) s;")"
+echo ""
+echo "4) one-time coupon used by 5 concurrent orders must be held by exactly one trade"
+echo "   all 5 placements returned HTTP 200 (${ok4}/5) -- the async-commit window is real;"
+echo "   after arbitration: COMMITTED=${committed} closed=${closed};"
+echo "   user_coupon: ${coupon_state:-?}; checkout_quote: ${quotes:-?}"
+if [ "$committed" != "1" ] || [ "$closed" != "4" ]; then
+  echo "   FAIL: the one-time coupon was not arbitrated to a single winner"
   FAILED=1
 else
   echo "   PASS"
