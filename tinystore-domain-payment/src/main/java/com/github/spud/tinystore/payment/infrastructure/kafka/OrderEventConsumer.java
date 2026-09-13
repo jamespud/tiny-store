@@ -40,7 +40,13 @@ public class OrderEventConsumer {
             log.debug("Received order event: {}", message);
 
             // 解析 Outbox envelope
-            Map<String, Object> envelope = objectMapper.readValue(message, Map.class);
+            Map<String, Object> envelope;
+            try {
+                envelope = objectMapper.readValue(message, Map.class);
+            } catch (Exception parseError) {
+                // 毒消息：无法解析，交给错误处理器直接投 DLT，不占用重试预算。
+                throw new IllegalArgumentException("Invalid order event JSON (DLT)", parseError);
+            }
             String eventType = (String) envelope.get("eventType");
             String payload = (String) envelope.get("payload");
 
@@ -60,9 +66,10 @@ public class OrderEventConsumer {
             ack.acknowledge();
 
         } catch (Exception e) {
-            log.error("Failed to handle order event: message={}", message, e);
-            // 消费失败不提交 offset，等待重试
-            // 生产环境可配置死信队列或告警
+            // 消费失败绝不 ack：交给 DefaultErrorHandler 重试，达到上限后进 DLT。
+            // 之前这里吞掉异常，等于"失败也当成功"，事件被静默丢弃（C1）。
+            log.error("Failed to handle order event, will retry/DLT: message={}", message, e);
+            throw e;
         }
     }
 
