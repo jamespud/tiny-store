@@ -14,11 +14,18 @@ MAVEN := "./mvnw"
 MAVEN_CLEAN_OPTS := -Dmaven.clean.failOnError=false
 
 # Multi-instance (distributed) test stack sizing.
-# NOTE: the replica count must not exceed the width of the host-port ranges declared in
-# docker/docker-compose-multi.yml, otherwise replicas fail with "all ports are allocated".
+# MULTI_REPLICAS is the single knob: `make e2e-multi MULTI_REPLICAS=3`. The host-port ranges in
+# docker/docker-compose-multi.yml are 10 ports wide per service, so any N in [1..10] works with
+# no compose edit; replicas are enumerated at runtime, never assumed to be "replica #1/#2".
 MULTI_SERVICES := gateway auth account product promotion inventory order payment
 MULTI_REPLICAS ?= 2
+MULTI_MIN_REPLICAS := 1
+# Must match the width of the host-port ranges in docker/docker-compose-multi.yml (10).
+MULTI_MAX_REPLICAS := 10
 MULTI_SCALE_FLAGS := $(foreach s,$(MULTI_SERVICES),--scale $(s)=$(MULTI_REPLICAS))
+# Compose interpolation (deploy.replicas: ${MULTI_REPLICAS:-2}) reads the environment, not the
+# make variable, so export it; otherwise `docker compose ... up` without --scale would differ.
+export MULTI_REPLICAS
 # resilience-multi: probe for this long, kill one replica this many seconds in.
 MULTI_PROBE_SECONDS ?= 45
 MULTI_KILL_AFTER ?= 10
@@ -28,6 +35,16 @@ help: ## Show this help message
 	@echo ''
 	@echo 'Available targets:'
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
+
+check-multi-replicas: ## Guard: MULTI_REPLICAS must be an integer in [1..10]
+	@case "$(MULTI_REPLICAS)" in \
+		''|*[!0-9]*) echo "ERROR: MULTI_REPLICAS must be an integer, got '$(MULTI_REPLICAS)'"; exit 1 ;; \
+	esac; \
+	if [ "$(MULTI_REPLICAS)" -lt $(MULTI_MIN_REPLICAS) ] || [ "$(MULTI_REPLICAS)" -gt $(MULTI_MAX_REPLICAS) ]; then \
+		echo "ERROR: MULTI_REPLICAS=$(MULTI_REPLICAS) is out of range [$(MULTI_MIN_REPLICAS)..$(MULTI_MAX_REPLICAS)]"; \
+		echo "       The multi overlay publishes $(MULTI_MAX_REPLICAS) host ports per service; widen the ranges first."; \
+		exit 1; \
+	fi
 
 build: ## Build all services with Maven
 	@echo "Building all services..."
@@ -145,7 +162,7 @@ e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
 	cd tests/api && ../../$(MAVEN) verify -Pit -DskipITs=false || exit 1; \
 	echo "E2E/API tests passed successfully"
 
-multi-up: build ## Start the multi-instance (distributed) test stack (2 replicas per service)
+multi-up: check-multi-replicas build ## Start the multi-instance (distributed) test stack (MULTI_REPLICAS per service)
 	@echo "Starting multi-instance test environment ($(MULTI_REPLICAS)x per service)..."
 	@docker compose -f $(COMPOSE_TEST) -f $(COMPOSE_MULTI) up -d --build $(MULTI_SCALE_FLAGS)
 	@echo "Multi-instance stack started. Replica host ports:"
@@ -159,27 +176,29 @@ multi-up: build ## Start the multi-instance (distributed) test stack (2 replicas
 multi-down: ## Stop the multi-instance test stack
 	@docker compose -f $(COMPOSE_TEST) -f $(COMPOSE_MULTI) down -v
 
-e2e-multi: build ## Run E2E/API + distributed assertions against the N-replica stack
-	@echo "Starting multi-instance environment for distributed E2E tests..."
+e2e-multi: check-multi-replicas build ## Run E2E/API + distributed assertions against the N-replica stack
+	@echo "Starting multi-instance environment for distributed E2E tests ($(MULTI_REPLICAS) replicas/service)..."
 	@set -e; \
 	root_dir=$$(pwd); \
+	replicas=$(MULTI_REPLICAS); \
 	compose() { docker compose -f $(COMPOSE_TEST) -f $(COMPOSE_MULTI) "$$@"; }; \
-	replica_port() { compose ps -q "$$1" | sed -n "$${2}p" | xargs -r -I{} docker port {} "$$3" | head -1 | sed 's/.*://'; }; \
+	replica_ports() { compose ps -q "$$1" | while read -r cid; do docker port "$$cid" "$$2" 2>/dev/null | head -1 | sed 's/.*://'; done; }; \
+	urls() { out=""; for p in $$(replica_ports "$$1" "$$2"); do out="$${out:+$$out,}http://localhost:$$p"; done; printf '%s' "$$out"; }; \
 	cleanup() { echo "Cleaning up multi-instance environment..."; cd "$$root_dir"; compose down -v; }; \
 	trap cleanup EXIT; \
 	compose up -d --build $(MULTI_SCALE_FLAGS); \
-	echo "Waiting for both gateway replicas to be healthy (max 180s)..."; \
+	echo "Waiting for all $$replicas gateway replicas to be healthy (max 180s)..."; \
 	for i in $$(seq 1 36); do \
 		ok=1; \
-		for idx in 1 2; do \
-			p=$$(replica_port gateway $$idx 8080); \
+		for p in $$(replica_ports gateway 8080); do \
 			if [ -z "$$p" ] || [ "$$(curl -sf -o /dev/null -w '%{http_code}' --max-time 3 http://localhost:$$p/actuator/health || echo 000)" != "200" ]; then ok=0; fi; \
 		done; \
-		if [ $$ok -eq 1 ]; then echo "Both gateway replicas healthy after $$((i*5))s"; break; fi; \
-		if [ $$i -eq 36 ]; then echo "ERROR: gateway replicas not healthy in 180s"; compose logs --tail=80 gateway; exit 1; fi; \
+		found=$$(replica_ports gateway 8080 | grep -c . || true); \
+		if [ "$$found" -ge "$$replicas" ] && [ $$ok -eq 1 ]; then echo "All $$replicas gateway replicas healthy after $$((i*5))s"; break; fi; \
+		if [ $$i -eq 36 ]; then echo "ERROR: gateway replicas not healthy in 180s ($$found/$$replicas published)"; compose logs --tail=80 gateway; exit 1; fi; \
 		sleep 5; \
 	done; \
-	gw_port=$$(replica_port gateway 1 8080); \
+	gw_port=$$(replica_ports gateway 8080 | head -1); \
 	echo "Waiting for downstream routes (max 180s)..."; \
 	for i in $$(seq 1 36); do \
 		all_ready=1; \
@@ -191,13 +210,17 @@ e2e-multi: build ## Run E2E/API + distributed assertions against the N-replica s
 		if [ $$i -eq 36 ]; then echo "ERROR: downstream routes not ready in 180s"; compose logs --tail=80 gateway; exit 1; fi; \
 		sleep 5; \
 	done; \
-	product_port=$$(replica_port product 1 8090); \
-	inventory_port=$$(replica_port inventory 1 13000); \
-	promotion_port=$$(replica_port promotion 1 1200); \
-	order_port_1=$$(replica_port order 1 28080); \
-	order_port_2=$$(replica_port order 2 28080); \
-	gw_port_2=$$(replica_port gateway 2 8080); \
-	echo "Resolved replica ports: gateway=$$gw_port,$$gw_port_2 product=$$product_port inventory=$$inventory_port promotion=$$promotion_port order=$$order_port_1,$$order_port_2"; \
+	product_urls=$$(urls product 8090); \
+	inventory_urls=$$(urls inventory 13000); \
+	promotion_urls=$$(urls promotion 1200); \
+	gw_urls=$$(urls gateway 8080); \
+	order_urls=$$(urls order 28080); \
+	auth_urls=$$(urls auth 9000); \
+	echo "Resolved replica URLs:"; \
+	echo "  gateway   $$gw_urls"; \
+	echo "  order     $$order_urls"; \
+	echo "  inventory $$inventory_urls"; \
+	echo "  auth      $$auth_urls"; \
 	echo "Waiting for all $(MULTI_REPLICAS) replicas of every service to register in Nacos (max 480s)..."; \
 	for i in $$(seq 1 96); do \
 		missing=""; \
@@ -218,38 +241,40 @@ e2e-multi: build ## Run E2E/API + distributed assertions against the N-replica s
 	echo "Running API tests + distributed assertions..."; \
 	cd tests/api && ../../$(MAVEN) verify -Pit -DskipITs=false \
 		-Dgateway.base.url=http://localhost:$$gw_port \
-		-Dproduct.base.url=http://localhost:$$product_port \
-		-Dinventory.base.url=http://localhost:$$inventory_port \
-		-Dpromotion.base.url=http://localhost:$$promotion_port \
+		-Dproduct.base.url=$${product_urls%%,*} \
+		-Dinventory.base.url=$${inventory_urls%%,*} \
+		-Dpromotion.base.url=$${promotion_urls%%,*} \
 		-Dmulti.instance.mode=true \
-		-Dmulti.instance.replicas=$(MULTI_REPLICAS) \
+		-Dmulti.instance.replicas=$$replicas \
 		-Dnacos.base.url=http://localhost:8849 \
-		-Dgateway.replica.urls=http://localhost:$$gw_port,http://localhost:$$gw_port_2 \
-		-Dorder.replica.urls=http://localhost:$$order_port_1,http://localhost:$$order_port_2 \
+		-Dgateway.replica.urls=$$gw_urls \
+		-Dorder.replica.urls=$$order_urls \
 		|| exit 1; \
 	echo "Multi-instance E2E + distributed assertions passed"
 
-consistency-multi: build ## Run concurrency consistency tests against the N-replica stack (+ outbox duplicate probe)
-	@echo "Starting multi-instance environment for concurrency consistency tests..."
+consistency-multi: check-multi-replicas build ## Run concurrency consistency tests against the N-replica stack (+ outbox duplicate probe)
+	@echo "Starting multi-instance environment for concurrency consistency tests ($(MULTI_REPLICAS) replicas/service)..."
 	@set -e; \
 	root_dir=$$(pwd); \
+	replicas=$(MULTI_REPLICAS); \
 	compose() { docker compose -f $(COMPOSE_TEST) -f $(COMPOSE_MULTI) "$$@"; }; \
-	replica_port() { compose ps -q "$$1" | sed -n "$${2}p" | xargs -r -I{} docker port {} "$$3" | head -1 | sed 's/.*://'; }; \
+	replica_ports() { compose ps -q "$$1" | while read -r cid; do docker port "$$cid" "$$2" 2>/dev/null | head -1 | sed 's/.*://'; done; }; \
+	urls() { out=""; for p in $$(replica_ports "$$1" "$$2"); do out="$${out:+$$out,}http://localhost:$$p"; done; printf '%s' "$$out"; }; \
 	cleanup() { echo "Cleaning up multi-instance environment..."; cd "$$root_dir"; compose down -v; }; \
 	trap cleanup EXIT; \
 	compose up -d --build $(MULTI_SCALE_FLAGS); \
-	echo "Waiting for gateway replicas (max 180s)..."; \
+	echo "Waiting for all $$replicas gateway replicas (max 180s)..."; \
 	for i in $$(seq 1 36); do \
 		ok=1; \
-		for idx in 1 2; do \
-			p=$$(replica_port gateway $$idx 8080); \
+		for p in $$(replica_ports gateway 8080); do \
 			if [ -z "$$p" ] || [ "$$(curl -sf -o /dev/null -w '%{http_code}' --max-time 3 http://localhost:$$p/actuator/health || echo 000)" != "200" ]; then ok=0; fi; \
 		done; \
-		if [ $$ok -eq 1 ]; then echo "Gateways healthy after $$((i*5))s"; break; fi; \
-		if [ $$i -eq 36 ]; then echo "ERROR: gateways not healthy"; compose logs --tail=80 gateway; exit 1; fi; \
+		found=$$(replica_ports gateway 8080 | grep -c . || true); \
+		if [ "$$found" -ge "$$replicas" ] && [ $$ok -eq 1 ]; then echo "Gateways healthy after $$((i*5))s"; break; fi; \
+		if [ $$i -eq 36 ]; then echo "ERROR: gateways not healthy ($$found/$$replicas published)"; compose logs --tail=80 gateway; exit 1; fi; \
 		sleep 5; \
 	done; \
-	gw_port=$$(replica_port gateway 1 8080); \
+	gw_port=$$(replica_ports gateway 8080 | head -1); \
 	for i in $$(seq 1 36); do \
 		all_ready=1; \
 		for path in "/internal/health/order" "/internal/health/inventory"; do \
@@ -263,15 +288,15 @@ consistency-multi: build ## Run concurrency consistency tests against the N-repl
 	echo "Applying E2E seed fixture (perf tests assert against SHOP_A/SKU_A)..."; \
 	docker exec -i tinystore-postgres-test psql -U postgres -d tinystore -v ON_ERROR_STOP=1 \
 		< tests/api/src/test/resources/seed/e2e-seed.sql > /dev/null; \
-	inv_1=$$(replica_port inventory 1 13000); \
-	inv_2=$$(replica_port inventory 2 13000); \
-	echo "Inventory replicas: $$inv_1,$$inv_2"; \
+	inventory_urls=$$(urls inventory 13000); \
+	inv_first=$${inventory_urls%%,*}; \
+	echo "Inventory replicas: $$inventory_urls"; \
 	echo "Running concurrency consistency tests (load spread over both inventory replicas)..."; \
 	$(MAVEN) -pl tests/performance test -Pperf \
 		-Dgateway.base.url=http://localhost:$$gw_port \
-		-Dinventory.base.url=http://localhost:$$inv_1 \
-		-Dinventory.replica.urls=http://localhost:$$inv_1,http://localhost:$$inv_2 \
-		-Dinventory.prometheus.url=http://localhost:$$inv_1/actuator/prometheus \
+		-Dinventory.base.url=$$inv_first \
+		-Dinventory.replica.urls=$$inventory_urls \
+		-Dinventory.prometheus.url=$$inv_first/actuator/prometheus \
 		-Dpg.url=jdbc:postgresql://localhost:5433/tinystore \
 		|| consistency_status=$$?; \
 	echo ""; \
@@ -296,7 +321,7 @@ consistency-multi: build ## Run concurrency consistency tests against the N-repl
 	fi; \
 	echo "Concurrency consistency tests passed on the multi-instance stack"
 
-resilience-multi: build ## Kill one replica mid-traffic and measure the failover window (distributed resilience probe)
+resilience-multi: check-multi-replicas build ## Kill one replica mid-traffic and measure the failover window (distributed resilience probe)
 	@echo "Starting multi-instance environment for the replica-failure probe..."
 	@set -e; \
 	root_dir=$$(pwd); \
@@ -343,22 +368,23 @@ resilience-multi: build ## Kill one replica mid-traffic and measure the failover
 	fi; \
 	echo "Replica-failure probe passed"
 
-load-multi: build ## Run the k6 load matrix against the N-replica stack (+ per-replica traffic split)
-	@echo "Starting multi-instance environment for the distributed load matrix..."
+load-multi: check-multi-replicas build ## Run the k6 load matrix against the N-replica stack (+ per-replica traffic split)
+	@echo "Starting multi-instance environment for the distributed load matrix ($(MULTI_REPLICAS) replicas/service)..."
 	@if ! command -v k6 > /dev/null 2>&1; then echo "ERROR: k6 not found"; exit 1; fi
 	@set -e; \
 	root_dir=$$(pwd); \
 	levels="$${VUS_LEVELS:-100 300}"; \
 	duration="$${DURATION:-30s}"; \
 	compose() { docker compose -f $(COMPOSE_TEST) -f $(COMPOSE_MULTI) "$$@"; }; \
-	replica_port() { compose ps -q "$$1" | sed -n "$${2}p" | xargs -r -I{} docker port {} "$$3" | head -1 | sed 's/.*://'; }; \
+	replica_ports() { compose ps -q "$$1" | while read -r cid; do docker port "$$cid" "$$2" 2>/dev/null | head -1 | sed 's/.*://'; done; }; \
+	urls() { out=""; for p in $$(replica_ports "$$1" "$$2"); do out="$${out:+$$out,}http://localhost:$$p"; done; printf '%s' "$$out"; }; \
 	order_trades_count() { curl -s --max-time 5 "http://localhost:$$1/actuator/prometheus" 2>/dev/null | grep 'http_server_requests_seconds_count' | grep 'uri="/order/trades"' | awk '{s+=$$NF} END {print s+0}'; }; \
 	cleanup() { echo "Cleaning up multi-instance environment..."; cd "$$root_dir"; compose down -v; }; \
 	trap cleanup EXIT; \
 	compose up -d --build $(MULTI_SCALE_FLAGS); \
 	echo "Waiting for gateway replicas (max 180s)..."; \
 	for i in $$(seq 1 36); do \
-		gw_port=$$(replica_port gateway 1 8080); \
+		gw_port=$$(replica_ports gateway 8080 | head -1); \
 		code=$$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://localhost:$$gw_port/api/order/trades/load-ready" 2>/dev/null || echo 000); \
 		[ "$$code" = "404" ] && { echo "order route ready after $$((i*5))s"; break; }; \
 		[ $$i -eq 36 ] && { echo "ERROR: route not ready"; compose logs --tail=60 gateway; exit 1; }; \
@@ -387,8 +413,11 @@ load-multi: build ## Run the k6 load matrix against the N-replica stack (+ per-r
 			"INSERT INTO tinystore_inventory.inventory_stock (shop_id, sku_id, total_quantity, reserved_quantity, version, created_at, updated_at) VALUES ('SHOP_A','$$sku',500000,0,0,NOW(),NOW()) ON CONFLICT (shop_id, sku_id) DO NOTHING;" > /dev/null; \
 	done; \
 	docker exec -i tinystore-postgres-test psql -U postgres -d tinystore -v ON_ERROR_STOP=1 < tests/api/src/test/resources/seed/e2e-seed.sql > /dev/null; \
-	o1=$$(replica_port order 1 28080); o2=$$(replica_port order 2 28080); \
-	before1=$$(order_trades_count $$o1); before2=$$(order_trades_count $$o2); \
+	order_urls=$$(urls order 28080); \
+	split_before=/tmp/tinystore-load-multi-before-$$$$.txt; \
+	split_after=/tmp/tinystore-load-multi-after-$$$$.txt; \
+	: > $$split_before; \
+	for u in $$(printf '%s' "$$order_urls" | tr ',' ' '); do p=$${u##*:}; echo "$$p $$(order_trades_count $$p)" >> $$split_before; done; \
 	echo "Running k6 matrix (VUS=$$levels, DURATION=$$duration) through gateway :$$gw_port (2 replicas behind it)..."; \
 	cd perf/k6; \
 	set +e; \
@@ -401,11 +430,12 @@ load-multi: build ## Run the k6 load matrix against the N-replica stack (+ per-r
 	if grep -q "THRESHOLD-CROSSED" $$matrix_log 2>/dev/null; then threshold_fail=1; fi; \
 	rm -f $$matrix_log; \
 	cd "$$root_dir"; \
-	after1=$$(order_trades_count $$o1); after2=$$(order_trades_count $$o2); \
+	: > $$split_after; \
+	for u in $$(printf '%s' "$$order_urls" | tr ',' ' '); do p=$${u##*:}; echo "$$p $$(order_trades_count $$p)" >> $$split_after; done; \
 	echo ""; \
 	echo "=== Per-replica traffic split (order) ==="; \
-	echo "  replica 1: $$((after1-before1)) requests"; \
-	echo "  replica 2: $$((after2-before2)) requests"; \
+	awk 'NR==FNR{b[$$1]=$$2;next}{d=$$2-b[$$1]; printf "  replica :%s -> %d requests%s\n", $$1, d, (d>0?"":"  <-- STARVED")}' $$split_before $$split_after; \
+	rm -f $$split_before $$split_after; \
 	echo ""; \
 	echo "=== Cross-replica ID collision probe ==="; \
 	compose logs order 2>&1 | grep 'duplicate key value violates unique constraint' \
@@ -416,7 +446,7 @@ load-multi: build ## Run the k6 load matrix against the N-replica stack (+ per-r
 	if [ $$k6_status -ne 0 ]; then echo "k6 load matrix exited $$k6_status"; exit $$k6_status; fi; \
 	echo "Distributed load matrix complete"
 
-load-compare: build ## k6 ladder on 1 replica vs N replicas: distributed scaling report (throughput + p95/p99 + per-replica split)
+load-compare: check-multi-replicas build ## k6 ladder on 1 replica vs N replicas: distributed scaling report (throughput + p95/p99 + per-replica split)
 	@echo "Starting distributed scaling comparison (1x vs $(MULTI_REPLICAS)x replicas, same k6 ladder)..."
 	@echo "Knobs: VUS_LEVELS (as in make load-matrix) / DURATION / REPEAT (median of N passes) / ORDER=single-first|multi-first / WARMUP_VUS / WARMUP_DURATION."
 	@bash perf/k6/load_compare.sh \
@@ -433,7 +463,7 @@ load-compare: build ## k6 ladder on 1 replica vs N replicas: distributed scaling
 		--repeat "$${REPEAT:-1}" \
 		--outdir perf/reports
 
-retry-multi: build ## Probe the order-placement failure path: is a same-key retry accepted after a 5xx?
+retry-multi: check-multi-replicas build ## Probe the order-placement failure path: is a same-key retry accepted after a 5xx?
 	@echo "Starting multi-instance environment for the order retry probe..."
 	@set -e; \
 	root_dir=$$(pwd); \
@@ -465,7 +495,7 @@ retry-multi: build ## Probe the order-placement failure path: is a same-key retr
 	fi; \
 	exit $$probe_status
 
-chain-multi: build ## Verify the order-placement chain's resource invariants on the N-replica stack
+chain-multi: check-multi-replicas build ## Verify the order-placement chain's resource invariants on the N-replica stack
 	@echo "Starting multi-instance environment for the order-chain invariant gate..."
 	@set -e; \
 	root_dir=$$(pwd); \

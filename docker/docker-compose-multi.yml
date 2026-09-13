@@ -25,18 +25,28 @@
 # question: "do several stateless replicas stay correct when they share one DB,
 # one Redis and one Kafka?"
 #
-# Every application service publishes a *range* of host ports, so each replica
-# gets its own host port and the test suite (or an operator) can reach a
-# specific replica: replica #1 -> first port in the range, replica #2 -> second.
-# Discover them with: docker port <project>-<service>-1 <container-port>
-# The ranges deliberately avoid the base stack's ports (8080/9000/8000/8090/1200/
+# Every application service publishes a *range* of 10 host ports, so each replica
+# gets its own host port and the test suite (or an operator) can reach a specific
+# replica. Do NOT hardcode "replica #1 / #2" anywhere: the number of replicas is a
+# runtime input (MULTI_REPLICAS, 1..10) and the ports must be discovered, not assumed:
+#   docker compose ... ps -q <service> | xargs -r -I{} docker port {} <container-port>
+# The Makefile exposes that as `replica_ports` / `urls` inside the multi targets.
+#
+# 10 ports per service is what makes `MULTI_REPLICAS=1/2/3/...` work with no compose
+# edit; MAX_MULTI_REPLICAS in the Makefile is pinned to that width and fails fast.
+# The blocks deliberately avoid the base stack's ports (8080/9000/8000/8090/1200/
 # 13000/28080/8083), which are frequently already taken on a shared dev host.
+#
+# Docker only *reserves* the ports the running replicas actually need, so an unrelated
+# process sitting somewhere inside a block does not break the stack.
 # =============================================================================
 
 x-app-multi: &app-multi
   container_name: !reset null
   deploy:
-    replicas: 2
+    # Runtime input, not a constant: the Makefile passes --scale for every target, and this
+    # keeps a bare `docker compose up` (without --scale) consistent with MULTI_REPLICAS too.
+    replicas: ${MULTI_REPLICAS:-2}
   # 2x8 JVMs on one host: cap the heap so replicas do not fight over the machine.
   environment:
     JAVA_TOOL_OPTIONS: "-Xmx512m -Xss512k -XX:MaxMetaspaceSize=192m"
@@ -53,39 +63,39 @@ services:
     # 8080 is frequently already taken, and then replica #2 fails with
     # "all ports are allocated". Override with MULTI_GATEWAY_PORTS=....
     ports: !override
-      - "${MULTI_GATEWAY_PORTS:-38080-38081}:8080"
+      - "${MULTI_GATEWAY_PORTS:-38080-38089}:8080"
 
   auth:
     <<: *app-multi
     ports: !override
-      - "39000-39001:9000"
+      - "${MULTI_AUTH_PORTS:-39000-39009}:9000"
 
   account:
     <<: *app-multi
     ports: !override
-      - "38000-38001:8000"
+      - "${MULTI_ACCOUNT_PORTS:-38000-38009}:8000"
 
   product:
     <<: *app-multi
     ports: !override
-      - "38090-38091:8090"
+      - "${MULTI_PRODUCT_PORTS:-38090-38099}:8090"
 
   promotion:
     <<: *app-multi
     ports: !override
-      - "38120-38121:1200"
+      - "${MULTI_PROMOTION_PORTS:-38120-38129}:1200"
 
   inventory:
     <<: *app-multi
     ports: !override
-      - "38130-38131:13000"
+      - "${MULTI_INVENTORY_PORTS:-38130-38139}:13000"
 
   order:
     <<: *app-multi
     ports: !override
-      - "38280-38281:28080"
+      - "${MULTI_ORDER_PORTS:-38280-38289}:28080"
 
   payment:
     <<: *app-multi
     ports: !override
-      - "38083-38084:8083"
+      - "${MULTI_PAYMENT_PORTS:-38040-38049}:8083"
