@@ -20,6 +20,7 @@ import com.github.spud.tinystore.auth.application.dto.SendOtpCommand;
 import com.github.spud.tinystore.auth.application.dto.SendOtpResult;
 import com.github.spud.tinystore.auth.application.dto.VerifyOtpCommand;
 import com.github.spud.tinystore.auth.application.port.out.AuditLogPort;
+import com.github.spud.tinystore.auth.application.port.out.OtpConsumeResult;
 import com.github.spud.tinystore.auth.application.port.out.OtpRepositoryPort;
 import com.github.spud.tinystore.auth.application.port.out.SmsSenderPort;
 import com.github.spud.tinystore.auth.domain.exception.OtpInvalidException;
@@ -216,7 +217,9 @@ class OtpApplicationServiceTest {
     VerifyOtpCommand command = new VerifyOtpCommand(phone, code);
 
     PhoneNumber phoneNumber = PhoneNumber.of(phone);
-    when(otpRepository.findLatest(phoneNumber)).thenReturn(Optional.empty());
+    // C4：校验+消费变成仓储层的一次原子调用
+    when(otpRepository.verifyAndConsume(phoneNumber, OtpCode.of(code)))
+      .thenReturn(OtpConsumeResult.NOT_FOUND);
 
     // When & Then
     assertThatThrownBy(() -> service.verifyOtp(command))
@@ -250,8 +253,8 @@ class OtpApplicationServiceTest {
       com.github.spud.tinystore.auth.domain.primitives.RtVersion.of(1)
     );
 
-    when(otpRepository.findLatest(phoneNumber)).thenReturn(Optional.of(mockOtp));
-    doNothing().when(otpGenerationService).verify(mockOtp, otpCode);
+    // C4：SUCCESS 表示"已校验且已消费"，无需再单独 markUsed
+    when(otpRepository.verifyAndConsume(phoneNumber, otpCode)).thenReturn(OtpConsumeResult.SUCCESS);
     when(userService.getOrCreateByPhone(phone)).thenReturn(mockUser);
 
     // When
@@ -261,8 +264,7 @@ class OtpApplicationServiceTest {
     assertThat(result).isNotNull();
     assertThat(result.user()).isEqualTo(mockUser);
 
-    verify(otpGenerationService).verify(mockOtp, otpCode);
-    verify(otpRepository).markUsed(mockOtp);
+    verify(otpRepository).verifyAndConsume(phoneNumber, otpCode);
     verify(userService).getOrCreateByPhone(phone);
     verify(auditLogPort, atLeastOnce()).append(any());
   }
@@ -280,9 +282,8 @@ class OtpApplicationServiceTest {
     Otp mockOtp = new Otp(UUID.randomUUID().toString(), phoneNumber, OtpCode.of("654321"),
       OffsetDateTime.now().plusMinutes(5), false, null);
 
-    when(otpRepository.findLatest(phoneNumber)).thenReturn(Optional.of(mockOtp));
-    doThrow(new OtpInvalidException("验证码错误")).when(otpGenerationService)
-      .verify(mockOtp, otpCode);
+    when(otpRepository.verifyAndConsume(phoneNumber, otpCode))
+      .thenReturn(OtpConsumeResult.MISMATCH);
 
     // When & Then
     assertThatThrownBy(() -> service.verifyOtp(command))
