@@ -232,10 +232,12 @@ services:
       INVENTORY_RESERVATION_EXPIRY_DEFAULT_MINUTES: 1
       LOGGING_LEVEL_COM_GITHUB_SPUD_TINYSTORE: WARN
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 15
-      # D3 connection budget: see the arithmetic in tests/api RuntimeConfigContractTest.
-      # 3 replicas x (35 order + 15 inventory + 15 promotion + 4 x 10 others) = 315 <= 70% of
-      # postgres max_connections (500). minimum-idle is small on purpose: idle connections also
-      # consume the budget, and the test stack spends most of its life idle.
+      # D3 connection budget (arithmetic pinned by tests/api RuntimeConfigContractTest):
+      # 3 replicas x (45 order + 15 inventory + 15 promotion + 4 x 10 others) = 345, i.e. 69% of
+      # postgres max_connections (500). That is the *edge* of the 70% budget -- only ~5 connections of
+      # headroom for admin/migration/background work, not a comfortable margin. Raising any pool, or
+      # running 4+ replicas, needs the budget recomputed (and the contract test updated) first.
+      # minimum-idle is small on purpose: idle connections also consume the budget.
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 2
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     depends_on:
