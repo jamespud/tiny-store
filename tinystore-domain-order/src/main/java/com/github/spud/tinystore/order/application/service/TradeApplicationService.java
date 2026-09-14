@@ -64,6 +64,11 @@ public class TradeApplicationService {
     /** create-trade 的幂等作用域。 */
     private static final String IDEMPOTENCY_SCOPE = "trade:create";
 
+    /** 幂等记录的行状态：处理中（durable claim） / 已完成（成功响应已落库）。 */
+    private static final String IDEMPOTENCY_STATE_PROCESSING = "PROCESSING";
+
+    private static final String IDEMPOTENCY_STATE_COMMITTED = "COMMITTED";
+
     /** 取消动作的幂等作用域（C6：按 trade 认领，保证同一笔交易只被一个 worker 取消）。 */
     private static final String CANCEL_SCOPE = "trade:cancel";
 
@@ -186,17 +191,12 @@ public class TradeApplicationService {
             // P0-2: the durable record decides first. Redis is the concurrency guard; this table is the
             // authority on "this key already produced this response", so a Redis failure after commit (or a
             // Redis restart) can no longer turn a committed trade into an error or allow a second trade.
+            // P0 (round 3): the same row is the durable *claim* (see claimProcessing below).
             Optional<TradeIdempotencyRecordEntity> durableRecord =
                     tradeIdempotencyRecordRepository.findById(idempotencyKey);
-            if (durableRecord.isPresent()) {
-                TradeIdempotencyRecordEntity record = durableRecord.get();
-                if (!fingerprint.equals(record.getFingerprint())) {
-                    throw new IdempotencyConflictException(
-                            "Idempotency key reused with a different request body", idempotencyKey);
-                }
-                log.info("Idempotent trade creation: replaying durable record, key={}, tradeId={}",
-                        idempotencyKey, record.getTradeId());
-                return objectMapper.readValue(record.getResponseJson(), CreateTradeData.class);
+            if (durableRecord.isPresent()
+                    && !IDEMPOTENCY_STATE_PROCESSING.equals(durableRecord.get().getState())) {
+                return replayDurableRecord(durableRecord.get(), fingerprint, idempotencyKey);
             }
 
             switch (idempotencyService.acquire(IDEMPOTENCY_SCOPE, idempotencyKey, fingerprint)) {
@@ -208,10 +208,27 @@ public class TradeApplicationService {
                     return replayStoredTrade(IDEMPOTENCY_SCOPE, idempotencyKey);
                 }
                 case ACQUIRED -> {
-                    // 取得处理权：立刻登记提交/回滚收尾，保证任何后续失败都会释放记录。
-                    registerIdempotencyCompletion(idempotencyKey, fingerprint, idempotencyResponseHolder);
+                    // The durable claim is taken below, before any external effect.
                 }
             }
+
+            // P0 (round 3): the durable claim is the authoritative mutual exclusion. It is taken *before*
+            // promotion/inventory are called, inside this transaction. A concurrent request with the same
+            // Idempotency-Key blocks here until this transaction commits (then it reads the committed row and
+            // replays it) or rolls back (then the claim is gone and it becomes the owner). That is what stops
+            // a Redis restart/flush from letting two replicas both pre-deduct inventory for one key.
+            if (tradeIdempotencyRecordRepository.claimProcessing(idempotencyKey, IDEMPOTENCY_SCOPE,
+                    fingerprint, LocalDateTime.now()) == 0) {
+                TradeIdempotencyRecordEntity claimedElsewhere = tradeIdempotencyRecordRepository
+                        .findById(idempotencyKey)
+                        .orElseThrow(() -> new IllegalStateException(
+                                "Idempotency claim was not taken but no record exists for key "
+                                        + idempotencyKey));
+                return replayDurableRecord(claimedElsewhere, fingerprint, idempotencyKey);
+            }
+
+            // 取得处理权：立刻登记提交/回滚收尾，保证任何后续失败都会释放记录。
+            registerIdempotencyCompletion(idempotencyKey, fingerprint, idempotencyResponseHolder);
 
             tradeId = (command.getTradeId() != null && !command.getTradeId().isEmpty())
                     ? command.getTradeId()
@@ -574,7 +591,7 @@ public class TradeApplicationService {
                     .idempotencyKey(idempotencyKey)
                     .scope(IDEMPOTENCY_SCOPE)
                     .fingerprint(fingerprint)
-                    .state("COMMITTED")
+                    .state(IDEMPOTENCY_STATE_COMMITTED)
                     .tradeId(trade.getTradeId())
                     .responseJson(idempotencyResponseHolder[0])
                     .createdAt(LocalDateTime.now())
@@ -685,6 +702,29 @@ public class TradeApplicationService {
         }
         throw new DomainConflictException("IDEMPOTENT_CONFLICT",
                 "Trade creation already completed for this idempotency key but its response is unavailable");
+    }
+
+    /**
+     * 用 durable 记录回答一次重放请求（P0-2 / round-3 P0）。
+     *
+     * <p>指纹不同 → 409（同键不同请求体绝不能返回上一次的结果）。指纹相同但记录还没有响应
+     * （{@code state=PROCESSING}）→ 说明另一个副本仍持有 claim，调用方应稍后重试，而不是被当成成功。
+     */
+    private CreateTradeData replayDurableRecord(TradeIdempotencyRecordEntity record, String fingerprint,
+            String idempotencyKey) throws JsonProcessingException {
+        if (!fingerprint.equals(record.getFingerprint())) {
+            throw new IdempotencyConflictException(
+                    "Idempotency key reused with a different request body", idempotencyKey);
+        }
+        if (record.getResponseJson() == null) {
+            // A committed PROCESSING row must not exist (claim + completion are one transaction), so this is
+            // defensive: never invent a success for a claim that never produced one.
+            throw new DomainConflictException("IDEMPOTENT_CONFLICT",
+                    "Trade creation already in progress with this idempotency key");
+        }
+        log.info("Idempotent trade creation: replaying durable record, key={}, tradeId={}",
+                idempotencyKey, record.getTradeId());
+        return objectMapper.readValue(record.getResponseJson(), CreateTradeData.class);
     }
 
     /**

@@ -129,6 +129,11 @@ class TradeApplicationServiceQuoteCompensationTest {
                 mock(com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository.class);
         when(recordRepository.findById(anyString())).thenReturn(java.util.Optional.empty());
         when(recordRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        // 第三轮 P0：durable claim 在 saga 之前取得（真实仓储会 INSERT 并返回 1）。
+        org.mockito.Mockito.lenient()
+                .when(recordRepository.claimProcessing(anyString(), anyString(), anyString(),
+                        org.mockito.ArgumentMatchers.any(java.time.LocalDateTime.class)))
+                .thenReturn(1);
         ReflectionTestUtils.setField(service, "tradeIdempotencyRecordRepository", recordRepository);
 
 
