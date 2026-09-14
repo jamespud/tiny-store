@@ -469,6 +469,59 @@ rate-limit-multi: check-multi-replicas build ## Burst the gateway's limiter acro
 	echo ""; \
 	echo "Rate-limit trust-boundary probe passed"
 
+rebalance-multi: check-multi-replicas build ## Place a burst, kill one replica, record the Kafka group's rebalance + lag recovery (C7)
+	@echo "Starting multi-instance environment for the Kafka rebalance measurement ($(MULTI_REPLICAS) replicas/service)..."
+	@set -e; \
+	root_dir=$$(pwd); \
+	compose() { docker compose -f $(COMPOSE_TEST) -f $(COMPOSE_MULTI) "$$@"; }; \
+	replica_ports() { compose ps -q "$$1" | while read -r cid; do docker port "$$cid" "$$2" 2>/dev/null | head -1 | sed 's/.*://'; done; }; \
+	cleanup() { echo "Cleaning up multi-instance environment..."; cd "$$root_dir"; compose down -v; }; \
+	trap cleanup EXIT; \
+	compose up -d --build $(MULTI_SCALE_FLAGS); \
+	echo "Waiting for gateway + order route (max 180s)..."; \
+	for i in $$(seq 1 36); do \
+		gw_port=$$(replica_ports gateway 8080 | head -1); \
+		code=$$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://localhost:$$gw_port/api/order/trades/rb-ready" 2>/dev/null || echo 000); \
+		if [ "$$code" = "404" ]; then echo "order route ready after $$((i*5))s"; break; fi; \
+		if [ $$i -eq 36 ]; then echo "ERROR: order route not ready"; compose logs --tail=60 gateway; exit 1; fi; \
+		sleep 5; \
+	done; \
+	sku="SKU-rebalance-$$$$"; \
+	echo "Seeding stock for $$sku ..."; \
+	docker exec -i tinystore-postgres-test psql -U postgres -d tinystore -q -c \
+		"INSERT INTO tinystore_inventory.inventory_stock (shop_id, sku_id, total_quantity, reserved_quantity, version, created_at, updated_at) VALUES ('SHOP_A','$$sku',$(REBALANCE_BURST),0,0,NOW(),NOW()) ON CONFLICT (shop_id, sku_id) DO NOTHING;"; \
+	echo "Waiting for the order consumer group to settle (stable member count, at least one per replica)..."; \
+	prev_members=""; \
+	settled=""; \
+	for i in $$(seq 1 36); do \
+		state=$$(docker exec tinystore-kafka-test /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group order-service --state 2>/dev/null | awk '/^order-service/ {print $$5" "$$6}'); \
+		members=$${state#Stable }; \
+		echo "  group state: $${state:-not-joined} (attempt $$i)"; \
+		if [ "$${state%% *}" = "Stable" ] && [ -n "$$members" ] && [ "$$members" -ge "$(MULTI_REPLICAS)" ] && [ "$$members" = "$$prev_members" ]; then \
+			echo "  group settled with $$members members (each order replica runs one listener per consumed topic)"; \
+			settled=yes; break; \
+		fi; \
+		prev_members=$$members; \
+		sleep 5; \
+	done; \
+	if [ -z "$$settled" ]; then echo "ERROR: order-service consumer group never settled"; exit 1; fi; \
+	victim=$$(compose ps -q order | tail -1); \
+	echo ""; \
+	echo "=== Kafka rebalance measurement (C7) ==="; \
+	set +e; \
+	REBALANCE_SKU="$$sku" REBALANCE_BURST=$(REBALANCE_BURST) \
+	REBALANCE_LAG_SLA_SECONDS=$(REBALANCE_LAG_SLA_SECONDS) \
+	python3 docker/kafka-rebalance-probe.py --victim "$$victim" --gateway-port "$$gw_port"; \
+	status=$$?; \
+	set -e; \
+	echo ""; \
+	if [ $$status -ne 0 ]; then \
+		echo "Kafka rebalance measurement reported exit $$status (1=unusable run, 2=SLA exceeded) -- see"; \
+		echo "docs/architecture/multi-instance-testing-blockers.md (C7)"; \
+		exit $$status; \
+	fi; \
+	echo "Kafka rebalance measurement recorded"
+
 load-multi: check-multi-replicas build ## Run the k6 load matrix against the N-replica stack (+ per-replica traffic split)
 	@echo "Starting multi-instance environment for the distributed load matrix ($(MULTI_REPLICAS) replicas/service)..."
 	@if ! command -v k6 > /dev/null 2>&1; then echo "ERROR: k6 not found"; exit 1; fi
@@ -1023,3 +1076,9 @@ load-matrix-it: build ## Run consistency IT matrix (oversell/idempotency/confirm
 		$(MAVEN) -pl tests/performance test -Pperf -Dtest=InventoryConfirmLockContentionIT -Dperf.confirm.concurrency=$$N -Dinventory.base.url=http://localhost:$(E2E_INVENTORY_PORT) -Dpg.url=jdbc:postgresql://localhost:$(E2E_POSTGRES_PORT)/tinystore || exit 1; \
 	done; \
 	echo "Consistency matrix complete - collect outputs into docs/performance/load-report-2026-07-28.md"
+# rebalance-multi: place a burst of orders, kill one replica, then record the Kafka group's
+# rebalance window and lag recovery (C7 -- an operational number with an explicit SLA, not a
+# correctness gate). REBALANCE_LAG_SLA_SECONDS is the release threshold: measured 42.7s on this box,
+# so 90s is the "clearly beyond noise" line rather than the observed value itself.
+REBALANCE_LAG_SLA_SECONDS ?= 90
+REBALANCE_BURST ?= 30
