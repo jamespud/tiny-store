@@ -1131,6 +1131,10 @@ promotion Hikari max =  25 × 2 =  50
 >
 > 回归：`make e2e-multi` 18/0/0/1（与修复前一致）；gateway 模块单测 17/0（原 7 条 + 新增 10 条）。
 > 门禁方向已反转（R7）：默认 0 失败才通过，`MULTI_EXPECT_FAILOVER=1` 保留"必须复现缺陷"的演示模式。
+> **P1 修正（评审第二轮）**：探针不再把通用 `404` 当"后端活着"——`make resilience-multi` 现在先经网关真
+> 下一单（拿到已知 tradeId），再对该 tradeId 发 `GET`，只有 **200 + body 里带这个 tradeId** 才算被服务；
+> 否则删掉 order 路由后，网关自己的 404 会让这条最重要的 gate 仍然"全绿"而请求一次都没进 order。
+> 同时把就绪窗口从 180s 提到 480s（与本仓库其它 multi target 一致）。
 
 以下为审计时的原始记录（保留，作为缺陷本身与复现方式的证据）。
 
