@@ -199,6 +199,15 @@ public class TradeApplicationService {
                         "Failed to get promotion quote: " + e.getMessage());
             }
 
+            // C14: as soon as the quote EXISTS, any later failure owes it a release. This used to be
+            // armed just before the inventory deduct, so a failure while validating the quote or the
+            // REQUOTE_REQUIRED rejection left a QUOTED row behind until QuoteExpiryTask's PT5M sweep
+            // (measured: a failed POST /api/order/trades left exactly one such row). Arming it here
+            // means "create trade failed" always implies "the quote was released" -- the inventory
+            // part of the compensation stays a no-op while no shop has reserved anything, which the
+            // loop over reservedOrders already guarantees.
+            compensationRequired = true;
+
             // 2.1 校验 promotion quote 响应关键字段
             if (quoteResponse == null || quoteResponse.getSnapshot() == null) {
                 throw new DomainConflictException("PROMOTION_QUOTE_INVALID",
@@ -292,7 +301,6 @@ public class TradeApplicationService {
             }
 
             // 4. 调用 inventory deduct（V2：按 shop 分组调用，Redis 原子扣减）
-            compensationRequired = true;
             for (ShopOrder shopOrder : shopOrders) {
                 String shopId = shopOrder.getShopId();
                 List<CreateTradeCommand.OrderLineCommand> lines = groupedByShop.get(shopId);
