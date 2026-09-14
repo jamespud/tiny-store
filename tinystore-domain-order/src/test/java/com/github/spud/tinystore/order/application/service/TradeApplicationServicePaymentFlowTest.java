@@ -46,6 +46,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -86,9 +87,27 @@ class TradeApplicationServicePaymentFlowTest {
         ReflectionTestUtils.setField(tradeApplicationService, "paymentIntentJpaRepository", paymentIntentJpaRepository);
         ReflectionTestUtils.setField(tradeApplicationService, "outboxEventService", outboxEventService);
         ReflectionTestUtils.setField(tradeApplicationService, "idempotencyService", idempotencyService);
+        // P0-2: createTrade consults the durable idempotency record first (empty here -> proceed).
+        com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository recordRepository =
+                org.mockito.Mockito.mock(com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository.class);
+        org.mockito.Mockito.lenient().when(recordRepository.findById(anyString())).thenReturn(java.util.Optional.empty());
+        org.mockito.Mockito.lenient().when(recordRepository.save(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        // 第三轮 P0：durable claim 在 saga 之前取得（真实仓储会 INSERT 并返回 1）。
+        org.mockito.Mockito.lenient()
+                .when(recordRepository.claimProcessing(anyString(), anyString(), anyString(),
+                        org.mockito.ArgumentMatchers.any(java.time.LocalDateTime.class)))
+                .thenReturn(1);
+        ReflectionTestUtils.setField(tradeApplicationService, "tradeIdempotencyRecordRepository", recordRepository);
+        // 幂等协议：createTrade 现在通过原子 acquire 取得处理权（mock 默认返回 null）。
+        lenient().when(idempotencyService.acquire(anyString(), anyString(), anyString()))
+            .thenReturn(IdempotencyService.AcquireResult.ACQUIRED);
         ReflectionTestUtils.setField(tradeApplicationService, "promotionClient", promotionClient);
         ReflectionTestUtils.setField(tradeApplicationService, "inventoryClient", inventoryClient);
         ReflectionTestUtils.setField(tradeApplicationService, "objectMapper", new ObjectMapper());
+        // C2/C8：状态迁移重试模板在单测里直通执行（无真实事务管理器）。
+        ReflectionTestUtils.setField(tradeApplicationService, "optimisticRetryTemplate",
+            new com.github.spud.tinystore.order.testsupport.PassthroughStateTransitionRetry());
     }
 
     @Test
@@ -143,7 +162,6 @@ class TradeApplicationServicePaymentFlowTest {
     @Test
     @DisplayName("createTrade - promotion commit failure compensates reserved inventory and promotion")
     void createTrade_promotionCommitFailure_shouldCompensateReservedInventoryAndPromotion() throws Exception {
-        when(idempotencyService.tryAcquire(anyString(), anyString(), anyString())).thenReturn(true);
         when(promotionClient.quote(anyString(), any())).thenReturn(okQuoteResponse(1000L));
         when(inventoryClient.preDeductRedisOnly(anyString(), any()))
             .thenReturn(reserveSuccessResponse("shop-009", "sku-009", "res-009"));
@@ -172,7 +190,6 @@ class TradeApplicationServicePaymentFlowTest {
     @Test
     @DisplayName("createTrade - saveAll false compensates reserved inventory and promotion")
     void createTrade_saveAllFalse_shouldCompensateReservedInventoryAndPromotion() throws Exception {
-        when(idempotencyService.tryAcquire(anyString(), anyString(), anyString())).thenReturn(true);
         when(promotionClient.quote(anyString(), any())).thenReturn(okQuoteResponse(1100L));
         when(promotionClient.commit(anyString(), any())).thenReturn(null);
         when(inventoryClient.preDeductRedisOnly(anyString(), any()))
@@ -206,7 +223,6 @@ class TradeApplicationServicePaymentFlowTest {
     @Test
     @DisplayName("createTrade - compensation calls rollbackRedis even when it throws (exception swallowed)")
     void createTrade_compensationCallsRollbackRedis_evenWhenItThrows() throws Exception {
-        when(idempotencyService.tryAcquire(anyString(), anyString(), anyString())).thenReturn(true);
         when(promotionClient.quote(anyString(), any())).thenReturn(okQuoteResponse(1200L));
         when(inventoryClient.preDeductRedisOnly(anyString(), any()))
             .thenReturn(reserveSuccessResponse("shop-011", "sku-011", "res-011"));
@@ -231,7 +247,6 @@ class TradeApplicationServicePaymentFlowTest {
     @Test
     @DisplayName("createTrade - canonical empty refs should throw and stop persistence")
     void createTrade_canonicalEmptyRefs_shouldThrowAndStopPersistence() throws Exception {
-        when(idempotencyService.tryAcquire(anyString(), anyString(), anyString())).thenReturn(true);
         when(promotionClient.quote(anyString(), any())).thenReturn(okQuoteResponse(1300L));
         when(inventoryClient.preDeductRedisOnly(anyString(), any())).thenReturn(InventoryDeductResponse.builder()
             .success(true)

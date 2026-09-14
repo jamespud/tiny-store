@@ -38,14 +38,30 @@ public class UserAccountApplicationService {
         return userCoreRepository.findById(userId);
     }
 
-    @Cacheable(value = "usersByPhone", keyGenerator = "userKeyGenerator")
+    // 缓存配置禁用了 null 值（disableCachingNullValues），而"按手机号查不到用户"是完全正常的
+    // 业务结果（新用户首次 OTP 登录）。方法返回的是 Optional，所以必须按 isEmpty() 判断——
+    // 否则空结果会被当成 null 写入缓存并抛
+    // "Cache 'usersByPhone' does not allow 'null' values"，把首次登录直接打挂。
+    @Cacheable(value = "usersByPhone", keyGenerator = "userKeyGenerator",
+        unless = "#result == null || #result.isEmpty()")
     public Optional<UserCore> getUserByPhone(String phone) {
-        return userCoreRepository.findByAccount(phone);
+        return nullSafe(userCoreRepository.findByAccount(phone));
     }
 
-    @Cacheable(value = "usersByUsername", keyGenerator = "userKeyGenerator")
+    @Cacheable(value = "usersByUsername", keyGenerator = "userKeyGenerator",
+        unless = "#result == null || #result.isEmpty()")
     public Optional<UserCore> getUserByUsername(String username) {
-        return userCoreRepository.findByAccount(username);
+        return nullSafe(userCoreRepository.findByAccount(username));
+    }
+
+    /**
+     * 查询未命中时可能出现 null（缓存 null 策略 + Optional 返回值的组合），
+     * 统一归一为 Optional.empty()：
+     * - 避免 "Cache does not allow 'null' values" / SpEL 在 null 上取 isEmpty() 而 500；
+     * - 保证调用方永远拿到非 null 的 Optional（首次 OTP 登录必须能走通）。
+     */
+    private static Optional<UserCore> nullSafe(Optional<UserCore> found) {
+        return found == null ? Optional.empty() : found;
     }
 
     @Transactional

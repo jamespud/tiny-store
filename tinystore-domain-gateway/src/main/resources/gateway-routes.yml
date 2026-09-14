@@ -42,13 +42,47 @@ routes:
       - Path=/internal/health/pay
     filters:
       - SetPath=/actuator/health
-  # Business routes
+  # Business routes.
+  #
+  # StripPrefix is NOT a style choice: it must be whatever turns the public path into the path the
+  # downstream controller actually declares. Two conventions coexist in this repo, and getting it
+  # wrong silently 404s the whole domain (which is why the black-box tests used to bypass the
+  # gateway by calling service ports directly):
+  #   * order declares /order/... (no /api), so the public /api/order/** must be stripped by 1;
+  #   * product / inventory / promotion / payment / account / auth declare the /api/... path
+  #     themselves, so those routes must strip 0.
+  # GatewayRouteContractTest pins public-path -> StripPrefix -> declared-controller-base for every
+  # domain, so a drift here fails the build instead of being masked by a direct-port test.
+  #
+  # `retry:` is the safe read failover policy (E1). It is compiled by GatewayRouteFilters into the
+  # framework's Retry route filter, and it is a policy rather than a `Retry=...` string because the
+  # string form of that filter is positional (one token per field), so it cannot express two methods.
+  #   retries: number of EXTRA attempts (1 = the original request plus one retry).
+  #   methods: which HTTP methods may be replayed. The framework checks this list on both retry
+  #     paths, so a mutation listed here would be replayed; GatewayRouteFilters refuses that at load
+  #     time. Mutations keep the "the client retries with the same Idempotency-Key" contract (C9/R2);
+  #     mutation failover is a different failure model and needs its own proof before it can be on.
+  # Everything not named here is the framework default, which fits E1's failure mode exactly:
+  #   exceptions = IOException + gateway TimeoutException  (ConnectException, ConnectTimeoutException
+  #     and "connection reset before a response" are all IOExceptions);
+  #   series     = 5xx, i.e. an idempotent read that failed is worth one attempt elsewhere.
+  # "next instance" is not a knob: every iteration calls ServerWebExchangeUtils.reset(exchange), which
+  # clears the already-routed flag, so RouteToRequestUrlFilter + ReactiveLoadBalancerClientFilter
+  # select again. That selection is deterministic (round-robin) because the randomising Nacos selector
+  # is off -- it needs spring.cloud.loadbalancer.nacos.enabled=true. With a random selector a single
+  # retry would be a coin flip instead of a guaranteed move to another replica, so
+  # GatewayResilienceConfigTest asserts the cache TTL, the connect timeout and that selector together.
+  # ORDER MATTERS: the retry filter is emitted after the declared filters, so it must not be moved
+  # before StripPrefix -- a retry would re-run the path rewrite and strip a second time (404).
   - id: order-service
     uri: lb://order-service
     predicates:
       - Path=/api/order/**
     filters:
       - StripPrefix=1
+    retry:
+      retries: 1
+      methods: [GET, HEAD]
     policies:
       rateLimit:
         type: ip
@@ -59,14 +93,21 @@ routes:
             capacity: 5
             refillRate: 5
       idempotency:
-        enabled: true
+        # 下单的业务幂等由订单域单独负责（原子 acquire + 请求指纹 + afterCommit 落库）。
+        # 网关再维护一套 PROCESSING/COMPLETED 生命周期会与订单域冲突：
+        # 网关把下游 5xx 也标记为 COMPLETED，导致失败后同键重试被 409 拒绝（见 C9）。
+        enabled: false
         keyTemplate: "idempotent:tinystore:order:create:{unique}"
   - id: pay-service
     uri: lb://pay-service
     predicates:
       - Path=/api/pay/**
     filters:
-      - StripPrefix=1
+      # PayController is @RequestMapping("/api/pay") -> keep the prefix.
+      - StripPrefix=0
+    retry:
+      retries: 1
+      methods: [GET, HEAD]
     policies:
       rateLimit:
         type: ip
@@ -79,20 +120,53 @@ routes:
     predicates:
       - Path=/api/promotion/**
     filters:
-      - StripPrefix=1
+      # CouponAssetController/CheckoutController declare /api/promotion/... -> keep the prefix.
+      - StripPrefix=0
+    retry:
+      retries: 1
+      methods: [GET, HEAD]
     policies:
       rateLimit:
         type: ip
         capacity: 100
         refillRate: 100
       idempotency:
-        enabled: true
+        # 促销域的 quote/commit 幂等由领域自己拥有（IdempotencyStorage + promotion.idempotency_record，
+        # 带请求哈希冲突检测）。网关再叠一层 stateful 幂等有两个具体危害：
+        #   1. 没有 Idempotency-Key 的正常 POST 会被网关直接 400（idempotency_key_required），
+        #      而下游契约并不要求这个头 —— 统一入口因此不可用；
+        #   2. 与 C9 同一类陷阱：网关把下游 5xx 也记成 COMPLETED，使失败后的同键重试被 409 拒绝。
+        # 与 order 路由（Task 4/C9）保持同一裁决：网关只做路由、安全与安全可重试。
+        enabled: false
   - id: product-service
     uri: lb://product-service
     predicates:
       - Path=/api/products/**
     filters:
-      - StripPrefix=1
+      # ProductController declares /api/products -> keep the prefix.
+      - StripPrefix=0
+    retry:
+      retries: 1
+      methods: [GET, HEAD]
+    policies:
+      rateLimit:
+        type: ip
+        capacity: 100
+        refillRate: 100
+      idempotency:
+        enabled: false
+  # SkuController is @RequestMapping("/api") and serves /api/skus/{id} (and
+  # /api/products/{productId}/skus, already covered by the route above), so this is a second
+  # public path prefix onto the same service.
+  - id: product-skus
+    uri: lb://product-service
+    predicates:
+      - Path=/api/skus/**
+    filters:
+      - StripPrefix=0
+    retry:
+      retries: 1
+      methods: [GET, HEAD]
     policies:
       rateLimit:
         type: ip
@@ -105,7 +179,11 @@ routes:
     predicates:
       - Path=/api/inventory/**
     filters:
-      - StripPrefix=1
+      # InventoryReservationController/AdjustmentController declare /api/inventory/... -> keep it.
+      - StripPrefix=0
+    retry:
+      retries: 1
+      methods: [GET, HEAD]
     policies:
       rateLimit:
         type: ip
@@ -118,7 +196,11 @@ routes:
     predicates:
       - Path=/api/account/**
     filters:
-      - StripPrefix=1
+      # UserQueryController/UserCommandController declare /api/account/users -> keep the prefix.
+      - StripPrefix=0
+    retry:
+      retries: 1
+      methods: [GET, HEAD]
     policies:
       rateLimit:
         type: ip
@@ -131,7 +213,12 @@ routes:
     predicates:
       - Path=/api/auth/**,/api/admin/**,/oidc/**
     filters:
+      # OtpController/PasswordController/AdminTokenController/ClientRegistrationController already
+      # declare the full /api/... and /oidc/... paths.
       - StripPrefix=0
+    retry:
+      retries: 1
+      methods: [GET, HEAD]
     policies:
       rateLimit:
         type: ip
@@ -139,4 +226,3 @@ routes:
         refillRate: 50
       idempotency:
         enabled: false
-

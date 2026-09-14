@@ -15,6 +15,7 @@ import org.springframework.util.Assert;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 库存Redis操作管理器（封装预扣、回滚、CAS更新、超时清理、对账等原子操作）
@@ -198,6 +199,59 @@ public class InventoryRedisManager {
             """;
 
     /**
+     * 脚本5：V2 定向回收孤儿预扣（C12 safety net）。
+     *
+     * <p>与脚本4（按时间阈值批量清理）不同，本脚本只回收调用方<b>显式传入</b>的 member。
+     * 调用方（{@code InventoryUncommitV2CleanupTask}）已经用 DB 权威状态过滤过：
+     * 只有「age &gt; orphanCheckDelay 且 DB 中不存在对应 reservation_id」的 member 才会传入，
+     * 因此仍然合法的预约（DB 有行）永远不会被本脚本释放。
+     *
+     * <p>原子语义：逐个 member 先确认 zset 中仍存在（幂等，重复调用不重复扣减），
+     * 解析 amount 后 zrem；全部处理完再一次性 DECRBY deducted（下限 0）并 bump version 一次。
+     * 结构不合法（&ne;3 段 / amount &le; 0）的 member 会被保留而不释放，避免误扣。
+     *
+     * @return 实际回收（zrem）的 member 数量
+     */
+    private static final String RECLAIM_ORPHAN_UNCOMMIT_SCRIPT = """
+            local deducted_key = KEYS[1]
+            local uncommit_zset_key = KEYS[2]
+            local version_key = KEYS[3]
+
+            local remove_count = 0
+            local total_rollback = 0
+
+            for i = 1, #ARGV do
+                local member = ARGV[i]
+                if member ~= "" and redis.call('zscore', uncommit_zset_key, member) then
+                    local parts = {}
+                    for part in string.gmatch(member, '[^_]+') do
+                        table.insert(parts, part)
+                    end
+                    if #parts == 3 then
+                        local amount = tonumber(parts[3]) or 0
+                        if amount > 0 then
+                            redis.call('zrem', uncommit_zset_key, member)
+                            total_rollback = total_rollback + amount
+                            remove_count = remove_count + 1
+                        end
+                    end
+                end
+            end
+
+            if remove_count > 0 then
+                local current_deducted = tonumber(redis.call('get', deducted_key)) or 0
+                if current_deducted >= total_rollback then
+                    redis.call('set', deducted_key, current_deducted - total_rollback)
+                else
+                    redis.call('set', deducted_key, 0)
+                end
+                redis.call('incr', version_key)
+            end
+
+            return remove_count
+            """;
+
+    /**
      * 脚本6：V2 addTotal（INCRBY total + INCR version 原子，保持 version 不变量）
      */
     private static final String ADD_TOTAL_V2_SCRIPT = """
@@ -372,6 +426,59 @@ public class InventoryRedisManager {
         cleanCount = cleanCount == null ? 0 : cleanCount;
         log.info("V2清理超时未提交预扣记录完成，shopId={}, skuId={}, 超时时间={}ms, 清理数量={}", shopId, skuId, timeout, cleanCount);
         return cleanCount;
+    }
+
+    /**
+     * V2：列出某个 (shopId, skuId) 下，入队时间早于 {@code now - ageMs} 的未提交预扣 member。
+     *
+     * <p>只读，供 orphan 判定使用；返回 member 形如 {@code <orderId>_<timestamp>_<amount>}，
+     * 它同时就是 reservation_id。调用方需再用 DB 权威状态过滤，只有 DB 无行的才是真孤儿。
+     */
+    public List<String> findUncommitMembersOlderThan(String shopId, String skuId, long ageMs) {
+        Assert.hasText(shopId, "shopId不能为空");
+        Assert.hasText(skuId, "skuId不能为空");
+        double cutoff = System.currentTimeMillis() - Math.max(0L, ageMs);
+        String uncommitKey = String.format(KEY_V2_UNCOMMIT, shopId, skuId);
+        Set<Object> members = redisTemplate.opsForZSet().rangeByScore(uncommitKey, 0, cutoff);
+        if (members == null || members.isEmpty()) {
+            return List.of();
+        }
+        return members.stream().map(String::valueOf).toList();
+    }
+
+    /**
+     * V2：定向回收孤儿预扣（原子，见 {@link #RECLAIM_ORPHAN_UNCOMMIT_SCRIPT}）。
+     *
+     * <p>只处理调用方<b>已确认</b>为孤儿的 member（DB 中不存在对应 reservation_id）。
+     * 本方法自身只会释放调用方传入的 member；但它<b>无法</b>验证那个"已确认"是否成立 —— 这条链能不能
+     * 保证"不释放仍然合法的预扣"，取决于调用方协议：{@code OrderEventConsumer} 拒绝
+     * {@code expireAt <= now} 的迟到 INVENTORY_RESERVE_DB 事件，且
+     * {@code InventoryUncommitV2CleanupTask} 强制 {@code orphanCheckDelay > maxReservationTtl}。
+     * 少了任何一个，"先查 DB 再回收"都可能与"消费端正在插入预约行"竞争（方向是超卖）。
+     *
+     * @return 实际回收（zrem）的 member 数量
+     */
+    public long reclaimOrphanMembersV2(String shopId, String skuId, List<String> orphanMembers) {
+        Assert.hasText(shopId, "shopId不能为空");
+        Assert.hasText(skuId, "skuId不能为空");
+        if (orphanMembers == null || orphanMembers.isEmpty()) {
+            return 0L;
+        }
+        String deductedKey = String.format(KEY_V2_DEDUCTED, shopId, skuId);
+        String uncommitKey = String.format(KEY_V2_UNCOMMIT, shopId, skuId);
+        String versionKey = String.format(KEY_V2_VERSION, shopId, skuId);
+        List<String> keys = Arrays.asList(deductedKey, uncommitKey, versionKey);
+        try {
+            DefaultRedisScript<Long> script = new DefaultRedisScript<>(RECLAIM_ORPHAN_UNCOMMIT_SCRIPT, Long.class);
+            Long reclaimed = redisTemplate.execute(script, keys, orphanMembers.toArray());
+            long count = reclaimed == null ? 0L : reclaimed;
+            log.info("V2 定向回收孤儿预扣完成，shopId={}, skuId={}, 候选={}, 实际回收={}",
+                    shopId, skuId, orphanMembers.size(), count);
+            return count;
+        } catch (Exception e) {
+            log.error("V2 定向回收孤儿预扣失败，shopId={}, skuId={}, 候选={}", shopId, skuId, orphanMembers.size(), e);
+            return 0L;
+        }
     }
 
     /**

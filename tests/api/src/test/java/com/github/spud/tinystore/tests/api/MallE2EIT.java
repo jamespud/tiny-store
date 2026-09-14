@@ -55,6 +55,14 @@ class MallE2EIT {
     private TestRestTemplate restTemplate;
     private String gatewayBaseUrl;
 
+    // This suite used to call product/inventory/promotion on their own host ports (and carried
+    // -Dproduct.base.url / -Dinventory.base.url / -Dpromotion.base.url overrides for that). It no
+    // longer does: business E2E must go through the gateway, so a route-contract drift (D2) turns
+    // these tests red instead of being masked by a direct-port call. Only replica-level probes may
+    // bypass the gateway (see DistributedMultiInstanceIT, which reads per-replica metrics).
+    // Public paths are derived from gatewayBaseUrl, so there is no second entry point to keep in
+    // sync -- and none of these tests needs a per-service host port to exist at all.
+
     // Fixed seed data (contract with docker-compose-test init)
     private static final String SHOP_A = "SHOP_A";
     private static final String SHOP_B = "SHOP_B";
@@ -463,7 +471,7 @@ class MallE2EIT {
         headers.add("X-Shop-Id", shopId);
 
         ResponseEntity<String> response = restTemplate.exchange(
-            "http://localhost:8090/api/skus/" + skuId,
+            gatewayBaseUrl + "/api/skus/" + skuId,
             HttpMethod.GET,
             new HttpEntity<>(headers),
             String.class
@@ -504,7 +512,7 @@ class MallE2EIT {
                     headers.add("Idempotency-Key", "seed-inv-" + UUID.randomUUID());
 
                     ResponseEntity<Map> response = restTemplate.exchange(
-                        "http://localhost:13000/api/inventory/reservations/reserve",
+                        gatewayBaseUrl + "/api/inventory/reservations/reserve",
                         HttpMethod.POST,
                         new HttpEntity<>(reserveRequest, headers),
                         Map.class
@@ -542,7 +550,7 @@ class MallE2EIT {
                 releaseHeaders.add("Idempotency-Key", releaseIdempotencyKeyRef.get());
 
                 ResponseEntity<Map> releaseResponse = restTemplate.exchange(
-                    "http://localhost:13000/api/inventory/reservations/release",
+                    gatewayBaseUrl + "/api/inventory/reservations/release",
                     HttpMethod.POST,
                     new HttpEntity<>(releaseRequest, releaseHeaders),
                     Map.class
@@ -583,7 +591,7 @@ class MallE2EIT {
         headers.add("Idempotency-Key", "seed-promo-" + UUID.randomUUID());
 
         ResponseEntity<Map> response = restTemplate.exchange(
-            "http://localhost:1200/api/promotion/checkout/quote",
+            gatewayBaseUrl + "/api/promotion/checkout/quote",
             HttpMethod.POST,
             new HttpEntity<>(quoteRequest, headers),
             Map.class
@@ -613,7 +621,7 @@ class MallE2EIT {
         releaseHeaders.add("Idempotency-Key", "seed-promo-rel-" + UUID.randomUUID());
 
         restTemplate.exchange(
-            "http://localhost:1200/api/promotion/checkout/release",
+            gatewayBaseUrl + "/api/promotion/checkout/release",
             HttpMethod.POST,
             new HttpEntity<>(releaseRequest, releaseHeaders),
             Map.class

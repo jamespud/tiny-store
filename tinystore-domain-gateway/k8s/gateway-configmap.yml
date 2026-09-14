@@ -1,3 +1,14 @@
+# Kubernetes mirror of tinystore-domain-gateway/src/main/resources/gateway-routes.yml.
+#
+# The route table is mounted into the pod, so a ConfigMap that drifts from the classpath file
+# silently ships a different contract in-cluster than the one the tests exercise. This file had in
+# fact drifted badly: it carried only order+pay, still had order idempotency enabled (the C9 fix
+# disables it) and still used StripPrefix=1 for pay.
+#
+# GatewayRouteContractTest parses both this file and the classpath file and asserts they define the
+# same routes with the same predicates/filters, so the next drift fails the build.
+#
+# Keep the two in sync: after editing gateway-routes.yml, copy the `routes:` block below verbatim.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -7,30 +18,187 @@ metadata:
 data:
   gateway-routes.yml: |
     routes:
+      # Health check routes (high priority, static URI to management ports)
+      - id: order-health
+        uri: http://order:28080
+        predicates:
+          - Path=/internal/health/order
+        filters:
+          - SetPath=/actuator/health
+      - id: promotion-health
+        uri: http://promotion:1200
+        predicates:
+          - Path=/internal/health/promotion
+        filters:
+          - SetPath=/actuator/health
+      - id: inventory-health
+        uri: http://inventory:13000
+        predicates:
+          - Path=/internal/health/inventory
+        filters:
+          - SetPath=/actuator/health
+      - id: product-health
+        uri: http://product:8090
+        predicates:
+          - Path=/internal/health/product
+        filters:
+          - SetPath=/actuator/health
+      - id: auth-health
+        uri: http://auth:9000
+        predicates:
+          - Path=/internal/health/auth
+        filters:
+          - SetPath=/actuator/health
+      - id: account-health
+        uri: http://account:8000
+        predicates:
+          - Path=/internal/health/account
+        filters:
+          - SetPath=/actuator/health
+      - id: pay-health
+        uri: http://payment:8083
+        predicates:
+          - Path=/internal/health/pay
+        filters:
+          - SetPath=/actuator/health
+      # Business routes. StripPrefix must turn the public path into the path the downstream
+      # controller declares: order declares /order/... (strip 1); product/inventory/promotion/
+      # payment/account/auth declare the /api/... path themselves (strip 0).
+      # retry: safe read failover (E1): one extra attempt, GET/HEAD only. It is compiled after the
+      # declared filters (so after StripPrefix) and mutations are refused at load time.
       - id: order-service
         uri: lb://order-service
         predicates:
           - Path=/api/order/**
         filters:
           - StripPrefix=1
+        retry:
+          retries: 1
+          methods: [GET, HEAD]
         policies:
           rateLimit:
             type: ip
             capacity: 100
             refillRate: 100
+            overrides:
+              - path: /api/promotion/seckill/**
+                capacity: 5
+                refillRate: 5
           idempotency:
-            enabled: true
+            # 下单的业务幂等由订单域单独负责（原子 acquire + 请求指纹 + afterCommit 落库）。
+            enabled: false
             keyTemplate: "idempotent:tinystore:order:create:{unique}"
       - id: pay-service
         uri: lb://pay-service
         predicates:
           - Path=/api/pay/**
         filters:
-          - StripPrefix=1
+          - StripPrefix=0
+        retry:
+          retries: 1
+          methods: [GET, HEAD]
         policies:
           rateLimit:
             type: ip
             capacity: 80
             refillRate: 80
+          idempotency:
+            enabled: false
+      - id: promotion-service
+        uri: lb://promotion-service
+        predicates:
+          - Path=/api/promotion/**
+        filters:
+          - StripPrefix=0
+        retry:
+          retries: 1
+          methods: [GET, HEAD]
+        policies:
+          rateLimit:
+            type: ip
+            capacity: 100
+            refillRate: 100
+          idempotency:
+            # 促销域自己拥有 quote/commit 幂等（IdempotencyStorage + idempotency_record）；
+            # 网关叠加会 400 掉没有 Idempotency-Key 的正常调用，并重现 C9 的 5xx-记-COMPLETED 陷阱。
+            enabled: false
+      - id: product-service
+        uri: lb://product-service
+        predicates:
+          - Path=/api/products/**
+        filters:
+          - StripPrefix=0
+        retry:
+          retries: 1
+          methods: [GET, HEAD]
+        policies:
+          rateLimit:
+            type: ip
+            capacity: 100
+            refillRate: 100
+          idempotency:
+            enabled: false
+      - id: product-skus
+        uri: lb://product-service
+        predicates:
+          - Path=/api/skus/**
+        filters:
+          - StripPrefix=0
+        retry:
+          retries: 1
+          methods: [GET, HEAD]
+        policies:
+          rateLimit:
+            type: ip
+            capacity: 100
+            refillRate: 100
+          idempotency:
+            enabled: false
+      - id: inventory-service
+        uri: lb://tinystore-inventory-service
+        predicates:
+          - Path=/api/inventory/**
+        filters:
+          - StripPrefix=0
+        retry:
+          retries: 1
+          methods: [GET, HEAD]
+        policies:
+          rateLimit:
+            type: ip
+            capacity: 100
+            refillRate: 100
+          idempotency:
+            enabled: false
+      - id: account-service
+        uri: lb://tinystore-domain-account
+        predicates:
+          - Path=/api/account/**
+        filters:
+          - StripPrefix=0
+        retry:
+          retries: 1
+          methods: [GET, HEAD]
+        policies:
+          rateLimit:
+            type: ip
+            capacity: 80
+            refillRate: 80
+          idempotency:
+            enabled: false
+      - id: auth-service
+        uri: lb://tinystore-auth
+        predicates:
+          - Path=/api/auth/**,/api/admin/**,/oidc/**
+        filters:
+          - StripPrefix=0
+        retry:
+          retries: 1
+          methods: [GET, HEAD]
+        policies:
+          rateLimit:
+            type: ip
+            capacity: 50
+            refillRate: 50
           idempotency:
             enabled: false

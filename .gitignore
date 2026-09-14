@@ -42,3 +42,10 @@ PLAN-TEST.md
 ### Runtime logs ###
 docker-*.log
 *.log
+
+### Superpowers SDD scratch (ledger, briefs, review packages) ###
+.superpowers/
+
+### Generated load-test reports ###
+perf/reports/
+__pycache__/

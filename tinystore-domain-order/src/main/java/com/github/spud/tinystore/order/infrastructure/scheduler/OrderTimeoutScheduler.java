@@ -67,21 +67,10 @@ public class OrderTimeoutScheduler {
 
             for (TradeEntity trade : expiredTrades) {
                 try {
-                    // 先调用 pay-service 关闭支付单（幂等操作）
-                    try {
-                        var paymentIntent = paymentIntentJpaRepository.findByTradeId(trade.getTradeId());
-                        if (paymentIntent.isPresent()) {
-                            String paymentIntentId = paymentIntent.get().getPaymentId();
-                            paymentClient.closePayOrder(paymentIntentId);
-                            log.info("Closed payment order in pay-service: paymentIntentId={}, tradeId={}", 
-                                paymentIntentId, trade.getTradeId());
-                        }
-                    } catch (Exception payCloseEx) {
-                        log.warn("Failed to closeTrade payment order in pay-service (will continue order cancellation): tradeId={}", 
-                            trade.getTradeId(), payCloseEx);
-                    }
-
-                    // 再取消订单侧交易
+                    // P1: the cancel claim must be taken BEFORE any external call. cancelTrade() claims
+                    // first (stable key `trade-cancel:<tradeId>`), so two scheduler replicas can no longer
+                    // both drive the pay-service close for the same trade; the close now happens after the
+                    // trade-side cancellation, under that claim.
                     CancelTradeCommand command = CancelTradeCommand.builder()
                         .tradeId(trade.getTradeId())
                         .reason("Payment timeout")
@@ -89,9 +78,25 @@ public class OrderTimeoutScheduler {
                         .build();
 
                     tradeApplicationService.cancelTrade(
-                        UUID.randomUUID().toString(), // 幂等键
+                        // C6：稳定幂等键。原先用随机 UUID，等于主动放弃去重信号；
+                        // 多副本同时扫到同一笔超时订单时会各自执行一次取消。
+                        "timeout-cancel:" + trade.getTradeId(),
                         command
                     );
+
+                    // 交易已取消（claim 已取得）后才关闭支付单；这是清理动作，失败不回滚取消。
+                    try {
+                        var paymentIntent = paymentIntentJpaRepository.findByTradeId(trade.getTradeId());
+                        if (paymentIntent.isPresent()) {
+                            String paymentIntentId = paymentIntent.get().getPaymentId();
+                            paymentClient.closePayOrder(paymentIntentId);
+                            log.info("Closed payment order in pay-service: paymentIntentId={}, tradeId={}",
+                                paymentIntentId, trade.getTradeId());
+                        }
+                    } catch (Exception payCloseEx) {
+                        log.warn("Failed to close payment order in pay-service (trade is already cancelled): tradeId={}",
+                            trade.getTradeId(), payCloseEx);
+                    }
 
                     log.info("Closed expired trade: tradeId={}", trade.getTradeId());
 

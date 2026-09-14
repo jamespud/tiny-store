@@ -40,8 +40,35 @@ public class InventoryReservationAppService {
     @Value("${inventory.reservation.expiry.default-minutes:15}")
     private int defaultExpiryMinutes;
 
+    /**
+     * The longest reservation window this service is willing to hand out (review round-3 P1).
+     *
+     * <p>Must stay below {@code inventory.uncommit.orphan-check-delay}: the orphan reclaim treats a Redis
+     * uncommit member older than that delay, with no DB row, as garbage -- which is only sound while every
+     * legitimate reservation window has already closed. Enforcing it *here*, at the request boundary, makes
+     * that independent of how the order service is configured.
+     */
+    @Value("${inventory.uncommit.max-reservation-ttl:PT15M}")
+    private java.time.Duration maxReservationTtl;
+
     public InventoryReservationAppService(InventoryReservationDomainService domainService) {
         this.domainService = domainService;
+    }
+
+    /**
+     * Configuration invariant: the service's own default expiry must also fit the orphan budget, otherwise a
+     * caller that omits the TTL gets a reservation the cleaner could consider reclaimable while still open.
+     */
+    @jakarta.annotation.PostConstruct
+    void validateTtlBudget() {
+        java.time.Duration ownDefault = java.time.Duration.ofMinutes(defaultExpiryMinutes);
+        if (ownDefault.compareTo(maxReservationTtl) > 0) {
+            throw new IllegalStateException(String.format(
+                    "inventory.reservation.expiry.default-minutes=%d exceeds "
+                            + "inventory.uncommit.max-reservation-ttl=%s: a caller that does not state a TTL "
+                            + "would get a reservation longer than the orphan-reclaim budget",
+                    defaultExpiryMinutes, maxReservationTtl));
+        }
     }
 
     // ========================== Reserve ==========================
@@ -179,12 +206,18 @@ public class InventoryReservationAppService {
     public DeductResponse preDeductRedisOnly(String idempotencyKey, DeductRequest request) {
         MDC.put("orderId", request.getOrderId());
         try {
+            // Round-3 P1: enforce the cross-service TTL contract at the boundary, BEFORE Redis is touched.
+            // The order service carries its own reservation TTL; if a deployment ever raises it above this
+            // service's max-reservation-ttl, the orphan reclaim would be able to release a pre-deduction whose
+            // DB row has not been written yet (oversell) -- the two services read different properties, so a
+            // runtime check is the only thing that keeps them honest.
+            OffsetDateTime expireAt = resolveRequestedExpireAt(request);
             InventoryReserveCommand command = InventoryReserveCommand.builder()
                     .idempotencyKey(idempotencyKey)
                     .orderId(request.getOrderId())
                     .tradeId(request.getTradeId())
                     .traceId(MDC.get(LogConstant.MDC_LOG_ID))
-                    .expireAt(OffsetDateTime.now().plusMinutes(defaultExpiryMinutes))
+                    .expireAt(expireAt)
                     .items(request.getItems().stream()
                             .map(item -> InventoryReserveCommand.Item.builder()
                                     .shopId(item.getShopId()).skuId(item.getSkuId()).quantity(item.getQuantity()).build())
@@ -210,6 +243,32 @@ public class InventoryReservationAppService {
         } finally {
             MDC.remove("orderId");
         }
+    }
+
+    /**
+     * Resolves the reservation window for a pre-deduct request.
+     *
+     * @throws IllegalArgumentException when the caller asks for a non-positive TTL, or one larger than
+     *         {@code inventory.uncommit.max-reservation-ttl}
+     */
+    private OffsetDateTime resolveRequestedExpireAt(DeductRequest request) {
+        Long requestedMinutes = request.getReservationTtlMinutes();
+        if (requestedMinutes == null) {
+            return OffsetDateTime.now().plusMinutes(defaultExpiryMinutes);
+        }
+        if (requestedMinutes <= 0) {
+            throw new IllegalArgumentException(
+                    "reservationTtlMinutes must be positive, got " + requestedMinutes);
+        }
+        java.time.Duration requested = java.time.Duration.ofMinutes(requestedMinutes);
+        if (requested.compareTo(maxReservationTtl) > 0) {
+            throw new IllegalArgumentException(String.format(
+                    "requested reservation TTL %s exceeds inventory.uncommit.max-reservation-ttl=%s: the "
+                            + "orphan reclaim could release a pre-deduction whose reservation row has not been "
+                            + "written yet",
+                    requested, maxReservationTtl));
+        }
+        return OffsetDateTime.now().plus(requested);
     }
 
     /**

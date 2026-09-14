@@ -24,6 +24,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.mock;
@@ -93,6 +94,8 @@ class TradeApplicationServicePromotionCommitTest {
 
         // Then: 下单成功，未调用同步 commit，写了 PROMOTION_COMMIT outbox
         assertThat(result.getTradeId()).isNotBlank();
+        // C13: 下单成功不等于优惠已最终确定，异步裁决期间必须如实返回 PENDING
+        assertThat(result.getPromotionCommitStatus()).isEqualTo("PENDING");
         verify(promotionClient, never()).commit(any(), any());
         verify(outboxEventService).saveEvent(
                 argThat(event -> event.getEventType() == OrderEventType.PROMOTION_COMMIT));
@@ -115,6 +118,9 @@ class TradeApplicationServicePromotionCommitTest {
 
         // Then: 下单成功，同步 commit 被调用，未写 PROMOTION_COMMIT outbox
         assertThat(result.getTradeId()).isNotBlank();
+        // 同步 commit 只表示"promotion 已受理"，订单域的裁决状态仍由回执 ack 落定（COMMITTED），
+        // 响应如实报 PENDING，而不是把"已提交"说成"已确定"
+        assertThat(result.getPromotionCommitStatus()).isEqualTo("PENDING");
         verify(promotionClient).commit(any(), any());
         verify(outboxEventService, never()).saveEvent(
                 argThat(event -> event.getEventType() == OrderEventType.PROMOTION_COMMIT));
@@ -129,8 +135,22 @@ class TradeApplicationServicePromotionCommitTest {
 
         // 幂等性：允许创建，成功路径不缓存已存在响应
         IdempotencyService idempotencyService = mock(IdempotencyService.class);
-        when(idempotencyService.tryAcquire(any(), any(), any())).thenReturn(true);
+        when(idempotencyService.acquire(any(), any(), any()))
+            .thenReturn(IdempotencyService.AcquireResult.ACQUIRED);
         ReflectionTestUtils.setField(service, "idempotencyService", idempotencyService);
+
+        // P0-2: createTrade consults the durable idempotency record first (empty here -> proceed).
+        com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository recordRepository =
+                mock(com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository.class);
+        when(recordRepository.findById(anyString())).thenReturn(java.util.Optional.empty());
+        when(recordRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        // 第三轮 P0：durable claim 在 saga 之前取得（真实仓储会 INSERT 并返回 1）。
+        org.mockito.Mockito.lenient()
+                .when(recordRepository.claimProcessing(anyString(), anyString(), anyString(),
+                        org.mockito.ArgumentMatchers.any(java.time.LocalDateTime.class)))
+                .thenReturn(1);
+        ReflectionTestUtils.setField(service, "tradeIdempotencyRecordRepository", recordRepository);
+
 
         // promotion quote：OK 状态 + 有效 snapshot
         PromotionClient promotionClient = mock(PromotionClient.class);

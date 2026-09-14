@@ -9,11 +9,30 @@ spring:
       enabled: false
       import-check:
         enabled: false
+    loadbalancer:
+      # The instance list is cached per client for `spring.cloud.loadbalancer.cache.ttl` (framework
+      # default 35s), so a Nacos deregistration can stay invisible to the gateway for that long.
+      # 2s bounds one of E1's two windows -- "deregistered, still selected" (the audit saw Nacos drop
+      # the ip at 07:21:45 and the gateway still dial it at 07:21:48). The other window, the request
+      # already in flight at the kill instant, is what the per-route retry policy covers; this TTL
+      # cannot help there.
+      cache:
+        ttl: ${LOADBALANCER_CACHE_TTL:2s}
     gateway:
       server:
         webflux:
           metrics:
             enabled: true
+          httpclient:
+            # Bounded failover latency: a dead container leaves a veth-less ip behind, so a TCP
+            # connect to it is not refused, it black-holes until the connect timeout. Without an
+            # explicit value Netty waits ~30s, which is why the pre-fix probe recorded 20s stalls
+            # (`--max-time 20` in the probe) instead of a fast failure the retry filter can act on.
+            connect-timeout: ${GATEWAY_HTTPCLIENT_CONNECT_TIMEOUT:1000}
+            # Upper bound for a downstream response; must stay below the client-side timeouts so the
+            # gateway, not the caller, decides the outcome. `response-timeout` is unset by default in
+            # the framework (= wait forever).
+            response-timeout: ${GATEWAY_HTTPCLIENT_RESPONSE_TIMEOUT:30s}
   security:
     oauth2:
       resourceserver:
@@ -30,6 +49,11 @@ gateway:
     routes-location: ${GATEWAY_ROUTES_LOCATION:classpath:gateway-routes.yml}
   rate-limit:
     enabled: ${GATEWAY_RATE_LIMIT_ENABLED:true}
+  # C16: who may speak for someone else. Empty (the default) means clients reach the gateway
+  # directly, so X-Forwarded-For is ignored entirely and the socket peer is the caller identity --
+  # otherwise any client could pick its own rate-limit bucket, or spend someone else's. Comma
+  # separated CIDRs, e.g. "172.16.0.0/12,10.0.0.0/8". See security/ClientIpResolver.
+  trusted-proxies: ${GATEWAY_TRUSTED_PROXIES:}
 
 idempotency:
   ttl: ${IDEMPOTENCY_TTL:PT5M}
@@ -43,6 +67,11 @@ management:
   tracing:
     sampling:
       probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
+    # D1: Boot 3.5 has no per-backend zipkin switch -- the sender and span handler are gated on
+    # management.tracing.enabled (checked via /actuator/beans), so an empty ZIPKIN_ENDPOINT used to
+    # build a reporter aimed at an empty URI that dropped every span without a word. Tracing is
+    # therefore opt-in: ZIPKIN_ENABLED=true + ZIPKIN_ENDPOINT=http://zipkin:9411/api/v2/spans.
+    enabled: ${ZIPKIN_ENABLED:false}
   zipkin:
     tracing:
       endpoint: ${ZIPKIN_ENDPOINT:}
@@ -50,6 +79,11 @@ management:
     web:
       exposure:
         include: health,info,prometheus,metrics,gateway-refresh
+  # A4: k8s 里 Boot 会自动建 probe 组，compose 下不会 —— 显式打开，healthcheck 才能测真正的 readiness。
+  endpoint:
+    health:
+      probes:
+        enabled: true
   metrics:
     distribution:
       percentiles-histogram:

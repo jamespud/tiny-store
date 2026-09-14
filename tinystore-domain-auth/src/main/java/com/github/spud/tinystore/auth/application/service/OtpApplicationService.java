@@ -12,6 +12,7 @@ import com.github.spud.tinystore.auth.application.port.out.OtpRepositoryPort;
 import com.github.spud.tinystore.auth.application.port.out.SmsSenderPort;
 import com.github.spud.tinystore.auth.domain.audit.AuditEvent;
 import com.github.spud.tinystore.auth.domain.exception.OtpInvalidException;
+import com.github.spud.tinystore.auth.domain.exception.OtpExpiredException;
 import com.github.spud.tinystore.auth.domain.exception.OtpRateLimitExceededException;
 import com.github.spud.tinystore.auth.domain.model.otp.Otp;
 import com.github.spud.tinystore.auth.domain.model.user.MallUser;
@@ -84,15 +85,32 @@ public class OtpApplicationService implements OtpUseCase {
   public AuthResult verifyOtp(VerifyOtpCommand command) {
     PhoneNumber phone = PhoneNumber.of(command.phone());
     OtpCode code = OtpCode.of(command.code());
-    Otp otp = otpRepository.findLatest(phone)
-      .orElseThrow(() -> {
+    // C4：校验与消费必须是仓储层的一次原子操作。原先的
+    // findLatest → verify → markUsed 三阶段协议在多副本下会出现
+    // "验证码只在签发副本可见"以及"同一验证码被并发成功使用多次"。
+    switch (otpRepository.verifyAndConsume(phone, code)) {
+      case NOT_FOUND -> {
         auditLogPort.append(
           AuditEvent.failure(null, phone.value(), null, ACTION_OTP_VERIFY, Set.of(), null, null,
             "otp_not_found"));
-        return new OtpInvalidException("验证码不存在或已失效");
-      });
-    otpGenerationService.verify(otp, code);
-    otpRepository.markUsed(otp);
+        throw new OtpInvalidException("验证码不存在或已失效");
+      }
+      case EXPIRED -> {
+        auditLogPort.append(
+          AuditEvent.failure(null, phone.value(), null, ACTION_OTP_VERIFY, Set.of(), null, null,
+            "otp_expired"));
+        throw new OtpExpiredException("验证码已过期");
+      }
+      case MISMATCH -> {
+        auditLogPort.append(
+          AuditEvent.failure(null, phone.value(), null, ACTION_OTP_VERIFY, Set.of(), null, null,
+            "otp_mismatch"));
+        throw new OtpInvalidException("otp mismatch");
+      }
+      case SUCCESS -> {
+        // 校验通过且已消费，继续后续用户激活流程
+      }
+    }
     MallUser user = userService.getOrCreateByPhone(phone.value());
     try {
       user.ensureActive();

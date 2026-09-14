@@ -28,6 +28,13 @@ spring:
     baseline-on-migrate: true
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      properties:
+        # 快速失败：broker 不可用时 send() 不再阻塞默认 60s，避免整个 outbox 轮询线程被拖住（C12）。
+        max.block.ms: ${KAFKA_PRODUCER_MAX_BLOCK_MS:3000}
+        # 明确的投递上限：超过即视为传输失败，交给退避重试而不是无限挂起。
+        delivery.timeout.ms: ${KAFKA_PRODUCER_DELIVERY_TIMEOUT_MS:10000}
+        request.timeout.ms: ${KAFKA_PRODUCER_REQUEST_TIMEOUT_MS:5000}
     consumer:
       group-id: ${KAFKA_CONSUMER_GROUP_ID:order-service}
       auto-offset-reset: earliest
@@ -116,6 +123,11 @@ management:
   tracing:
     sampling:
       probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
+    # D1: Boot 3.5 has no per-backend zipkin switch -- the sender and span handler are gated on
+    # management.tracing.enabled (checked via /actuator/beans), so an empty ZIPKIN_ENDPOINT used to
+    # build a reporter aimed at an empty URI that dropped every span without a word. Tracing is
+    # therefore opt-in: ZIPKIN_ENABLED=true + ZIPKIN_ENDPOINT=http://zipkin:9411/api/v2/spans.
+    enabled: ${ZIPKIN_ENABLED:false}
   zipkin:
     tracing:
       endpoint: ${ZIPKIN_ENDPOINT:}
@@ -130,3 +142,7 @@ management:
   endpoint:
     health:
       show-details: always
+      # A4: 让 /actuator/health/readiness 在 compose/k8s 下都存在（非 k8s 环境 Boot 默认不建 probe 组），
+      # compose healthcheck 与多实例门禁据此判断"能接流量"，而不只是"JVM 还活着"。
+      probes:
+        enabled: true

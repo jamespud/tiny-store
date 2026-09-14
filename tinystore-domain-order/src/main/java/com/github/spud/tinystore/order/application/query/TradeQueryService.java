@@ -95,6 +95,9 @@ public class TradeQueryService {
             .discountAmountCents(trade.getDiscountAmountCents())
             .payableAmountCents(trade.getPayableAmountCents())
             .createdAt(trade.getCreatedAt().toString())
+            // C13: the client polls this until the asynchronous promotion verdict lands
+            // (PENDING -> COMMITTED, or FAILED for a loser of a contested coupon).
+            .promotionCommitStatus(trade.getPromotionCommitStatus())
             .shopOrders(shopOrderDetails)
             .build();
     }

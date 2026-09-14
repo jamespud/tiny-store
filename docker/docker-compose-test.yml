@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: postgres
     command: ["postgres", "-c", "max_connections=500"]
     ports:
-      - "5433:5432"
+      - "${E2E_POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres-data-test:/var/lib/postgresql
       - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
@@ -25,7 +25,7 @@ services:
     image: redis:7.4.0
     container_name: tinystore-redis-test
     ports:
-      - "6380:6379"
+      - "${E2E_REDIS_PORT:-6380}:6379"
     networks:
       - tinystore-test
     healthcheck:
@@ -38,7 +38,7 @@ services:
     image: apache/kafka:4.1.1
     container_name: tinystore-kafka-test
     ports:
-      - "9093:9092"
+      - "${E2E_KAFKA_PORT:-9093}:9092"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -66,8 +66,8 @@ services:
     image: nacos/nacos-server:v3.1.1
     container_name: tinystore-nacos-test
     ports:
-      - "8849:8848"
-      - "9849:9848"
+      - "${E2E_NACOS_PORT:-8849}:8848"
+      - "${E2E_NACOS_GRPC_PORT:-9849}:9848"
     environment:
       MODE: standalone
       NACOS_AUTH_TOKEN: "ZXlKaGJHY2lPaUpJVXpVeE1pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnVZVzFsSWpvaVNtOW9iaUlzSW1Ga2JXbHVJanAwY25WbGZRLklpdUxkRHdTX0VONmU1ZENzdmlRRFVsZ0djUXdkWHdadm5vM284NjNZMlFmRGphYnNYZ2gyQURqYnBzVVU2VUF1R1FSVFFmb0ZhajdSV3owdFRHSTh3"
@@ -88,7 +88,7 @@ services:
       dockerfile: Dockerfile
     container_name: tinystore-gateway-test
     ports:
-      - "8080:8080"
+      - "${E2E_GATEWAY_PORT:-8080}:8080"
     environment:
       SPRING_PROFILES_ACTIVE: default
       REDIS_HOST: redis
@@ -97,9 +97,14 @@ services:
       TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
       JWKS_URI: http://auth:9000/.well-known/jwks.json
       GATEWAY_RATE_LIMIT_ENABLED: false
-      SPRING_CLOUD_GATEWAY_HTTPCLIENT_POOL_MAX_CONNECTIONS: 2000
-      SPRING_CLOUD_GATEWAY_HTTPCLIENT_POOL_MAX_PENDING_ACQUIRE_COUNT: 20000
-      SPRING_CLOUD_GATEWAY_HTTPCLIENT_RESPONSE_TIMEOUT: 30s
+      # The three SPRING_CLOUD_GATEWAY_HTTPCLIENT_* keys that used to sit here were inert: Gateway
+      # 4.x moved the prefix to spring.cloud.gateway.server.webflux.httpclient, so the stack "set" a
+      # response timeout that never applied and ran with no connect timeout at all -- which is why a
+      # killed replica black-holed requests for 20s (E1) instead of failing fast into a retry.
+      # Those timeouts now have explicit, asserted defaults in the gateway's application.yml
+      # (GatewayResilienceConfigTest). pool.max-pending-acquire-count does not exist in Gateway 4.3.0
+      # and pool.max-connections only applies to a FIXED pool, so both pool knobs were no-ops too;
+      # the connection budget belongs to task 13B.
     depends_on:
       nacos:
         condition: service_healthy
@@ -108,7 +113,9 @@ services:
     networks:
       - tinystore-test
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      # A4: readiness, not "the JVM answers" -- app services take 45-70s to boot and have real
+      # dependencies; this endpoint only turns UP when the service can actually take traffic.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health/readiness"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -119,8 +126,14 @@ services:
       context: ../tinystore-domain-auth
       dockerfile: Dockerfile
     container_name: tinystore-auth-test
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9000/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
     ports:
-      - "9000:9000"
+      - "${E2E_AUTH_PORT:-9000}:9000"
     environment:
       SPRING_PROFILES_ACTIVE: dev
       DB_HOST: postgres
@@ -129,6 +142,8 @@ services:
       REDIS_PORT: 6379
       NACOS_SERVER_ADDR: nacos:8848
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tinystore?currentSchema=tinystore_auth
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 10
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 2
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
@@ -148,8 +163,14 @@ services:
       context: ../tinystore-domain-account
       dockerfile: Dockerfile
     container_name: tinystore-account-test
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
     ports:
-      - "8000:8000"
+      - "${E2E_ACCOUNT_PORT:-8000}:8000"
     environment:
       SPRING_PROFILES_ACTIVE: default
       DB_HOST: postgres
@@ -159,6 +180,8 @@ services:
       KAFKA_BOOTSTRAP: kafka:29092
       NACOS_SERVER_ADDR: nacos:8848
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tinystore?currentSchema=tinystore_account
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 10
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 2
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
@@ -183,8 +206,14 @@ services:
       context: ../tinystore-domain-inventory
       dockerfile: Dockerfile
     container_name: tinystore-inventory-test
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:13000/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
     ports:
-      - "13000:13000"
+      - "${E2E_INVENTORY_PORT:-13000}:13000"
     expose:
       - "23000"
     environment:
@@ -202,8 +231,14 @@ services:
       INVENTORY_RESERVATION_EXPIRY_FIXED_DELAY: PT5S
       INVENTORY_RESERVATION_EXPIRY_DEFAULT_MINUTES: 1
       LOGGING_LEVEL_COM_GITHUB_SPUD_TINYSTORE: WARN
-      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 25
-      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 10
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 15
+      # D3 connection budget (arithmetic pinned by tests/api RuntimeConfigContractTest):
+      # 3 replicas x (45 order + 15 inventory + 15 promotion + 4 x 10 others) = 345, i.e. 69% of
+      # postgres max_connections (500). That is the *edge* of the 70% budget -- only ~5 connections of
+      # headroom for admin/migration/background work, not a comfortable margin. Raising any pool, or
+      # running 4+ replicas, needs the budget recomputed (and the contract test updated) first.
+      # minimum-idle is small on purpose: idle connections also consume the budget.
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 2
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     depends_on:
       postgres:
@@ -220,8 +255,14 @@ services:
       context: ../tinystore-domain-order
       dockerfile: Dockerfile
     container_name: tinystore-order-test
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:28080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
     ports:
-      - "28080:28080"
+      - "${E2E_ORDER_PORT:-28080}:28080"
     expose:
       - "38080"
     environment:
@@ -250,8 +291,8 @@ services:
       ORDER_PAYMENT_CALLBACK_VERIFY_ENABLED: "false"
       ORDER_KAFKA_TOPIC_PROMOTION_EVENTS: tinystore.promotion.general
       LOGGING_LEVEL_COM_GITHUB_SPUD_TINYSTORE: WARN
-      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 100
-      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 10
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 45
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 2
       SERVER_TOMCAT_THREADS_MAX: 500
     depends_on:
       postgres:
@@ -270,8 +311,14 @@ services:
       context: ../tinystore-domain-payment
       dockerfile: Dockerfile
     container_name: tinystore-payment-test
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8083/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
     ports:
-      - "8083:8083"
+      - "${E2E_PAYMENT_PORT:-8083}:8083"
     environment:
       SPRING_PROFILES_ACTIVE: default
       DB_HOST: postgres
@@ -282,6 +329,8 @@ services:
       JWT_ISSUER: http://auth:9000
       NACOS_SERVER_ADDR: nacos:8848
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tinystore?currentSchema=tinystore_payment
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 10
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 2
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
@@ -306,8 +355,14 @@ services:
       context: ../tinystore-domain-product
       dockerfile: Dockerfile
     container_name: tinystore-product-test
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8090/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
     ports:
-      - "8090:8090"
+      - "${E2E_PRODUCT_PORT:-8090}:8090"
     expose:
       - "18090"
     environment:
@@ -320,6 +375,8 @@ services:
       JWT_ISSUER: http://auth:9000
       NACOS_SERVER_ADDR: nacos:8848
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tinystore?currentSchema=tinystore_product
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 10
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 2
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
@@ -349,8 +406,14 @@ services:
       context: ../tinystore-domain-promotion
       dockerfile: Dockerfile
     container_name: tinystore-promotion-test
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:1200/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
     ports:
-      - "1200:1200"
+      - "${E2E_PROMOTION_PORT:-1200}:1200"
     expose:
       - "11200"
     environment:
@@ -370,8 +433,8 @@ services:
       TINYSTORE_SECURITY_PERMIT_ALL_ENABLED: true
       PROMOTION_KAFKA_TOPIC_ACK_EVENTS: tinystore.promotion.general
       LOGGING_LEVEL_COM_GITHUB_SPUD_TINYSTORE: WARN
-      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 25
-      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 10
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 15
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 2
     depends_on:
       postgres:
         condition: service_healthy

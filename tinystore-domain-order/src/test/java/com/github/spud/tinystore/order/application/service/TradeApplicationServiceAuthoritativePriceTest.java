@@ -1,9 +1,11 @@
 package com.github.spud.tinystore.order.application.service;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 import com.github.spud.tinystore.infrastructure.rpc.dto.ProductSkuPrice;
 import com.github.spud.tinystore.infrastructure.rpc.dto.ProductSkuPriceResponse;
@@ -43,6 +45,21 @@ class TradeApplicationServiceAuthoritativePriceTest {
 	void setUp() {
 		service = new TradeApplicationService();
 		ReflectionTestUtils.setField(service, "idempotencyService", idempotencyService);
+
+        // P0-2: createTrade consults the durable idempotency record first (empty here -> proceed).
+        com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository recordRepository =
+                mock(com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository.class);
+		org.mockito.Mockito.lenient().when(recordRepository.findById(anyString())).thenReturn(java.util.Optional.empty());
+		org.mockito.Mockito.lenient().when(recordRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+		// 第三轮 P0：durable claim 在 saga 之前取得（真实仓储会 INSERT 并返回 1）。
+		org.mockito.Mockito.lenient()
+			.when(recordRepository.claimProcessing(anyString(), anyString(), anyString(),
+				org.mockito.ArgumentMatchers.any(java.time.LocalDateTime.class)))
+			.thenReturn(1);
+		ReflectionTestUtils.setField(service, "tradeIdempotencyRecordRepository", recordRepository);
+
+		lenient().when(idempotencyService.acquire(anyString(), anyString(), anyString()))
+			.thenReturn(IdempotencyService.AcquireResult.ACQUIRED);
 		ReflectionTestUtils.setField(service, "skuPriceResolver", new SkuPriceResolver(productClient));
 		ReflectionTestUtils.setField(service, "priceAuthoritativeEnabled", true);
 	}
@@ -50,7 +67,6 @@ class TradeApplicationServiceAuthoritativePriceTest {
 	@Test
 	@DisplayName("tampered client price should be rejected by createTrade")
 	void tamperedClientPrice_createTrade_shouldReject() {
-		when(idempotencyService.tryAcquire(anyString(), anyString(), anyString())).thenReturn(true);
 		ProductSkuPriceResponse resp = new ProductSkuPriceResponse();
 		ProductSkuPrice price = new ProductSkuPrice();
 		price.setSkuId("SKU_A");

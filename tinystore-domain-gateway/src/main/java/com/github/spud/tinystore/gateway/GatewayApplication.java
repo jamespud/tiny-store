@@ -13,6 +13,7 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 import com.github.spud.tinystore.gateway.config.GatewayDynamicProperties;
+import com.github.spud.tinystore.gateway.config.GatewayTrustedProxyProperties;
 import com.github.spud.tinystore.gateway.idempotency.IdempotencyProperties;
 import com.github.spud.tinystore.gateway.security.JwksProperties;
 
@@ -37,7 +38,8 @@ import com.github.spud.tinystore.gateway.security.JwksProperties;
 )
 @EnableDiscoveryClient
 @EnableScheduling
-@EnableConfigurationProperties({ GatewayDynamicProperties.class, JwksProperties.class, IdempotencyProperties.class })
+@EnableConfigurationProperties({ GatewayDynamicProperties.class, GatewayTrustedProxyProperties.class,
+		JwksProperties.class, IdempotencyProperties.class })
 public class GatewayApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(GatewayApplication.class, args);

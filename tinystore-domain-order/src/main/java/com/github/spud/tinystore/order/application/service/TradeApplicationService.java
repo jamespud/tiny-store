@@ -13,6 +13,7 @@ import com.github.spud.tinystore.order.domain.enums.PromotionStatus;
 import com.github.spud.tinystore.order.domain.event.OrderDomainEvent;
 import com.github.spud.tinystore.order.domain.event.OrderEventType;
 import com.github.spud.tinystore.order.domain.exception.DomainConflictException;
+import com.github.spud.tinystore.order.domain.exception.IdempotencyConflictException;
 import com.github.spud.tinystore.order.domain.model.InventoryReservationRef;
 import com.github.spud.tinystore.order.domain.model.OrderLine;
 import com.github.spud.tinystore.order.domain.model.ShopOrder;
@@ -26,6 +27,8 @@ import com.github.spud.tinystore.order.infrastructure.acl.dto.*;
 import com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService;
 import com.github.spud.tinystore.order.infrastructure.idempotency.IdempotencyService;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.PaymentIntentEntity;
+import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.TradeIdempotencyRecordEntity;
+import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.PaymentIntentJpaRepository;
 import com.github.spud.tinystore.order.interfaces.dto.response.CreateTradeData;
 import lombok.extern.slf4j.Slf4j;
@@ -37,11 +40,15 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -54,14 +61,74 @@ import java.util.stream.Collectors;
 @Service
 public class TradeApplicationService {
 
+    /** create-trade 的幂等作用域。 */
+    private static final String IDEMPOTENCY_SCOPE = "trade:create";
+
+    /** 幂等记录的行状态：处理中（durable claim） / 已完成（成功响应已落库）。 */
+    private static final String IDEMPOTENCY_STATE_PROCESSING = "PROCESSING";
+
+    private static final String IDEMPOTENCY_STATE_COMMITTED = "COMMITTED";
+
+    /** 取消动作的幂等作用域（C6：按 trade 认领，保证同一笔交易只被一个 worker 取消）。 */
+    private static final String CANCEL_SCOPE = "trade:cancel";
+
+    /** 取消认领键前缀（键内容为 tradeId）。 */
+    private static final String CANCEL_KEY_PREFIX = "trade-cancel:";
+
     @Autowired
     private TradeRepository tradeRepository;
+
+    /** C2/C8：纯数据库状态迁移的乐观锁冲突重试（每次尝试独立事务）。 */
+    @Autowired
+    private com.github.spud.tinystore.order.infrastructure.tx.StateTransitionRetry optimisticRetryTemplate;
+
+    /** 序列化 outbox 载荷；失败属于编程错误，统一转成非受检异常，便于在 lambda 内使用。 */
+    private String toJson(Object payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize outbox payload", e);
+        }
+    }
+
+    /**
+     * 取消失败（事务回滚）时释放认领，使同一个键可以重新尝试。
+     */
+    private void registerCancelClaimRelease(String tradeId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        String key = CANCEL_KEY_PREFIX + tradeId;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                // P1: mark the claim SUCCEEDED once the cancellation is actually committed, so a later
+                // request replays it as a completed cancellation (REPLAY) instead of being told
+                // CANCEL_IN_PROGRESS until the key expires.
+                try {
+                    idempotencyService.markSucceeded(CANCEL_SCOPE, key, tradeId, "{\"tradeId\":\"" + tradeId + "\"}");
+                } catch (Exception e) {
+                    log.warn("Failed to mark cancel claim succeeded (trade is cancelled): tradeId={}", tradeId, e);
+                }
+            }
+
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
+                    idempotencyService.releaseLock(CANCEL_SCOPE, key);
+                }
+            }
+        });
+    }
 
     @Autowired
     private ShopOrderRepository shopOrderRepository;
 
     @Autowired
     private PaymentIntentJpaRepository paymentIntentJpaRepository;
+
+    @Autowired
+    private JpaTradeIdempotencyRecordRepository tradeIdempotencyRecordRepository;
 
     @Autowired
     private OutboxEventService outboxEventService;
@@ -114,23 +181,58 @@ public class TradeApplicationService {
         PromotionQuoteResponse quoteResponse = null;
         List<ShopOrder> updatedOrders = new ArrayList<>();
         boolean compensationRequired = false;
+        // 幂等收尾：必须在取得处理权之后立刻注册，否则中途失败时没有东西会释放记录。
+        String[] idempotencyResponseHolder = new String[1];
         try {
+            // 1. 幂等：请求指纹必须在生成服务端 tradeId **之前**计算，
+            //    否则"同键不同请求体"无法被识别（服务端 ID 每次都不同）。
+            String fingerprint = TradeRequestFingerprint.of(command);
+
+            // P0-2: the durable record decides first. Redis is the concurrency guard; this table is the
+            // authority on "this key already produced this response", so a Redis failure after commit (or a
+            // Redis restart) can no longer turn a committed trade into an error or allow a second trade.
+            // P0 (round 3): the same row is the durable *claim* (see claimProcessing below).
+            Optional<TradeIdempotencyRecordEntity> durableRecord =
+                    tradeIdempotencyRecordRepository.findById(idempotencyKey);
+            if (durableRecord.isPresent()
+                    && !IDEMPOTENCY_STATE_PROCESSING.equals(durableRecord.get().getState())) {
+                return replayDurableRecord(durableRecord.get(), fingerprint, idempotencyKey);
+            }
+
+            switch (idempotencyService.acquire(IDEMPOTENCY_SCOPE, idempotencyKey, fingerprint)) {
+                case FINGERPRINT_CONFLICT -> throw new IdempotencyConflictException(
+                        "Idempotency key reused with a different request body", idempotencyKey);
+                case IN_PROGRESS -> throw new DomainConflictException("IDEMPOTENT_CONFLICT",
+                        "Trade creation already in progress with this idempotency key");
+                case REPLAY -> {
+                    return replayStoredTrade(IDEMPOTENCY_SCOPE, idempotencyKey);
+                }
+                case ACQUIRED -> {
+                    // The durable claim is taken below, before any external effect.
+                }
+            }
+
+            // P0 (round 3): the durable claim is the authoritative mutual exclusion. It is taken *before*
+            // promotion/inventory are called, inside this transaction. A concurrent request with the same
+            // Idempotency-Key blocks here until this transaction commits (then it reads the committed row and
+            // replays it) or rolls back (then the claim is gone and it becomes the owner). That is what stops
+            // a Redis restart/flush from letting two replicas both pre-deduct inventory for one key.
+            if (tradeIdempotencyRecordRepository.claimProcessing(idempotencyKey, IDEMPOTENCY_SCOPE,
+                    fingerprint, LocalDateTime.now()) == 0) {
+                TradeIdempotencyRecordEntity claimedElsewhere = tradeIdempotencyRecordRepository
+                        .findById(idempotencyKey)
+                        .orElseThrow(() -> new IllegalStateException(
+                                "Idempotency claim was not taken but no record exists for key "
+                                        + idempotencyKey));
+                return replayDurableRecord(claimedElsewhere, fingerprint, idempotencyKey);
+            }
+
+            // 取得处理权：立刻登记提交/回滚收尾，保证任何后续失败都会释放记录。
+            registerIdempotencyCompletion(idempotencyKey, fingerprint, idempotencyResponseHolder);
+
             tradeId = (command.getTradeId() != null && !command.getTradeId().isEmpty())
                     ? command.getTradeId()
                     : TradeIdGenerator.generateTradeId();
-
-            // 1. 幂等性检查与获取缓存
-            String fingerprint = tradeId + ":" + command.getBuyerId();
-            if (!idempotencyService.tryAcquire("trade:create", idempotencyKey, fingerprint)) {
-                String cachedResponse = idempotencyService.getCachedResponse("trade:create",
-                        idempotencyKey);
-                if (cachedResponse != null) {
-                    log.info("Idempotent trade creation: returning cached response");
-                    return objectMapper.readValue(cachedResponse, CreateTradeData.class);
-                }
-                throw new DomainConflictException("IDEMPOTENT_CONFLICT",
-                        "Trade creation already in progress with this idempotency key");
-            }
 
             // 2.0 服务端权威定价（A3）：以商品目录单价为准，拒绝客户端自定价格（demo 级缺陷修复）。
             if (priceAuthoritativeEnabled && skuPriceResolver != null
@@ -148,6 +250,15 @@ public class TradeApplicationService {
                 throw new DomainConflictException("PROMOTION_QUOTE_FAILED",
                         "Failed to get promotion quote: " + e.getMessage());
             }
+
+            // C14: as soon as the quote EXISTS, any later failure owes it a release. This used to be
+            // armed just before the inventory deduct, so a failure while validating the quote or the
+            // REQUOTE_REQUIRED rejection left a QUOTED row behind until QuoteExpiryTask's PT5M sweep
+            // (measured: a failed POST /api/order/trades left exactly one such row). Arming it here
+            // means "create trade failed" always implies "the quote was released" -- the inventory
+            // part of the compensation stays a no-op while no shop has reserved anything, which the
+            // loop over reservedOrders already guarantees.
+            compensationRequired = true;
 
             // 2.1 校验 promotion quote 响应关键字段
             if (quoteResponse == null || quoteResponse.getSnapshot() == null) {
@@ -242,7 +353,6 @@ public class TradeApplicationService {
             }
 
             // 4. 调用 inventory deduct（V2：按 shop 分组调用，Redis 原子扣减）
-            compensationRequired = true;
             for (ShopOrder shopOrder : shopOrders) {
                 String shopId = shopOrder.getShopId();
                 List<CreateTradeCommand.OrderLineCommand> lines = groupedByShop.get(shopId);
@@ -259,6 +369,10 @@ public class TradeApplicationService {
                 InventoryDeductRequest deductRequest = InventoryDeductRequest.builder()
                         .orderId(shopOrder.getOrderId())
                         .tradeId(tradeId)
+                        // Round-3 P1: hand inventory the reservation window this trade asks for, so it can
+                        // refuse a TTL that does not fit its orphan-reclaim budget instead of silently
+                        // creating a pre-deduction the cleaner could later release while still legitimate.
+                        .reservationTtlMinutes(reservationTtlMinutes)
                         .items(deductItems)
                         .build();
 
@@ -465,11 +579,40 @@ public class TradeApplicationService {
                     .tradeId(trade.getTradeId())
                     .payableAmountCents(trade.getPayableAmountCents())
                     .paymentIntentId(paymentId)
+                    // C13: expose the promotion verdict. A 200 here means "order created", not
+                    // "the discount is final" -- the coupon is arbitrated asynchronously (a
+                    // contested coupon has exactly one COMMITTED winner; losers go FAILED).
+                    .promotionCommitStatus(trade.getPromotionCommitStatus())
                     .build();
 
-            // 缓存幂等响应
-            idempotencyService.storeResponse("trade:create", idempotencyKey,
-                    objectMapper.writeValueAsString(result));
+            // 幂等收尾：记录响应内容。真正写入 Redis 的时机由前面登记的同步器决定
+            // （事务提交后写 SUCCEEDED；回滚则删除记录）。
+            idempotencyResponseHolder[0] = objectMapper.writeValueAsString(result);
+
+            // P0-2: persist the durable record in the SAME transaction as the trade, so the commit of the
+            // trade and the record of its response are atomic. Everything after this point (Redis) is a cache.
+            tradeIdempotencyRecordRepository.save(TradeIdempotencyRecordEntity.builder()
+                    .idempotencyKey(idempotencyKey)
+                    .scope(IDEMPOTENCY_SCOPE)
+                    .fingerprint(fingerprint)
+                    .state(IDEMPOTENCY_STATE_COMMITTED)
+                    .tradeId(trade.getTradeId())
+                    .responseJson(idempotencyResponseHolder[0])
+                    .createdAt(LocalDateTime.now())
+                    .build());
+
+            if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+                // 非事务上下文（单测直接驱动应用服务）：立即落库，保持行为可预期。
+                try {
+                    idempotencyService.markSucceeded(IDEMPOTENCY_SCOPE, idempotencyKey, fingerprint,
+                            idempotencyResponseHolder[0]);
+                } catch (Exception e) {
+                    // Same reasoning as afterCommit(): the durable record is written above, so a cache failure
+                    // must not turn a committed create into an error.
+                    log.warn("Idempotency cache update failed (durable record is authoritative): key={}",
+                            idempotencyKey, e);
+                }
+            }
 
             log.info("Trade creation succeeded: tradeId={}, paymentId={}", trade.getTradeId(), paymentId);
             return result;
@@ -487,8 +630,146 @@ public class TradeApplicationService {
                 }
             }
             log.error("Trade creation failed", e);
-            throw e;
+            throw translateCreateConflict(e, tradeId);
         }
+    }
+
+    /**
+     * 把"用户可解释的"数据库唯一冲突翻译成领域冲突。
+     *
+     * <p>例如同一 tradeId 被以不同幂等键重复提交时，数据库抛的是
+     * {@link DataIntegrityViolationException}；它反映的是调用方的冲突而不是服务端故障。
+     * 在应用层转成 {@link DomainConflictException} 之后，HTTP 层会返回 409，
+     * 且 PostgreSQL 的约束名/SQL 文本不会被暴露给调用方。
+     *
+     * <p>包级可见以便单测直接覆盖翻译规则。
+     */
+    Exception translateCreateConflict(Exception failure, String tradeId) {
+        Throwable cause = failure;
+        while (cause != null) {
+            if (cause instanceof DataIntegrityViolationException) {
+                // P2: only integrity errors we can attribute to a *business* rule become 409. A NOT NULL,
+                // foreign-key or check violation is a programming/schema problem, and mapping those to
+                // "conflict" hides real bugs behind a user-looking conflict -- so they keep their 500 and
+                // stay visible to monitoring.
+                if (isKnownBusinessUniqueViolation(cause)) {
+                    DomainConflictException translated = new DomainConflictException("TRADE_CONFLICT",
+                            "Trade creation conflicts with an existing record: tradeId=" + tradeId);
+                    translated.initCause(failure);
+                    return translated;
+                }
+                return failure;
+            }
+            cause = cause.getCause();
+        }
+        return failure;
+    }
+
+    /**
+     * Known business uniqueness rules for create-trade. Everything else (NOT NULL/FK/CHECK, unknown unique
+     * constraints) is deliberately left as a server error.
+     */
+    private static final java.util.Set<String> BUSINESS_UNIQUE_CONSTRAINTS = java.util.Set.of(
+            "trade_pkey", "uk_trade_trade_id", "trade_trade_id_key", "shop_order_trade_id_shop_id_key");
+
+    private static boolean isKnownBusinessUniqueViolation(Throwable cause) {
+        String message = cause.getMessage();
+        if (message == null) {
+            return false;
+        }
+        // Postgres unique violations surface as SQLState 23505; the constraint name distinguishes them from
+        // schema problems.
+        boolean uniqueViolation = message.contains("23505") || message.contains("duplicate key value");
+        if (!uniqueViolation) {
+            return false;
+        }
+        return BUSINESS_UNIQUE_CONSTRAINTS.stream().anyMatch(message::contains);
+    }
+
+    /**
+     * 重放上一次成功请求的响应（幂等键 + 相同请求指纹）。
+     */
+    private CreateTradeData replayStoredTrade(String scope, String idempotencyKey)
+            throws JsonProcessingException {
+        String cachedResponse = idempotencyService.getStoredResponse(scope, idempotencyKey);
+        if (cachedResponse != null) {
+            log.info("Idempotent trade creation: replaying stored response");
+            return objectMapper.readValue(cachedResponse, CreateTradeData.class);
+        }
+        // P0-2: Redis no longer holds the only copy -- fall back to the durable record (Redis may have been
+        // restarted, or the after-commit write may have failed).
+        Optional<TradeIdempotencyRecordEntity> durable = tradeIdempotencyRecordRepository.findById(idempotencyKey);
+        if (durable.isPresent()) {
+            log.info("Idempotent trade creation: replaying durable record (redis cache empty), key={}",
+                    idempotencyKey);
+            return objectMapper.readValue(durable.get().getResponseJson(), CreateTradeData.class);
+        }
+        throw new DomainConflictException("IDEMPOTENT_CONFLICT",
+                "Trade creation already completed for this idempotency key but its response is unavailable");
+    }
+
+    /**
+     * 用 durable 记录回答一次重放请求（P0-2 / round-3 P0）。
+     *
+     * <p>指纹不同 → 409（同键不同请求体绝不能返回上一次的结果）。指纹相同但记录还没有响应
+     * （{@code state=PROCESSING}）→ 说明另一个副本仍持有 claim，调用方应稍后重试，而不是被当成成功。
+     */
+    private CreateTradeData replayDurableRecord(TradeIdempotencyRecordEntity record, String fingerprint,
+            String idempotencyKey) throws JsonProcessingException {
+        if (!fingerprint.equals(record.getFingerprint())) {
+            throw new IdempotencyConflictException(
+                    "Idempotency key reused with a different request body", idempotencyKey);
+        }
+        if (record.getResponseJson() == null) {
+            // A committed PROCESSING row must not exist (claim + completion are one transaction), so this is
+            // defensive: never invent a success for a claim that never produced one.
+            throw new DomainConflictException("IDEMPOTENT_CONFLICT",
+                    "Trade creation already in progress with this idempotency key");
+        }
+        log.info("Idempotent trade creation: replaying durable record, key={}, tradeId={}",
+                idempotencyKey, record.getTradeId());
+        return objectMapper.readValue(record.getResponseJson(), CreateTradeData.class);
+    }
+
+    /**
+     * 幂等收尾：成功只在事务提交后落库（SUCCEEDED + 响应），回滚则释放本次请求占用的记录。
+     *
+     * <p>提交前不写 SUCCEEDED，是为了避免"事务回滚了、客户端却拿到成功"。
+     * 回滚时删除记录，是为了让"失败后同键重试"可以真正重新执行——这正是 C9 修复的核心。
+     */
+    private void registerIdempotencyCompletion(String idempotencyKey, String fingerprint,
+            String[] responseHolder) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            // 非事务上下文（例如直接驱动应用服务的单测）：由成功路径直接落库。
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                if (responseHolder[0] != null) {
+                    try {
+                        idempotencyService.markSucceeded(IDEMPOTENCY_SCOPE, idempotencyKey, fingerprint,
+                                responseHolder[0]);
+                    } catch (Exception e) {
+                        // P0-2: the trade AND its idempotency record are already committed, so a Redis
+                        // failure here must not be reported as a request failure -- that was the ambiguous
+                        // commit window (client sees an error, retries, and the retry must replay). The
+                        // durable record answers the retry; Redis is only a cache.
+                        log.warn("Idempotency cache update failed after commit (durable record is authoritative): "
+                                + "key={}", idempotencyKey, e);
+                    }
+                }
+            }
+
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
+                    log.info("Trade creation rolled back, releasing idempotency record: key={}",
+                            idempotencyKey);
+                    idempotencyService.releaseLock(IDEMPOTENCY_SCOPE, idempotencyKey);
+                }
+            }
+        });
     }
 
     /**
@@ -633,6 +914,28 @@ public class TradeApplicationService {
      * + promotion release（同步 Feign，异步化不在本计划范围）。
      */
     private void cancelTradeInternal(String idempotencyKey, CancelTradeCommand command) throws Exception {
+        // C6：取消动作按 **trade 派生的稳定键** 认领。
+        // REST 取消、支付超时取消、促销提交超时取消三个入口最终都走到这里；
+        // 用同一个键认领，保证同一笔交易在任何时刻只有一个实例在执行取消，
+        // 另一个副本扫到同一行时直接跳过（而不是重复释放库存/重复写关闭事件）。
+        // 失败时通过回滚同步器释放认领，因此"失败后重试"依然可行。
+        switch (idempotencyService.acquire(CANCEL_SCOPE, CANCEL_KEY_PREFIX + command.getTradeId(),
+                command.getTradeId())) {
+            case FINGERPRINT_CONFLICT -> throw new IdempotencyConflictException(
+                    "Cancellation already claimed for a different trade", command.getTradeId());
+            case IN_PROGRESS -> throw new DomainConflictException("CANCEL_IN_PROGRESS",
+                    // P1: a cancellation that is still running is NOT a success. Reporting one would let a
+                    // concurrent caller see "cancelled" while the owning instance may still roll back.
+                    "Trade cancellation is already in progress for tradeId: " + command.getTradeId()
+                            + " -- retry after it completes");
+            case REPLAY -> {
+                log.info("Trade cancellation already completed, skipping: tradeId={}",
+                        command.getTradeId());
+                return;
+            }
+            case ACQUIRED -> registerCancelClaimRelease(command.getTradeId());
+        }
+
         // 获取 Trade 聚合根（公共 cancelTrade 已校验过；此处供 autoCancelTrade 直接复用，
         // 同一事务内二次查找命中同一持久化上下文）
         Trade trade = tradeRepository.findByTradeId(command.getTradeId())
@@ -650,44 +953,60 @@ public class TradeApplicationService {
                     shopOrder);
         }
 
-        // 所有 release 成功后，才更新本地关闭态与关闭事件
-        trade.closeTrade();
-        tradeRepository.save(trade);
+        // 所有 release 成功后，才更新本地关闭态与关闭事件。
+        //
+        // C2：这一段是**纯数据库状态迁移**，而异步的促销提交回执
+        // （PromotionAckConsumer → applyPromotionCommitResult）也会写同一个 trade 行。
+        // 多副本下两条路径在不同 JVM 里各自加载、各自写，后写者会因 @Version 失配失败；
+        // 这里让冲突在新事务里重新加载后重试，而不是把 500 抛给用户。
+        // 外部调用（库存/优惠释放）已经在上面完成，不在重试范围内。
+        optimisticRetryTemplate.execute("close trade " + command.getTradeId(), () -> {
+            Trade fresh = tradeRepository.findByTradeId(command.getTradeId())
+                    .orElseThrow(() -> new DomainConflictException("TRADE_NOT_FOUND",
+                            "Trade not found: " + command.getTradeId()));
+            if (fresh.isClosed()) {
+                log.info("Trade already closed by a concurrent writer, skipping close: {}",
+                        command.getTradeId());
+                return Boolean.TRUE;
+            }
+            fresh.closeTrade();
+            tradeRepository.save(fresh);
 
-        for (ShopOrder shopOrder : shopOrders) {
-            // Mark inventory status as RELEASED before closing the order
-            shopOrder.markInventoryReleased();
-            shopOrder.close();
-            shopOrderRepository.save(shopOrder);
-        }
+            List<ShopOrder> freshOrders = shopOrderRepository.findByTradeId(command.getTradeId());
+            for (ShopOrder shopOrder : freshOrders) {
+                // Mark inventory status as RELEASED before closing the order
+                shopOrder.markInventoryReleased();
+                shopOrder.close();
+                shopOrderRepository.save(shopOrder);
+            }
 
-        OrderDomainEvent tradeClosedEvent = OrderDomainEvent.builder()
-                .eventId(UUID.randomUUID().toString())
-                .eventType(OrderEventType.TRADE_CLOSED)
-                .aggregateType("TRADE")
-                .aggregateId(trade.getTradeId())
-                .occurredAt(LocalDateTime.now())
-                .traceId(command.getTraceId())
-                .payloadJson(objectMapper.writeValueAsString(Map.of(
-                        "tradeId", trade.getTradeId(),
-                        "reason", command.getReason())))
-                .build();
-        outboxEventService.saveEvent(tradeClosedEvent);
-
-        for (ShopOrder shopOrder : shopOrders) {
-            OrderDomainEvent orderClosedEvent = OrderDomainEvent.builder()
+            outboxEventService.saveEvent(OrderDomainEvent.builder()
                     .eventId(UUID.randomUUID().toString())
-                    .eventType(OrderEventType.ORDER_CLOSED)
-                    .aggregateType("ORDER")
-                    .aggregateId(shopOrder.getOrderId())
+                    .eventType(OrderEventType.TRADE_CLOSED)
+                    .aggregateType("TRADE")
+                    .aggregateId(fresh.getTradeId())
                     .occurredAt(LocalDateTime.now())
                     .traceId(command.getTraceId())
-                    .payloadJson(objectMapper.writeValueAsString(Map.of(
-                            "orderId", shopOrder.getOrderId(),
-                            "tradeId", shopOrder.getTradeId())))
-                    .build();
-            outboxEventService.saveEvent(orderClosedEvent);
-        }
+                    .payloadJson(toJson(Map.of(
+                            "tradeId", fresh.getTradeId(),
+                            "reason", command.getReason())))
+                    .build());
+
+            for (ShopOrder shopOrder : freshOrders) {
+                outboxEventService.saveEvent(OrderDomainEvent.builder()
+                        .eventId(UUID.randomUUID().toString())
+                        .eventType(OrderEventType.ORDER_CLOSED)
+                        .aggregateType("ORDER")
+                        .aggregateId(shopOrder.getOrderId())
+                        .occurredAt(LocalDateTime.now())
+                        .traceId(command.getTraceId())
+                        .payloadJson(toJson(Map.of(
+                                "orderId", shopOrder.getOrderId(),
+                                "tradeId", shopOrder.getTradeId())))
+                        .build());
+            }
+            return Boolean.TRUE;
+        });
 
         // 释放促销优惠
         try {
@@ -986,39 +1305,65 @@ public class TradeApplicationService {
     @Transactional
     public void confirmTradeReceipt(String tradeId, String traceId) throws Exception {
         try {
-            Trade trade = tradeRepository.findByTradeId(tradeId)
-                    .orElseThrow(() -> new DomainConflictException("TRADE_NOT_FOUND",
-                            "Trade not found: " + tradeId));
+            List<String> notAdvanced;
+            try {
+                // C8：这一段是纯数据库状态迁移，与"包裹签收"路径（同样会把订单推到 SUCCESS）
+                // 争抢同一行；冲突时在新事务里重新加载后重试，而不是直接失败。
+                notAdvanced = optimisticRetryTemplate.execute("confirm receipt " + tradeId, () -> {
+                    Trade trade = tradeRepository.findByTradeId(tradeId)
+                            .orElseThrow(() -> new DomainConflictException("TRADE_NOT_FOUND",
+                                    "Trade not found: " + tradeId));
 
-            // 查找该交易下的所有店铺订单
-            List<ShopOrder> shopOrders = shopOrderRepository.findByTradeId(tradeId);
-            if (shopOrders.isEmpty()) {
-                log.warn("No shop orders found for trade: tradeId={}", tradeId);
-                return;
+                    List<ShopOrder> shopOrders = shopOrderRepository.findByTradeId(tradeId);
+                    if (shopOrders.isEmpty()) {
+                        // P2 (C8): a trade without any shop order is a data inconsistency, not a successful
+                        // confirmation. Returning an empty "advanced" list made the API answer 200 while
+                        // nothing had been received; surface it as a server error instead.
+                        throw new IllegalStateException(
+                                "Trade exists but has no shop orders; refusing to report success: tradeId="
+                                        + tradeId);
+                    }
+
+                    for (ShopOrder shopOrder : shopOrders) {
+                        if (OrderStatus.PENDING_RECEIVE.equals(shopOrder.getOrderStatus())) {
+                            shopOrder.markAsSuccess();
+                            shopOrderRepository.save(shopOrder);
+
+                            outboxEventService.saveEvent(OrderDomainEvent.builder()
+                                    .eventId(UUID.randomUUID().toString())
+                                    .eventType(OrderEventType.ORDER_SUCCESS)
+                                    .aggregateType("ORDER")
+                                    .aggregateId(shopOrder.getOrderId())
+                                    .occurredAt(LocalDateTime.now())
+                                    .traceId(traceId)
+                                    .payloadJson(toJson(Map.of(
+                                            "orderId", shopOrder.getOrderId(),
+                                            "tradeId", tradeId)))
+                                    .build());
+
+                            log.info("Shop order receipt confirmed: orderId={}",
+                                    shopOrder.getOrderId());
+                        }
+                    }
+
+                    // 复核：只有所有子单都处于成功终态，才允许对外报告成功。
+                    List<String> pending = new ArrayList<>();
+                    for (ShopOrder shopOrder : shopOrderRepository.findByTradeId(tradeId)) {
+                        if (!OrderStatus.SUCCESS.equals(shopOrder.getOrderStatus())) {
+                            pending.add(shopOrder.getOrderId() + "=" + shopOrder.getOrderStatus());
+                        }
+                    }
+                    return pending;
+                });
+            } catch (DomainConflictException e) {
+                throw e;
             }
 
-            // 逐个订单确认收货（使用聚合根方法）
-            for (ShopOrder shopOrder : shopOrders) {
-                if (OrderStatus.PENDING_RECEIVE.equals(shopOrder.getOrderStatus())) {
-                    shopOrder.markAsSuccess();
-                    shopOrderRepository.save(shopOrder);
-
-                    // 发布订单完成事件
-                    OrderDomainEvent orderSuccessEvent = OrderDomainEvent.builder()
-                            .eventId(UUID.randomUUID().toString())
-                            .eventType(OrderEventType.ORDER_SUCCESS)
-                            .aggregateType("ORDER")
-                            .aggregateId(shopOrder.getOrderId())
-                            .occurredAt(LocalDateTime.now())
-                            .traceId(traceId)
-                            .payloadJson(objectMapper.writeValueAsString(Map.of(
-                                    "orderId", shopOrder.getOrderId(),
-                                    "tradeId", tradeId)))
-                            .build();
-                    outboxEventService.saveEvent(orderSuccessEvent);
-
-                    log.info("Shop order receipt confirmed: orderId={}", shopOrder.getOrderId());
-                }
+            if (!notAdvanced.isEmpty()) {
+                // 绝不静默 200：部分子单没有推进时必须让调用方知道（客户端可重试）。
+                throw new DomainConflictException("RECEIPT_PARTIAL",
+                        "Trade receipt not fully confirmed for tradeId=" + tradeId
+                                + ", pending shop orders: " + String.join(", ", notAdvanced));
             }
 
             log.info("Trade receipt confirmed: tradeId={}", tradeId);
@@ -1203,7 +1548,8 @@ public class TradeApplicationService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void autoCancelTrade(String tradeId, String reason, String traceId) {
-        String internalKey = "auto-cancel-" + tradeId + "-" + System.nanoTime();
+        // 稳定键：同一笔交易的自动取消只应被认领一次（原先拼 System.nanoTime()，每次都不同）。
+        String internalKey = "auto-cancel:" + tradeId;
         CancelTradeCommand command = CancelTradeCommand.builder()
                 .tradeId(tradeId)
                 .reason(reason)

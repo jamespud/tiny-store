@@ -1,8 +1,6 @@
 package com.github.spud.tinystore.gateway.filter;
 
-import java.net.InetSocketAddress;
 import java.time.Duration;
-import java.util.Optional;
 
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -20,6 +18,7 @@ import com.github.spud.tinystore.gateway.config.GatewayRoutesDefinition;
 import com.github.spud.tinystore.gateway.limiter.RateLimitResult;
 import com.github.spud.tinystore.gateway.limiter.RedisRateLimiterService;
 import com.github.spud.tinystore.gateway.metrics.GatewayMetrics;
+import com.github.spud.tinystore.gateway.security.ClientIpResolver;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import reactor.core.publisher.Mono;
@@ -33,15 +32,18 @@ public class IpRateLimiterFilter implements GlobalFilter, Ordered {
 	private final RedisRateLimiterService redisRateLimiterService;
 	private final GatewayPolicyRegistry policyRegistry;
 	private final MeterRegistry meterRegistry;
+	private final ClientIpResolver clientIpResolver;
 
 	public IpRateLimiterFilter(@org.springframework.beans.factory.annotation.Value("${gateway.rate-limit.enabled:true}") boolean rateLimitEnabled,
 		RedisRateLimiterService redisRateLimiterService,
 		GatewayPolicyRegistry policyRegistry,
-		MeterRegistry meterRegistry) {
+		MeterRegistry meterRegistry,
+		ClientIpResolver clientIpResolver) {
 		this.rateLimitEnabled = rateLimitEnabled;
 		this.redisRateLimiterService = redisRateLimiterService;
 		this.policyRegistry = policyRegistry;
 		this.meterRegistry = meterRegistry;
+		this.clientIpResolver = clientIpResolver;
 	}
 
 	@Override
@@ -62,7 +64,8 @@ public class IpRateLimiterFilter implements GlobalFilter, Ordered {
 			return chain.filter(exchange);
 		}
 
-		String identity = resolveIdentity(exchange).orElse("unknown");
+		// C16: the identity comes from the trust boundary, never straight from a client header.
+		String identity = clientIpResolver.resolveIdentity(exchange).orElse("unknown");
 		return redisRateLimiterService.isAllowed(routeId, identity, policy)
 			.flatMap(result -> handleResult(result, routeId, identity, exchange, chain));
 	}
@@ -82,18 +85,6 @@ public class IpRateLimiterFilter implements GlobalFilter, Ordered {
 			response.getHeaders().set(RATE_LIMIT_HEADER, String.valueOf(retryAfter.toSeconds()));
 		}
 		return response.setComplete();
-	}
-
-	private Optional<String> resolveIdentity(ServerWebExchange exchange) {
-		String forwarded = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
-		if (StringUtils.hasText(forwarded)) {
-			return Optional.of(forwarded.split(",")[0].trim());
-		}
-		InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();
-		if (remoteAddress != null && remoteAddress.getAddress() != null) {
-			return Optional.of(remoteAddress.getAddress().getHostAddress());
-		}
-		return Optional.empty();
 	}
 
 	@Override

@@ -35,7 +35,22 @@ import static org.mockito.Mockito.when;
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {
         "spring.cloud.nacos.discovery.enabled=false",
-        "spring.cloud.nacos.config.enabled=false"
+        "spring.cloud.nacos.config.enabled=false",
+        // The REST ITs drive the app over HTTP without a token, exactly like the compose stacks, which
+        // set ORDER_AUTHZ_REQUIRE_AUTHENTICATED_BUYER=false for order-service (docker-compose-test.yml).
+        // Without it the A2 anti-forgery rule ("buyer identity comes from the authenticated principal")
+        // answers 401 to every unauthenticated create -- a test-context gap, not a product issue: the
+        // application default stays true.
+        "order.authz.require-authenticated-buyer=false",
+        // Same story for the payment/refund callback signature check (A4): the test stack disables it
+        // (ORDER_PAYMENT_CALLBACK_VERIFY_ENABLED=false) while these ITs predate it and send no signature,
+        // so the 401 would mask the assertions the tests are actually making.
+        "order.payment.callback-verify-enabled=false"
+        // ...and the authoritative-price check (A1) calls product-service through discovery
+        // (lb://product-service/internal/restful/sku/batch). These ITs disable Nacos, so the call dies with
+        // UnknownHostException and createTrade answers 500; the test stack turns the check off for the same
+        // reason (ORDER_PRICING_AUTHORITATIVE_ENABLED=false). The application default stays true.
+        , "order.pricing.authoritative-enabled=false"
     }
 )
 public abstract class AbstractSpringBootOrderIT extends AbstractOrderIT {

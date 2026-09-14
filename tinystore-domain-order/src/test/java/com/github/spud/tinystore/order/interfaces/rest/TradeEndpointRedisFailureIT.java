@@ -16,6 +16,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,6 +29,10 @@ import static org.mockito.Mockito.when;
  * Tests behavior when Redis/Idempotency service is unavailable
  */
 @DisplayName("Trade Endpoint Redis Failure Tests")
+// This class swaps the real IdempotencyService for a throwing mock. The ITs share Spring's context cache,
+// so without this the mock (and Redis being "down") can leak into the classes that run after it -- they
+// then fail in @BeforeEach instead of exercising anything. Close the context when this class is done.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class TradeEndpointRedisFailureIT extends AbstractSpringBootOrderIT {
 
     @Autowired
@@ -49,8 +54,11 @@ class TradeEndpointRedisFailureIT extends AbstractSpringBootOrderIT {
     @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades:redis-failure")
     @DisplayName("POST /api/order/trades - Redis unavailable returns 503")
     void createTrade_whenRedisUnavailable_returns503() {
-        // Given: IdempotencyService throws IdempotencyServiceUnavailableException (simulating Redis failure)
-        when(idempotencyServiceMock.tryAcquire(anyString(), anyString(), anyString()))
+        // Given: IdempotencyService throws IdempotencyServiceUnavailableException (simulating Redis failure).
+        // This has to stub `acquire(scope, key, fingerprint)`: after the atomic-acquire rewrite that is the
+        // method createTrade calls, and an unstubbed mock returns null -- which the service then NPEs on,
+        // surfacing as 500 instead of the 503 this test asserts.
+        when(idempotencyServiceMock.acquire(anyString(), anyString(), anyString()))
             .thenThrow(new IdempotencyServiceUnavailableException(
                 "tryAcquire",
                 "idem-redis-down-001",

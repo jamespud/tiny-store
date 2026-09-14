@@ -1,0 +1,105 @@
+# =============================================================================
+# Multi-instance (distributed) test overlay for the hermetic E2E stack.
+#
+# Usage:
+#   docker compose -f docker/docker-compose-test.yml -f docker/docker-compose-multi.yml up -d --build
+#
+# Why this file exists
+# --------------------
+# The base stack (docker-compose-test.yml) pins `container_name` and fixed host
+# port mappings for every application service. Both of those make the stack
+# structurally un-scalable:
+#   * Compose refuses to scale a service that declares a fixed `container_name`.
+#   * N replicas publishing the same host port collide ("port is already allocated").
+#
+# This overlay removes those pins so every application service can run N replicas
+# on the same Compose network, register each replica in Nacos, and therefore let
+# the gateway load-balance real traffic across instances via `lb://<service-id>`.
+# That is what turns the "distributed" claim into something a test can falsify.
+#
+# What is intentionally NOT scaled here
+# -------------------------------------
+# postgres / redis / kafka / nacos stay single-instance. They are the shared
+# stateful tier; scaling them needs a different design (see the blocker report).
+# Keeping them single-node means a multi-instance run still exercises the real
+# question: "do several stateless replicas stay correct when they share one DB,
+# one Redis and one Kafka?"
+#
+# Every application service publishes a *range* of 10 host ports, so each replica
+# gets its own host port and the test suite (or an operator) can reach a specific
+# replica. Do NOT hardcode "replica #1 / #2" anywhere: the number of replicas is a
+# runtime input (MULTI_REPLICAS, 1..10) and the ports must be discovered, not assumed:
+#   docker compose ... ps -q <service> | xargs -r -I{} docker port {} <container-port>
+# The Makefile exposes that as `replica_ports` / `urls` inside the multi targets.
+#
+# 10 ports per service is what makes `MULTI_REPLICAS=1/2/3/...` work with no compose
+# edit; MAX_MULTI_REPLICAS in the Makefile is pinned to that width and fails fast.
+# The blocks deliberately avoid the base stack's ports (8080/9000/8000/8090/1200/
+# 13000/28080/8083), which are frequently already taken on a shared dev host.
+#
+# Docker only *reserves* the ports the running replicas actually need, so an unrelated
+# process sitting somewhere inside a block does not break the stack.
+# =============================================================================
+
+x-app-multi: &app-multi
+  container_name: !reset null
+  deploy:
+    # Runtime input, not a constant: the Makefile passes --scale for every target, and this
+    # keeps a bare `docker compose up` (without --scale) consistent with MULTI_REPLICAS too.
+    replicas: ${MULTI_REPLICAS:-2}
+  # 2x8 JVMs on one host: cap the heap so replicas do not fight over the machine.
+  environment:
+    JAVA_TOOL_OPTIONS: "-Xmx512m -Xss512k -XX:MaxMetaspaceSize=192m"
+
+services:
+  gateway:
+    <<: *app-multi
+    # The base stack disables rate limiting for hermetic tests. It can be switched back on
+    # for the multi-instance run, which is the only way to see that the limiter is shared
+    # across gateway replicas (Redis Lua token bucket keyed by route + identity).
+    environment:
+      GATEWAY_RATE_LIMIT_ENABLED: "${MULTI_GATEWAY_RATE_LIMIT_ENABLED:-false}"
+      # C16: empty by default, which is the direct-client case the probes use (a client header must
+      # not be believed). `make rate-limit-multi` re-creates the gateways with the calling host's
+      # address in this list to exercise the trusted-proxy path.
+      GATEWAY_TRUSTED_PROXIES: "${MULTI_GATEWAY_TRUSTED_PROXIES:-}"
+    # The base stack hardcodes 8080, which is not portable: on a shared dev host
+    # 8080 is frequently already taken, and then replica #2 fails with
+    # "all ports are allocated". Override with MULTI_GATEWAY_PORTS=....
+    ports: !override
+      - "${MULTI_GATEWAY_PORTS:-38080-38089}:8080"
+
+  auth:
+    <<: *app-multi
+    ports: !override
+      - "${MULTI_AUTH_PORTS:-39000-39009}:9000"
+
+  account:
+    <<: *app-multi
+    ports: !override
+      - "${MULTI_ACCOUNT_PORTS:-38000-38009}:8000"
+
+  product:
+    <<: *app-multi
+    ports: !override
+      - "${MULTI_PRODUCT_PORTS:-38090-38099}:8090"
+
+  promotion:
+    <<: *app-multi
+    ports: !override
+      - "${MULTI_PROMOTION_PORTS:-38120-38129}:1200"
+
+  inventory:
+    <<: *app-multi
+    ports: !override
+      - "${MULTI_INVENTORY_PORTS:-38130-38139}:13000"
+
+  order:
+    <<: *app-multi
+    ports: !override
+      - "${MULTI_ORDER_PORTS:-38280-38289}:28080"
+
+  payment:
+    <<: *app-multi
+    ports: !override
+      - "${MULTI_PAYMENT_PORTS:-38040-38049}:8083"

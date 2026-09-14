@@ -17,6 +17,12 @@ public class DeductRequest {
 
     private String tradeId;
 
+    /**
+     * Requested reservation window in minutes (review round-3 P1). Optional: absent means "use this
+     * service's default expiry". Rejected up front when it exceeds {@code inventory.uncommit.max-reservation-ttl}.
+     */
+    private Long reservationTtlMinutes;
+
     @NotEmpty(message = "扣减项不能为空")
     @Valid
     private List<Item> items;
