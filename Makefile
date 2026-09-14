@@ -128,23 +128,12 @@ it: build ## Run integration tests (Testcontainers only, no compose; excludes te
 	fi
 	@echo "Running integration tests with Testcontainers..."
 	@echo "WARNING: Ensure no other Docker containers conflict with Testcontainers infra"
-	# Gate discipline (review P1-4): a *test* failure is never retried -- this branch exists to catch
-	# low-probability distributed races, and "attempt 1 fails, attempt 2 passes" would erase exactly the
-	# signal it is looking for. What may be retried is a **classification**: this host runs rootless Docker
-	# and Testcontainers intermittently fails to start a container (RootlessKit port bind / refused
-	# connection), which is infrastructure, not a test result. Anything else fails the gate with the log.
-	@set -e; attempt=0; max_attempts=$${IT_INFRA_RETRIES:-2}; \
-	while :; do \
-		attempt=$$((attempt + 1)); log=/tmp/tinystore-it-$$$$.log; \
-		if $(MAVEN) clean verify -Pit -DskipITs=false -DskipTests -pl '!tests/api,!tests/performance' $(MAVEN_CLEAN_OPTS) > $$log 2>&1; then \
-			cat $$log; rm -f $$log; break; \
-		fi; \
-		if [ $$attempt -lt $$max_attempts ] && grep -qE "RootlessKit PortManager|ContainerLaunchException|address already in use|Connection refused" $$log; then \
-			echo "Infrastructure retry $$attempt/$$max_attempts: a Testcontainers container could not start (rootless Docker), which is not a test result"; \
-			rm -f $$log; continue; \
-		fi; \
-		echo "Integration tests failed and the failure is not a container-startup problem:"; cat $$log; rm -f $$log; exit 1; \
-	done
+	# Gate discipline (review P1-4, tightened by round-3 P2): a *test* result is never retried. The wrapper
+	# retries only a *classification* -- a container that could not start on this rootless-Docker host --
+	# and only when the Surefire/Failsafe reports agree: no assertion failure, and no error other than a
+	# container-startup one. A bare "Connection refused" is no longer a retry trigger (it also appears when
+	# an application inside a test cannot reach a dependency, which is a test result).
+	@bash docker/it-gate.sh $(MAVEN) clean verify -Pit -DskipITs=false -DskipTests -pl '!tests/api,!tests/performance' $(MAVEN_CLEAN_OPTS)
 
 it-retry: build ## Same as `it`, but tolerates the rootless-Docker container flakes (2 reruns). NOT the gate.
 	@echo "Running integration tests with 2 reruns per failing test (local/rootless-Docker convenience only)"
