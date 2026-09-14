@@ -122,4 +122,44 @@ class OutboxClaimFencingIT extends AbstractOrderIT {
         assertThat(after.getNextAttemptAt()).isNotNull();
         assertThat(after.getClaimToken()).isNull();
     }
+
+    @Test
+    @DisplayName("round-3 P1: a stale owner cannot re-pend an event the new owner already PUBLISHED")
+    void staleOwnerCannotReopenAPublishedEvent() {
+        outboxEventJpaRepository.save(OutboxEventEntity.builder()
+            .eventId("evt-fencing-3")
+            .eventType("ORDER_CREATED")
+            .aggregateType("ORDER")
+            .aggregateId("order-3")
+            .payloadJson("{}")
+            .status("PENDING")
+            .retryCount(0)
+            .createdAt(LocalDateTime.now())
+            .build());
+
+        // A claims, stalls past the timeout; B reclaims and publishes successfully.
+        List<OutboxEventEntity> claimedByA = outboxEventService.claimPendingEvents(10, "instance-A");
+        String tokenA = claimedByA.get(0).getClaimToken();
+        outboxEventService.reclaimStaleClaims(Duration.ZERO);
+        List<OutboxEventEntity> claimedByB = outboxEventService.claimPendingEvents(10, "instance-B");
+        String tokenB = claimedByB.get(0).getClaimToken();
+
+        outboxEventService.markAsPublishedBatch(List.of("evt-fencing-3"), tokenB);
+        OutboxEventEntity afterOwnerPublish =
+            outboxEventJpaRepository.findByEventId("evt-fencing-3").orElseThrow();
+        assertThat(afterOwnerPublish.getStatus()).isEqualTo("PUBLISHED");
+        assertThat(afterOwnerPublish.getClaimToken()).isNull();
+
+        // A now wakes up and reports the failure of its long-gone send. The event is already PUBLISHED, so
+        // this must be a no-op -- the previous "status <> PROCESSING" fence let A re-pend it here, and the
+        // scheduler would then publish the same event a second time.
+        outboxEventService.markAsFailed("evt-fencing-3", tokenA, "stale worker failure", null);
+
+        OutboxEventEntity afterStaleFailure =
+            outboxEventJpaRepository.findByEventId("evt-fencing-3").orElseThrow();
+        assertThat(afterStaleFailure.getStatus())
+            .withFailMessage("a stale owner must not re-open an event the current owner already published")
+            .isEqualTo("PUBLISHED");
+        assertThat(afterStaleFailure.getRetryCount()).isZero();
+    }
 }

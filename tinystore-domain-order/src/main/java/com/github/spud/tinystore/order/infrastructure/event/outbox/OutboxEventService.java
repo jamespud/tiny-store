@@ -142,29 +142,43 @@ public class OutboxEventService {
     /**
      * 标记事件为已发布
      *
+     * <p>Unfenced admin/test path: this method does not hold a lease, so it may only complete rows that are
+     * not under one (see {@link OutboxEventJpaRepository#markAsPublishedUnfenced}). The publisher itself
+     * always claims first and goes through {@link #markAsPublishedBatch(List, String)}.
+     *
      * @param eventId 事件 ID
      */
     public void markAsPublished(String eventId) {
-        outboxEventJpaRepository.findByEventId(eventId).ifPresent(event -> {
-            event.setStatus("PUBLISHED");
-            event.setPublishedAt(LocalDateTime.now());
-            outboxEventJpaRepository.save(event);
-            log.info("Outbox event marked as published: eventId={}", eventId);
-        });
+        int updated = outboxEventJpaRepository.markAsPublishedUnfenced(eventId, LocalDateTime.now());
+        if (updated == 0) {
+            log.warn("Outbox publish completion (unfenced) affected 0 rows: eventId={} is either already "
+                    + "PUBLISHED or currently held under another worker's lease", eventId);
+            return;
+        }
+        log.info("Outbox event marked as published: eventId={}", eventId);
     }
 
     /**
      * 批量标记已发布（一次 UPDATE 替代逐条 SELECT+UPDATE）。
      *
-     * <p>P1-2：这条 UPDATE 带 claim_token 围栏 —— 只影响**本次认领仍然有效**的行。若这批事件在发布期间
-     * 被判定为僵尸认领并回收（owner 卡顿超过 claimTimeout），影响行数会小于入参数量，旧 worker 不得把
-     * 它们写成 PUBLISHED。
+     * <p>P1-2 / round-3 P1：这条 UPDATE 严格带 claim_token 围栏 —— 只影响**本次认领仍然有效**的行。若这批
+     * 事件在发布期间被判定为僵尸认领并回收（owner 卡顿超过 claimTimeout），影响行数会小于入参数量，旧
+     * worker 不得把它们写成 PUBLISHED，也不得在新 owner 已经 PUBLISHED 之后把它们打回 PENDING。
      *
      * @param eventIds 发布成功的 eventId 列表
      * @param claimToken 本次认领的 fencing token
      */
     public void markAsPublishedBatch(List<String> eventIds, String claimToken) {
         if (eventIds == null || eventIds.isEmpty()) {
+            return;
+        }
+        if (claimToken == null) {
+            // The caller did not claim these rows (admin/direct invocation): use the unfenced completion,
+            // which still refuses to touch a live lease.
+            for (String eventId : eventIds) {
+                outboxEventJpaRepository.markAsPublishedUnfenced(eventId, LocalDateTime.now());
+            }
+            log.info("Outbox events marked as published (batch, unfenced path): count={}", eventIds.size());
             return;
         }
         int updated = outboxEventJpaRepository.markAsPublishedBatch(eventIds, LocalDateTime.now(), claimToken);
@@ -183,11 +197,23 @@ public class OutboxEventService {
      * @param error 错误信息
      */
     public void markAsFailed(String eventId, String error) {
-        // Legacy/unfenced callers (admin endpoints, cleanup) look the token up themselves.
-        String token = outboxEventJpaRepository.findByEventId(eventId)
-                .map(OutboxEventEntity::getClaimToken)
-                .orElse(null);
-        markAsFailed(eventId, token, error, null);
+        // Admin/cleanup caller: it does not hold a lease, so use the unfenced path (which still refuses to
+        // clobber a live lease or re-open a PUBLISHED event).
+        boolean unrecoverable = isUnrecoverable(null);
+        int retryCount = outboxEventJpaRepository.findByEventId(eventId)
+                .map(event -> event.getRetryCount() != null ? event.getRetryCount() : 0)
+                .orElse(0);
+        int nextRetryCount = retryCount + 1;
+        LocalDateTime nextAttemptAt = unrecoverable ? null
+                : LocalDateTime.now().plusSeconds(backoffSeconds(nextRetryCount));
+        int updated = outboxEventJpaRepository.markAsFailedUnfenced(eventId, error,
+                unrecoverable ? "FAILED" : "PENDING", nextAttemptAt);
+        if (updated == 0) {
+            log.warn("Outbox failure update (unfenced) affected 0 rows: eventId={}", eventId);
+            return;
+        }
+        log.warn("Outbox event marked as failed (unfenced path): eventId={}, status={}, error={}",
+                eventId, unrecoverable ? "FAILED" : "PENDING", error);
     }
 
     /**
@@ -204,7 +230,12 @@ public class OutboxEventService {
     public void markAsFailed(String eventId, String claimToken, String error, Throwable cause) {
         // P1-2: fenced update. Once the lease is reclaimed the previous owner must not be able to release or
         // re-pend the row the new owner is working on (that is what let a stalled worker override a live
-        // lease). Zero affected rows means "you no longer hold this event" -- nothing to do.
+        // lease), and round-3 P1: it must also not be able to re-pend a row the new owner already PUBLISHED.
+        // Zero affected rows means "you no longer hold this event" -- nothing to do.
+        if (claimToken == null) {
+            markAsFailed(eventId, error);
+            return;
+        }
         boolean unrecoverable = isUnrecoverable(cause);
         int retryCount = outboxEventJpaRepository.findByEventId(eventId)
                 .map(event -> event.getRetryCount() != null ? event.getRetryCount() : 0)

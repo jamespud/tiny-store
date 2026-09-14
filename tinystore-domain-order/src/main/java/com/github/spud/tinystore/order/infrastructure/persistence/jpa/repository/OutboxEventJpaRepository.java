@@ -45,22 +45,45 @@ public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventEntit
     int reclaimStaleClaims(@Param("claimedBefore") LocalDateTime claimedBefore);
 
     /**
-     * 批量标记已发布（替代逐条 SELECT+UPDATE，一次往返）。
-     * 自定义 @Modifying 方法不自动加事务——必须显式 @Transactional（否则 Hibernate 拒绝批量 UPDATE）。
+     * 批量标记已发布（替代逐条 SELECT+UPDATE，一次往返），并严格按本次 lease 围栏。
+     *
+     * <p>Review round 3 P1：完成动作必须是 {@code status='PROCESSING' AND claim_token = :claimToken}——
+     * 只放宽到 "不是 PROCESSING 就算我的" 会让一个被回收过 lease 的旧 owner，在**新 owner 已经
+     * PUBLISHED 之后**再次获得写权限，把 PUBLISHED 打回 PENDING 并让事件被重复发布。未持有 lease 的行
+     * 请走 {@link #markAsPublishedUnfenced(String, LocalDateTime)}（管理/直连路径）。
+     *
+     * <p>发布成功同时清空 claim 字段，行不再归任何 worker。
+     *
+     * <p>自定义 @Modifying 方法不自动加事务——必须显式 @Transactional（否则 Hibernate 拒绝批量 UPDATE）。
      */
     @Modifying(clearAutomatically = true)
     @Transactional
-    @Query("UPDATE OutboxEventEntity e SET e.status = 'PUBLISHED', e.publishedAt = :publishedAt "
-            // Fenced by the caller's lease when it has one; rows that are not under a live lease (published
-            // through the admin path or a direct call) still complete, but a row another worker currently
-            // holds can never be touched by a stale owner.
-            + "WHERE e.eventId IN :eventIds AND (e.status <> 'PROCESSING' OR e.claimToken = :claimToken)")
+    @Query("UPDATE OutboxEventEntity e SET e.status = 'PUBLISHED', e.publishedAt = :publishedAt, "
+            + "e.claimedBy = NULL, e.claimedAt = NULL, e.claimToken = NULL "
+            + "WHERE e.eventId IN :eventIds AND e.status = 'PROCESSING' AND e.claimToken = :claimToken")
     int markAsPublishedBatch(@Param("eventIds") List<String> eventIds,
                              @Param("publishedAt") LocalDateTime publishedAt,
                              @Param("claimToken") String claimToken);
 
     /**
-     * Fenced failure update (review P1-2): only the owner of the current lease may move the row.
+     * Unfenced publish completion for rows that are not under a lease (admin endpoint, direct invocation in
+     * tests). Deliberately refuses a row another worker currently holds: an unclaimed row can complete, a
+     * live lease cannot be completed by a caller that never took it.
+     */
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query("UPDATE OutboxEventEntity e SET e.status = 'PUBLISHED', e.publishedAt = :publishedAt, "
+            + "e.claimedBy = NULL, e.claimedAt = NULL, e.claimToken = NULL "
+            + "WHERE e.eventId = :eventId AND e.status <> 'PUBLISHED' "
+            + "AND (e.status <> 'PROCESSING' OR e.claimToken IS NULL)")
+    int markAsPublishedUnfenced(@Param("eventId") String eventId,
+                                @Param("publishedAt") LocalDateTime publishedAt);
+
+    /**
+     * Fenced failure update (review P1-2, tightened in round 3): only the owner of the *current* lease may
+     * move the row -- {@code status='PROCESSING' AND claim_token = :claimToken}. The previous
+     * {@code status <> 'PROCESSING' OR ...} form also matched PUBLISHED rows, so a stale owner could re-pend
+     * an event the new owner had already published.
      *
      * @return 1 when this worker still held the lease, 0 when the claim was reclaimed meanwhile
      */
@@ -69,12 +92,29 @@ public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventEntit
     @Query("UPDATE OutboxEventEntity e SET e.retryCount = coalesce(e.retryCount, 0) + 1, "
             + "e.lastError = :error, e.status = :status, e.nextAttemptAt = :nextAttemptAt, "
             + "e.claimedBy = NULL, e.claimedAt = NULL, e.claimToken = NULL "
-            + "WHERE e.eventId = :eventId AND (e.status <> 'PROCESSING' OR e.claimToken = :claimToken)")
+            + "WHERE e.eventId = :eventId AND e.status = 'PROCESSING' AND e.claimToken = :claimToken")
     int markAsFailedIfOwned(@Param("eventId") String eventId,
                             @Param("claimToken") String claimToken,
                             @Param("error") String error,
                             @Param("status") String status,
                             @Param("nextAttemptAt") LocalDateTime nextAttemptAt);
+
+    /**
+     * Unfenced failure update for rows that are not under a lease (admin endpoint, direct invocation in
+     * tests). Same guard as {@link #markAsPublishedUnfenced}: never touches a live lease, never re-opens a
+     * PUBLISHED event.
+     */
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query("UPDATE OutboxEventEntity e SET e.retryCount = coalesce(e.retryCount, 0) + 1, "
+            + "e.lastError = :error, e.status = :status, e.nextAttemptAt = :nextAttemptAt, "
+            + "e.claimedBy = NULL, e.claimedAt = NULL, e.claimToken = NULL "
+            + "WHERE e.eventId = :eventId AND e.status <> 'PUBLISHED' "
+            + "AND (e.status <> 'PROCESSING' OR e.claimToken IS NULL)")
+    int markAsFailedUnfenced(@Param("eventId") String eventId,
+                             @Param("error") String error,
+                             @Param("status") String status,
+                             @Param("nextAttemptAt") LocalDateTime nextAttemptAt);
 
     List<OutboxEventEntity> findByAggregateIdOrderByCreatedAtAsc(String aggregateId);
 
