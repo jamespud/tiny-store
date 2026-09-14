@@ -93,6 +93,8 @@ class TradeApplicationServicePromotionCommitTest {
 
         // Then: 下单成功，未调用同步 commit，写了 PROMOTION_COMMIT outbox
         assertThat(result.getTradeId()).isNotBlank();
+        // C13: 下单成功不等于优惠已最终确定，异步裁决期间必须如实返回 PENDING
+        assertThat(result.getPromotionCommitStatus()).isEqualTo("PENDING");
         verify(promotionClient, never()).commit(any(), any());
         verify(outboxEventService).saveEvent(
                 argThat(event -> event.getEventType() == OrderEventType.PROMOTION_COMMIT));
@@ -115,6 +117,9 @@ class TradeApplicationServicePromotionCommitTest {
 
         // Then: 下单成功，同步 commit 被调用，未写 PROMOTION_COMMIT outbox
         assertThat(result.getTradeId()).isNotBlank();
+        // 同步 commit 只表示"promotion 已受理"，订单域的裁决状态仍由回执 ack 落定（COMMITTED），
+        // 响应如实报 PENDING，而不是把"已提交"说成"已确定"
+        assertThat(result.getPromotionCommitStatus()).isEqualTo("PENDING");
         verify(promotionClient).commit(any(), any());
         verify(outboxEventService, never()).saveEvent(
                 argThat(event -> event.getEventType() == OrderEventType.PROMOTION_COMMIT));

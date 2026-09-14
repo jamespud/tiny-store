@@ -523,6 +523,10 @@ public class TradeApplicationService {
                     .tradeId(trade.getTradeId())
                     .payableAmountCents(trade.getPayableAmountCents())
                     .paymentIntentId(paymentId)
+                    // C13: expose the promotion verdict. A 200 here means "order created", not
+                    // "the discount is final" -- the coupon is arbitrated asynchronously (a
+                    // contested coupon has exactly one COMMITTED winner; losers go FAILED).
+                    .promotionCommitStatus(trade.getPromotionCommitStatus())
                     .build();
 
             // 幂等收尾：记录响应内容。真正写入 Redis 的时机由前面登记的同步器决定
