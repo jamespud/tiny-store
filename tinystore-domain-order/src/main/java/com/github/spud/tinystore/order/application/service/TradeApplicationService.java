@@ -627,14 +627,42 @@ public class TradeApplicationService {
         Throwable cause = failure;
         while (cause != null) {
             if (cause instanceof DataIntegrityViolationException) {
-                DomainConflictException translated = new DomainConflictException("TRADE_CONFLICT",
-                        "Trade creation conflicts with an existing record: tradeId=" + tradeId);
-                translated.initCause(failure);
-                return translated;
+                // P2: only integrity errors we can attribute to a *business* rule become 409. A NOT NULL,
+                // foreign-key or check violation is a programming/schema problem, and mapping those to
+                // "conflict" hides real bugs behind a user-looking conflict -- so they keep their 500 and
+                // stay visible to monitoring.
+                if (isKnownBusinessUniqueViolation(cause)) {
+                    DomainConflictException translated = new DomainConflictException("TRADE_CONFLICT",
+                            "Trade creation conflicts with an existing record: tradeId=" + tradeId);
+                    translated.initCause(failure);
+                    return translated;
+                }
+                return failure;
             }
             cause = cause.getCause();
         }
         return failure;
+    }
+
+    /**
+     * Known business uniqueness rules for create-trade. Everything else (NOT NULL/FK/CHECK, unknown unique
+     * constraints) is deliberately left as a server error.
+     */
+    private static final java.util.Set<String> BUSINESS_UNIQUE_CONSTRAINTS = java.util.Set.of(
+            "trade_pkey", "uk_trade_trade_id", "trade_trade_id_key", "shop_order_trade_id_shop_id_key");
+
+    private static boolean isKnownBusinessUniqueViolation(Throwable cause) {
+        String message = cause.getMessage();
+        if (message == null) {
+            return false;
+        }
+        // Postgres unique violations surface as SQLState 23505; the constraint name distinguishes them from
+        // schema problems.
+        boolean uniqueViolation = message.contains("23505") || message.contains("duplicate key value");
+        if (!uniqueViolation) {
+            return false;
+        }
+        return BUSINESS_UNIQUE_CONSTRAINTS.stream().anyMatch(message::contains);
     }
 
     /**
@@ -1244,8 +1272,12 @@ public class TradeApplicationService {
 
                     List<ShopOrder> shopOrders = shopOrderRepository.findByTradeId(tradeId);
                     if (shopOrders.isEmpty()) {
-                        log.warn("No shop orders found for trade: tradeId={}", tradeId);
-                        return List.<String>of();
+                        // P2 (C8): a trade without any shop order is a data inconsistency, not a successful
+                        // confirmation. Returning an empty "advanced" list made the API answer 200 while
+                        // nothing had been received; surface it as a server error instead.
+                        throw new IllegalStateException(
+                                "Trade exists but has no shop orders; refusing to report success: tradeId="
+                                        + tradeId);
                     }
 
                     for (ShopOrder shopOrder : shopOrders) {

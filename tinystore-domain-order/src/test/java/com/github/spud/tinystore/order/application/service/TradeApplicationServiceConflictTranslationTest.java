@@ -36,15 +36,16 @@ class TradeApplicationServiceConflictTranslationTest {
     }
 
     @Test
-    @DisplayName("被包装的唯一约束冲突同样会被翻译")
+    @DisplayName("被包装的业务唯一约束冲突同样会被翻译")
     void wrappedDataIntegrityViolation_isTranslatedToDomainConflict() {
         Exception wrapped = new IllegalStateException("persist failed",
-                new DataIntegrityViolationException("violates unique constraint \"shop_order_order_id_key\""));
+                new DataIntegrityViolationException(
+                        "violates unique constraint \"uk_trade_trade_id\" (SQL State: 23505)"));
 
         Exception translated = service.translateCreateConflict(wrapped, "trade-2");
 
         assertThat(translated).isInstanceOf(DomainConflictException.class);
-        assertThat(translated.getMessage()).doesNotContain("shop_order_order_id_key");
+        assertThat(translated.getMessage()).doesNotContain("uk_trade_trade_id");
     }
 
     @Test
@@ -53,5 +54,19 @@ class TradeApplicationServiceConflictTranslationTest {
         RuntimeException boom = new RuntimeException("upstream unavailable");
 
         assertThat(service.translateCreateConflict(boom, "trade-3")).isSameAs(boom);
+    }
+
+    @Test
+    @DisplayName("P2: NOT NULL / FK / CHECK 违反不能被伪装成用户冲突（保持 500）")
+    void schemaProblemsAreNotTranslated() {
+        DataIntegrityViolationException notNull = new DataIntegrityViolationException(
+                "could not execute statement; SQL [n/a]; ERROR: null value in column \"seller_id\" violates "
+                        + "not-null constraint (SQL State: 23502)");
+
+        assertThat(service.translateCreateConflict(notNull, "trade-4")).isSameAs(notNull);
+
+        DataIntegrityViolationException unknownUnique = new DataIntegrityViolationException(
+                "ERROR: duplicate key value violates unique constraint \"some_new_internal_key\" (SQL State: 23505)");
+        assertThat(service.translateCreateConflict(unknownUnique, "trade-5")).isSameAs(unknownUnique);
     }
 }
