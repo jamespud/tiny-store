@@ -369,6 +369,10 @@ public class TradeApplicationService {
                 InventoryDeductRequest deductRequest = InventoryDeductRequest.builder()
                         .orderId(shopOrder.getOrderId())
                         .tradeId(tradeId)
+                        // Round-3 P1: hand inventory the reservation window this trade asks for, so it can
+                        // refuse a TTL that does not fit its orphan-reclaim budget instead of silently
+                        // creating a pre-deduction the cleaner could later release while still legitimate.
+                        .reservationTtlMinutes(reservationTtlMinutes)
                         .items(deductItems)
                         .build();
 
