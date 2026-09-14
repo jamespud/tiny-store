@@ -54,6 +54,9 @@ import com.github.spud.tinystore.inventory.infrastructure.util.InventoryRedisMan
         // The reclaim's correctness invariant: the delay must exceed the biggest legitimate reservation
         // TTL (the consumer refuses expired events, so after the TTL no row can appear any more).
         "inventory.uncommit.max-reservation-ttl=PT5M",
+        // ...and the service's own default expiry must fit inside that budget too (the pre-deduct boundary
+        // check keeps a *caller's* TTL inside it; this one keeps a caller that omits the TTL inside it).
+        "inventory.reservation.expiry.default-minutes=5",
         "inventory.uncommit.timeout=PT30M"
     }
 )
