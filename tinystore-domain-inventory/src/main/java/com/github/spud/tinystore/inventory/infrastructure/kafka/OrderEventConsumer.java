@@ -101,15 +101,31 @@ public class OrderEventConsumer {
     @SuppressWarnings("unchecked")
     private void handleInventoryReserveDb(String eventId, String payload) throws Exception {
         Map<String, Object> p = objectMapper.readValue(payload, Map.class);
+        String reservationId = (String) p.get("reservationId");
+        OffsetDateTime expireAt = OffsetDateTime.parse((String) p.get("expireAt"));
+
+        // P0 (orphan reclaim race): a *late* event must not resurrect a reservation whose window has
+        // already closed. The Redis pre-deduction this event belongs to is then older than the reservation
+        // TTL, which is exactly the population the orphan cleaner is allowed to reclaim; inserting the row
+        // anyway leaves Redis without the admission while the DB says PRE_DEDUCTED -- an oversell in the
+        // making. Refusing here is what makes "orphan-check-delay > max reservation TTL" a real protocol
+        // invariant instead of a timing hope: after the TTL no legitimate row can still appear.
+        if (!expireAt.isAfter(OffsetDateTime.now())) {
+            log.warn("Refusing expired INVENTORY_RESERVE_DB event: eventId={}, reservationId={}, expireAt={} "
+                    + "-- the pre-deduction is reclaimed by the uncommit/orphan cleanup instead",
+                    eventId, reservationId, expireAt);
+            return;
+        }
+
         reservationDomainService.saveReservation(
-                (String) p.get("reservationId"),
+                reservationId,
                 (String) p.get("shopId"),
                 (String) p.get("skuId"),
                 ((Number) p.get("quantity")).intValue(),
                 (String) p.get("tradeId"),
                 (String) p.get("orderId"),
                 eventId,
-                OffsetDateTime.parse((String) p.get("expireAt")));
+                expireAt);
     }
 
     @SuppressWarnings("unchecked")

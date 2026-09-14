@@ -51,6 +51,9 @@ import com.github.spud.tinystore.inventory.infrastructure.util.InventoryRedisMan
         "inventory.reconciliation.enabled=false",
         "inventory.reservation.expiry.enabled=false",
         "inventory.uncommit.orphan-check-delay=PT10M",
+        // The reclaim's correctness invariant: the delay must exceed the biggest legitimate reservation
+        // TTL (the consumer refuses expired events, so after the TTL no row can appear any more).
+        "inventory.uncommit.max-reservation-ttl=PT5M",
         "inventory.uncommit.timeout=PT30M"
     }
 )
