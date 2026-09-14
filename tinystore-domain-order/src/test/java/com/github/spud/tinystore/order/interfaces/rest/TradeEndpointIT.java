@@ -46,11 +46,15 @@ class TradeEndpointIT extends AbstractSpringBootOrderIT {
     private TradeJpaRepository tradeRepository;
 
     @Autowired
+    private com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository tradeIdempotencyRecordRepository;
+
+    @Autowired
     private StringRedisTemplate redisTemplate;
 
     @BeforeEach
     void cleanup() {
         outboxEventJpaRepository.deleteAll();
+        tradeIdempotencyRecordRepository.deleteAll();
         tradeRepository.deleteAll();
 
         // 清理 Redis 中的幂等键
@@ -123,6 +127,70 @@ class TradeEndpointIT extends AbstractSpringBootOrderIT {
 
         // Then: returns 400 (validation failure)
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades")
+    @DisplayName("POST /api/order/trades - the same key replays the same trade even after Redis forgets it")
+    void createTrade_sameKeyReplaysAfterRedisLoss() {
+        // Review P0-2: the success record used to live only in Redis (written in afterCommit). A Redis
+        // restart -- or a Redis failure right after the DB commit -- could therefore let the same
+        // Idempotency-Key create a SECOND trade, and could also turn a committed trade into an HTTP error.
+        // The durable record makes the replay independent of Redis.
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("Idempotency-Key", "idem-durable-replay-001");
+
+        String requestBody = "{"
+            + "\"tradeId\":\"trade-durable-replay-001\","
+            + "\"buyerId\":\"buyer-durable-001\","
+            + "\"buyerNick\":\"DurableBuyer\","
+            + "\"traceId\":\"trace-durable-001\","
+            + "\"orderLines\":[{"
+            + "\"skuId\":\"SKU_IT_001\","
+            + "\"productId\":\"PROD_IT_001\","
+            + "\"productName\":\"Test Product\","
+            + "\"shopId\":\"SHOP_IT_001\","
+            + "\"sellerId\":\"SELLER_IT_001\","
+            + "\"quantity\":1,"
+            + "\"priceCents\":9900"
+            + "}]"
+            + "}";
+
+        HttpEntity<String> request = new HttpEntity<>(requestBody, headers);
+        ResponseEntity<String> first = restTemplate.exchange("/order/trades", HttpMethod.POST, request, String.class);
+        assertThat(first.getStatusCode()).isEqualTo(HttpStatus.OK);
+        String firstTradeId = tradeIdOf(first.getBody());
+
+        // Same key + same body while Redis is intact: replay (this is the long-standing behaviour).
+        ResponseEntity<String> second = restTemplate.exchange("/order/trades", HttpMethod.POST, request, String.class);
+        assertThat(second.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(tradeIdOf(second.getBody())).isEqualTo(firstTradeId);
+
+        // Simulate Redis losing the key (restart / flush): the durable record must still answer the retry.
+        Set<String> keys = redisTemplate.keys("idempotency:*");
+        if (keys != null && !keys.isEmpty()) {
+            redisTemplate.delete(keys);
+        }
+
+        ResponseEntity<String> third = restTemplate.exchange("/order/trades", HttpMethod.POST, request, String.class);
+        assertThat(third.getStatusCode())
+            .withFailMessage("a retry after Redis lost the key must replay, not create another trade")
+            .isEqualTo(HttpStatus.OK);
+        assertThat(tradeIdOf(third.getBody())).isEqualTo(firstTradeId);
+        assertThat(tradeRepository.count())
+            .withFailMessage("exactly one trade row is expected for this idempotency key")
+            .isEqualTo(1L);
+    }
+
+    private static String tradeIdOf(String responseBody) {
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(responseBody).path("data").path("tradeId").asText();
+        }
+        catch (Exception e) {
+            throw new AssertionError("cannot read tradeId from response: " + responseBody, e);
+        }
     }
 
     @Test

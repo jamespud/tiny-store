@@ -27,6 +27,8 @@ import com.github.spud.tinystore.order.infrastructure.acl.dto.*;
 import com.github.spud.tinystore.order.infrastructure.event.outbox.OutboxEventService;
 import com.github.spud.tinystore.order.infrastructure.idempotency.IdempotencyService;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.PaymentIntentEntity;
+import com.github.spud.tinystore.order.infrastructure.persistence.jpa.entity.TradeIdempotencyRecordEntity;
+import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository;
 import com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.PaymentIntentJpaRepository;
 import com.github.spud.tinystore.order.interfaces.dto.response.CreateTradeData;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +40,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
@@ -108,6 +111,9 @@ public class TradeApplicationService {
     private PaymentIntentJpaRepository paymentIntentJpaRepository;
 
     @Autowired
+    private JpaTradeIdempotencyRecordRepository tradeIdempotencyRecordRepository;
+
+    @Autowired
     private OutboxEventService outboxEventService;
 
     @Autowired
@@ -164,6 +170,23 @@ public class TradeApplicationService {
             // 1. 幂等：请求指纹必须在生成服务端 tradeId **之前**计算，
             //    否则"同键不同请求体"无法被识别（服务端 ID 每次都不同）。
             String fingerprint = TradeRequestFingerprint.of(command);
+
+            // P0-2: the durable record decides first. Redis is the concurrency guard; this table is the
+            // authority on "this key already produced this response", so a Redis failure after commit (or a
+            // Redis restart) can no longer turn a committed trade into an error or allow a second trade.
+            Optional<TradeIdempotencyRecordEntity> durableRecord =
+                    tradeIdempotencyRecordRepository.findById(idempotencyKey);
+            if (durableRecord.isPresent()) {
+                TradeIdempotencyRecordEntity record = durableRecord.get();
+                if (!fingerprint.equals(record.getFingerprint())) {
+                    throw new IdempotencyConflictException(
+                            "Idempotency key reused with a different request body", idempotencyKey);
+                }
+                log.info("Idempotent trade creation: replaying durable record, key={}, tradeId={}",
+                        idempotencyKey, record.getTradeId());
+                return objectMapper.readValue(record.getResponseJson(), CreateTradeData.class);
+            }
+
             switch (idempotencyService.acquire(IDEMPOTENCY_SCOPE, idempotencyKey, fingerprint)) {
                 case FINGERPRINT_CONFLICT -> throw new IdempotencyConflictException(
                         "Idempotency key reused with a different request body", idempotencyKey);
@@ -532,10 +555,30 @@ public class TradeApplicationService {
             // 幂等收尾：记录响应内容。真正写入 Redis 的时机由前面登记的同步器决定
             // （事务提交后写 SUCCEEDED；回滚则删除记录）。
             idempotencyResponseHolder[0] = objectMapper.writeValueAsString(result);
+
+            // P0-2: persist the durable record in the SAME transaction as the trade, so the commit of the
+            // trade and the record of its response are atomic. Everything after this point (Redis) is a cache.
+            tradeIdempotencyRecordRepository.save(TradeIdempotencyRecordEntity.builder()
+                    .idempotencyKey(idempotencyKey)
+                    .scope(IDEMPOTENCY_SCOPE)
+                    .fingerprint(fingerprint)
+                    .state("COMMITTED")
+                    .tradeId(trade.getTradeId())
+                    .responseJson(idempotencyResponseHolder[0])
+                    .createdAt(LocalDateTime.now())
+                    .build());
+
             if (!TransactionSynchronizationManager.isSynchronizationActive()) {
                 // 非事务上下文（单测直接驱动应用服务）：立即落库，保持行为可预期。
-                idempotencyService.markSucceeded(IDEMPOTENCY_SCOPE, idempotencyKey, fingerprint,
-                        idempotencyResponseHolder[0]);
+                try {
+                    idempotencyService.markSucceeded(IDEMPOTENCY_SCOPE, idempotencyKey, fingerprint,
+                            idempotencyResponseHolder[0]);
+                } catch (Exception e) {
+                    // Same reasoning as afterCommit(): the durable record is written above, so a cache failure
+                    // must not turn a committed create into an error.
+                    log.warn("Idempotency cache update failed (durable record is authoritative): key={}",
+                            idempotencyKey, e);
+                }
             }
 
             log.info("Trade creation succeeded: tradeId={}, paymentId={}", trade.getTradeId(), paymentId);
@@ -592,6 +635,14 @@ public class TradeApplicationService {
             log.info("Idempotent trade creation: replaying stored response");
             return objectMapper.readValue(cachedResponse, CreateTradeData.class);
         }
+        // P0-2: Redis no longer holds the only copy -- fall back to the durable record (Redis may have been
+        // restarted, or the after-commit write may have failed).
+        Optional<TradeIdempotencyRecordEntity> durable = tradeIdempotencyRecordRepository.findById(idempotencyKey);
+        if (durable.isPresent()) {
+            log.info("Idempotent trade creation: replaying durable record (redis cache empty), key={}",
+                    idempotencyKey);
+            return objectMapper.readValue(durable.get().getResponseJson(), CreateTradeData.class);
+        }
         throw new DomainConflictException("IDEMPOTENT_CONFLICT",
                 "Trade creation already completed for this idempotency key but its response is unavailable");
     }
@@ -612,8 +663,17 @@ public class TradeApplicationService {
             @Override
             public void afterCommit() {
                 if (responseHolder[0] != null) {
-                    idempotencyService.markSucceeded(IDEMPOTENCY_SCOPE, idempotencyKey, fingerprint,
-                            responseHolder[0]);
+                    try {
+                        idempotencyService.markSucceeded(IDEMPOTENCY_SCOPE, idempotencyKey, fingerprint,
+                                responseHolder[0]);
+                    } catch (Exception e) {
+                        // P0-2: the trade AND its idempotency record are already committed, so a Redis
+                        // failure here must not be reported as a request failure -- that was the ambiguous
+                        // commit window (client sees an error, retries, and the retry must replay). The
+                        // durable record answers the retry; Redis is only a cache.
+                        log.warn("Idempotency cache update failed after commit (durable record is authoritative): "
+                                + "key={}", idempotencyKey, e);
+                    }
                 }
             }
 

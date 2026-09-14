@@ -1,6 +1,7 @@
 package com.github.spud.tinystore.order.application.service;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
@@ -44,6 +45,14 @@ class TradeApplicationServiceAuthoritativePriceTest {
 	void setUp() {
 		service = new TradeApplicationService();
 		ReflectionTestUtils.setField(service, "idempotencyService", idempotencyService);
+
+        // P0-2: createTrade consults the durable idempotency record first (empty here -> proceed).
+        com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository recordRepository =
+                mock(com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository.class);
+        org.mockito.Mockito.lenient().when(recordRepository.findById(anyString())).thenReturn(java.util.Optional.empty());
+        org.mockito.Mockito.lenient().when(recordRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        ReflectionTestUtils.setField(service, "tradeIdempotencyRecordRepository", recordRepository);
+
 		lenient().when(idempotencyService.acquire(anyString(), anyString(), anyString()))
 			.thenReturn(IdempotencyService.AcquireResult.ACQUIRED);
 		ReflectionTestUtils.setField(service, "skuPriceResolver", new SkuPriceResolver(productClient));

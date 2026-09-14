@@ -3,6 +3,7 @@ package com.github.spud.tinystore.order.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.mock;
@@ -122,6 +123,14 @@ class TradeApplicationServiceQuoteCompensationTest {
         when(idempotencyService.acquire(any(), any(), any()))
             .thenReturn(IdempotencyService.AcquireResult.ACQUIRED);
         ReflectionTestUtils.setField(service, "idempotencyService", idempotencyService);
+
+        // P0-2: createTrade consults the durable idempotency record first (empty here -> proceed).
+        com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository recordRepository =
+                mock(com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository.class);
+        when(recordRepository.findById(anyString())).thenReturn(java.util.Optional.empty());
+        when(recordRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        ReflectionTestUtils.setField(service, "tradeIdempotencyRecordRepository", recordRepository);
+
 
         PromotionClient promotionClient = mock(PromotionClient.class);
         when(promotionClient.quote(any(), any())).thenReturn(quote);

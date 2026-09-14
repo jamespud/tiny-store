@@ -87,6 +87,13 @@ class TradeApplicationServicePaymentFlowTest {
         ReflectionTestUtils.setField(tradeApplicationService, "paymentIntentJpaRepository", paymentIntentJpaRepository);
         ReflectionTestUtils.setField(tradeApplicationService, "outboxEventService", outboxEventService);
         ReflectionTestUtils.setField(tradeApplicationService, "idempotencyService", idempotencyService);
+        // P0-2: createTrade consults the durable idempotency record first (empty here -> proceed).
+        com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository recordRepository =
+                org.mockito.Mockito.mock(com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository.class);
+        org.mockito.Mockito.lenient().when(recordRepository.findById(anyString())).thenReturn(java.util.Optional.empty());
+        org.mockito.Mockito.lenient().when(recordRepository.save(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        ReflectionTestUtils.setField(tradeApplicationService, "tradeIdempotencyRecordRepository", recordRepository);
         // 幂等协议：createTrade 现在通过原子 acquire 取得处理权（mock 默认返回 null）。
         lenient().when(idempotencyService.acquire(anyString(), anyString(), anyString()))
             .thenReturn(IdempotencyService.AcquireResult.ACQUIRED);
