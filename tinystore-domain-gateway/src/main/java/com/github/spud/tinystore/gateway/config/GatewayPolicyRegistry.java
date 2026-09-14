@@ -23,6 +23,17 @@ public class GatewayPolicyRegistry {
 		policiesByRoute.clear();
 	}
 
+	/**
+	 * Replace the whole policy set in one step (P1-6 validate-then-swap). Applying policies route by route
+	 * would leave a window where a live route has no rate-limit/idempotency policy at all.
+	 */
+	public void replaceAll(Map<String, GatewayRoutesDefinition.RoutePolicies> policies) {
+		policiesByRoute.clear();
+		if (policies != null) {
+			policies.forEach(this::registerPolicies);
+		}
+	}
+
 	public Optional<GatewayRoutesDefinition.RoutePolicies> findPolicies(String routeId) {
 		return Optional.ofNullable(policiesByRoute.get(routeId));
 	}
