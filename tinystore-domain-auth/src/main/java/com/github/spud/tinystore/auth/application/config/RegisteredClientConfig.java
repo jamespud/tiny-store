@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -99,7 +100,8 @@ public class RegisteredClientConfig {
   }
 
   @Bean
-  CommandLineRunner initClients(RegisteredClientRepository repo, PasswordEncoder encoder) {
+  CommandLineRunner initClients(RegisteredClientRepository repo, PasswordEncoder encoder,
+    Environment environment) {
     return args -> {
       // web client (PKCE)
       seedIfAbsent(repo, "tinystore-web", () -> RegisteredClient.withId(seededClientId("tinystore-web"))
@@ -132,8 +134,8 @@ public class RegisteredClientConfig {
       // DB 的 secret；轮换需要显式更新路径（改 clientSecret 或写迁移）。prod 下缺失/默认 secret 会由
       // DefaultCredentialGuard 直接拒绝启动。
       seedIfAbsent(repo, "tinystore-internal", () -> {
-        String secret = System.getenv()
-          .getOrDefault("TINYSTORE_INTERNAL_CLIENT_SECRET", "changeit");
+        String secret = SeedCredentialPolicy.secretFrom(environment,
+          SeedCredentialPolicy.INTERNAL_SECRET_ENV);
         return RegisteredClient.withId(seededClientId("tinystore-internal"))
           .clientId("tinystore-internal")
           .clientIdIssuedAt(Instant.now())
@@ -149,32 +151,44 @@ public class RegisteredClientConfig {
           .build();
       });
 
-      // tool client
-      seedIfAbsent(repo, "tinystore-tool", () -> RegisteredClient.withId(seededClientId("tinystore-tool"))
-        .clientId("tinystore-tool")
-        .clientIdIssuedAt(Instant.now())
-        .clientSecret(encoder.encode("changeit"))
-        .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-        .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-        .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-        .redirectUri("http://localhost:8081/callback")
-        .scope("openid")
-        .scope("user.profile")
-        .scope("user.phone")
-        .scope("user.address")
-        .scope("user.follow")
-        .scope("user.payment")
-        .scope("svc.admin")
-        .clientSettings(ClientSettings.builder()
-          .requireProofKey(false)
-          .requireAuthorizationConsent(true)
-          .build())
-        .tokenSettings(TokenSettings.builder()
-          .accessTokenTimeToLive(userAccessTokenTtl)
-          .refreshTokenTimeToLive(userRefreshTokenTtl)
-          .reuseRefreshTokens(false)
-          .build())
-        .build());
+      // tool client (local operations/debugging, carries svc.admin)
+      // Review round-3 P1: this used to be seeded in every profile with a hardcoded "changeit" secret and the
+      // svc.admin scope, so a production deployment shipped a credential anyone can read from the repository.
+      // It is now seeded only when explicitly enabled (default: outside prod only), with the secret coming
+      // from TINYSTORE_TOOL_CLIENT_SECRET; DefaultCredentialGuard fails the context if prod enables it with
+      // the demo secret.
+      if (SeedCredentialPolicy.toolClientEnabled(environment)) {
+        seedIfAbsent(repo, "tinystore-tool", () -> RegisteredClient.withId(seededClientId("tinystore-tool"))
+          .clientId("tinystore-tool")
+          .clientIdIssuedAt(Instant.now())
+          .clientSecret(encoder.encode(
+            SeedCredentialPolicy.secretFrom(environment, SeedCredentialPolicy.TOOL_SECRET_ENV)))
+          .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+          .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+          .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+          .redirectUri("http://localhost:8081/callback")
+          .scope("openid")
+          .scope("user.profile")
+          .scope("user.phone")
+          .scope("user.address")
+          .scope("user.follow")
+          .scope("user.payment")
+          .scope("svc.admin")
+          .clientSettings(ClientSettings.builder()
+            .requireProofKey(false)
+            .requireAuthorizationConsent(true)
+            .build())
+          .tokenSettings(TokenSettings.builder()
+            .accessTokenTimeToLive(userAccessTokenTtl)
+            .refreshTokenTimeToLive(userRefreshTokenTtl)
+            .reuseRefreshTokens(false)
+            .build())
+          .build());
+      }
+      else {
+        LOG.info("Registered client 'tinystore-tool' is not seeded (prod default); set {} =true to enable it",
+          SeedCredentialPolicy.TOOL_ENABLED_ENV);
+      }
     };
   }
 }
