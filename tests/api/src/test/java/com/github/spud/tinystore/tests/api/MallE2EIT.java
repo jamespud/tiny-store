@@ -55,23 +55,13 @@ class MallE2EIT {
     private TestRestTemplate restTemplate;
     private String gatewayBaseUrl;
 
-    /**
-     * Direct per-service base URLs.
-     *
-     * <p>These used to be hardcoded {@code http://localhost:<fixed-port>}, which meant the suite
-     * could only ever run against the single-instance compose stack (one published host port per
-     * service). When services run as N replicas behind Nacos, each replica gets its own host port
-     * and the old constants point at a dead port. Override them per run, e.g.
-     * {@code -Dproduct.base.url=http://localhost:38090}.
-     *
-     * <p>Defaults keep the historical single-instance behaviour.
-     */
-    private static final String PRODUCT_BASE_URL =
-        System.getProperty("product.base.url", "http://localhost:8090");
-    private static final String INVENTORY_BASE_URL =
-        System.getProperty("inventory.base.url", "http://localhost:13000");
-    private static final String PROMOTION_BASE_URL =
-        System.getProperty("promotion.base.url", "http://localhost:1200");
+    // This suite used to call product/inventory/promotion on their own host ports (and carried
+    // -Dproduct.base.url / -Dinventory.base.url / -Dpromotion.base.url overrides for that). It no
+    // longer does: business E2E must go through the gateway, so a route-contract drift (D2) turns
+    // these tests red instead of being masked by a direct-port call. Only replica-level probes may
+    // bypass the gateway (see DistributedMultiInstanceIT, which reads per-replica metrics).
+    // Public paths are derived from gatewayBaseUrl, so there is no second entry point to keep in
+    // sync -- and none of these tests needs a per-service host port to exist at all.
 
     // Fixed seed data (contract with docker-compose-test init)
     private static final String SHOP_A = "SHOP_A";
@@ -481,7 +471,7 @@ class MallE2EIT {
         headers.add("X-Shop-Id", shopId);
 
         ResponseEntity<String> response = restTemplate.exchange(
-            PRODUCT_BASE_URL + "/api/skus/" + skuId,
+            gatewayBaseUrl + "/api/skus/" + skuId,
             HttpMethod.GET,
             new HttpEntity<>(headers),
             String.class
@@ -522,7 +512,7 @@ class MallE2EIT {
                     headers.add("Idempotency-Key", "seed-inv-" + UUID.randomUUID());
 
                     ResponseEntity<Map> response = restTemplate.exchange(
-                        INVENTORY_BASE_URL + "/api/inventory/reservations/reserve",
+                        gatewayBaseUrl + "/api/inventory/reservations/reserve",
                         HttpMethod.POST,
                         new HttpEntity<>(reserveRequest, headers),
                         Map.class
@@ -560,7 +550,7 @@ class MallE2EIT {
                 releaseHeaders.add("Idempotency-Key", releaseIdempotencyKeyRef.get());
 
                 ResponseEntity<Map> releaseResponse = restTemplate.exchange(
-                    INVENTORY_BASE_URL + "/api/inventory/reservations/release",
+                    gatewayBaseUrl + "/api/inventory/reservations/release",
                     HttpMethod.POST,
                     new HttpEntity<>(releaseRequest, releaseHeaders),
                     Map.class
@@ -601,7 +591,7 @@ class MallE2EIT {
         headers.add("Idempotency-Key", "seed-promo-" + UUID.randomUUID());
 
         ResponseEntity<Map> response = restTemplate.exchange(
-            PROMOTION_BASE_URL + "/api/promotion/checkout/quote",
+            gatewayBaseUrl + "/api/promotion/checkout/quote",
             HttpMethod.POST,
             new HttpEntity<>(quoteRequest, headers),
             Map.class
@@ -631,7 +621,7 @@ class MallE2EIT {
         releaseHeaders.add("Idempotency-Key", "seed-promo-rel-" + UUID.randomUUID());
 
         restTemplate.exchange(
-            PROMOTION_BASE_URL + "/api/promotion/checkout/release",
+            gatewayBaseUrl + "/api/promotion/checkout/release",
             HttpMethod.POST,
             new HttpEntity<>(releaseRequest, releaseHeaders),
             Map.class
