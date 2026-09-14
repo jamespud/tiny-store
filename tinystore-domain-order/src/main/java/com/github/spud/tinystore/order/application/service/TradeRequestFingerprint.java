@@ -32,6 +32,10 @@ public final class TradeRequestFingerprint {
     public static String of(CreateTradeCommand command) {
         StringBuilder canonical = new StringBuilder();
         canonical.append("buyerId=").append(nullSafe(command.getBuyerId())).append('\n');
+        // P1-3: buyerNick/sellerId/productName are part of the request the client sent. sellerId is written
+        // straight into ShopOrder (not a display-only field), and buyerNick lands in Trade, so leaving them out
+        // let "same key + different body" replay the first trade instead of answering 409.
+        canonical.append("buyerNick=").append(nullSafe(command.getBuyerNick())).append('\n');
         canonical.append("addressId=").append(nullSafe(command.getAddressId())).append('\n');
 
         // 客户端显式传入的 tradeId 属于请求的一部分；服务端生成的不参与。
@@ -57,8 +61,10 @@ public final class TradeRequestFingerprint {
         for (CreateTradeCommand.OrderLineCommand line : lines) {
             rendered.add("line|"
                     + nullSafe(line.getShopId()) + '|'
+                    + nullSafe(line.getSellerId()) + '|'
                     + nullSafe(line.getSkuId()) + '|'
                     + nullSafe(line.getProductId()) + '|'
+                    + nullSafe(line.getProductName()) + '|'
                     + nullSafe(line.getQuantity()) + '|'
                     + nullSafe(line.getPriceCents()) + '|'
                     + nullSafe(line.getWeightGrams()));

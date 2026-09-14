@@ -90,11 +90,35 @@ class TradeRequestFingerprintTest {
     }
 
     @Test
-    @DisplayName("traceId 与展示字段不参与指纹")
-    void traceIdAndDisplayFields_areIgnored() {
+    @DisplayName("traceId 不参与指纹（每次请求都不同，不应制造假冲突）")
+    void traceIdIsIgnored() {
         String baseline = TradeRequestFingerprint.of(base().build());
 
         assertThat(TradeRequestFingerprint.of(base().traceId("trace-2").build()))
                 .as("traceId must not affect the fingerprint").isEqualTo(baseline);
+    }
+
+    @Test
+    @DisplayName("P1-3: sellerId/buyerNick/productName 参与指纹 —— 同键换 body 必须 409")
+    void businessFieldsBeyondPriceAreBound() {
+        String baseline = TradeRequestFingerprint.of(base().build());
+
+        // sellerId 会被直接写进 ShopOrder，绝不是展示字段：换一个卖家必须算另一个请求体。
+        assertThat(TradeRequestFingerprint.of(base()
+                .orderLines(List.of(CreateTradeCommand.OrderLineCommand.builder()
+                    .shopId("SHOP_A").skuId("SKU_A").productId("prod-SKU_A").productName("display-name")
+                    .sellerId("seller-OTHER").quantity(1).priceCents(1000L).weightGrams(0L).build()))
+                .build()))
+            .as("sellerId").isNotEqualTo(baseline);
+
+        assertThat(TradeRequestFingerprint.of(base().buyerNick("other-nick").build()))
+            .as("buyerNick (written into Trade)").isNotEqualTo(baseline);
+
+        assertThat(TradeRequestFingerprint.of(base()
+                .orderLines(List.of(CreateTradeCommand.OrderLineCommand.builder()
+                    .shopId("SHOP_A").skuId("SKU_A").productId("prod-SKU_A").productName("renamed")
+                    .sellerId("seller-SHOP_A").quantity(1).priceCents(1000L).weightGrams(0L).build()))
+                .build()))
+            .as("productName").isNotEqualTo(baseline);
     }
 }
