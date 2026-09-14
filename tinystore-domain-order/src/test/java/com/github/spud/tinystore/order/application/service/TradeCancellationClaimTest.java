@@ -1,6 +1,8 @@
 package com.github.spud.tinystore.order.application.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.any;
@@ -67,13 +69,21 @@ class TradeCancellationClaimTest {
     }
 
     @Test
-    @DisplayName("认领使用 trade 派生的稳定键，且另一个持有者存在时直接跳过")
-    void whenClaimHeldElsewhere_shouldSkipWithoutSideEffects() {
+    @DisplayName("P1: 取消正在进行（IN_PROGRESS）不能当成功返回 —— 必须让调用方知道还没取消")
+    void whenCancellationInProgress_shouldConflictInsteadOfReportingSuccess() {
         lenient().when(idempotencyService.acquire(anyString(), anyString(), anyString()))
                 .thenReturn(IdempotencyService.AcquireResult.IN_PROGRESS);
 
-        assertThatCode(() -> service.autoCancelTrade("trade-claim-1", "PROMOTION_COMMIT_FAILED:x",
-                "trace-1")).doesNotThrowAnyException();
+        // 另一个实例还在跑；此刻返回 200 “Trade cancelled” 是假成功（它可能随后回滚）。
+        Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(
+                () -> service.autoCancelTrade("trade-claim-1", "PROMOTION_COMMIT_FAILED:x", "trace-1"));
+        // autoCancelTrade 会包一层 IllegalStateException；根因是 CANCEL_IN_PROGRESS。
+        // REST 取消入口不包这一层，同样的异常直接由 GlobalExceptionHandler 映射成 409。
+        assertThat(thrown).hasRootCauseInstanceOf(
+                com.github.spud.tinystore.order.domain.exception.DomainConflictException.class);
+        assertThat(thrown.getCause())
+                .isInstanceOf(com.github.spud.tinystore.order.domain.exception.DomainConflictException.class)
+                .hasMessageContaining("already in progress");
 
         // 认领键必须是 trade 派生的稳定值（原先 autoCancelTrade 用 System.nanoTime() 拼随机键）
         verify(idempotencyService).acquire(anyString(), argThat(k -> "trade-cancel:trade-claim-1".equals(k)),
@@ -81,6 +91,19 @@ class TradeCancellationClaimTest {
         // 未取得处理权 => 不得触碰交易、子单或 outbox
         verify(tradeRepository, never()).save(any());
         verify(shopOrderRepository, never()).save(any());
+        verifyNoInteractions(outboxEventService);
+    }
+
+    @Test
+    @DisplayName("P1: 已完成的取消（REPLAY）才是幂等成功，直接跳过且无副作用")
+    void whenCancellationAlreadyCompleted_shouldSkipAsIdempotentSuccess() {
+        lenient().when(idempotencyService.acquire(anyString(), anyString(), anyString()))
+                .thenReturn(IdempotencyService.AcquireResult.REPLAY);
+
+        assertThatCode(() -> service.autoCancelTrade("trade-claim-replay", "PROMOTION_COMMIT_FAILED:x",
+                "trace-replay")).doesNotThrowAnyException();
+
+        verify(tradeRepository, never()).save(any());
         verifyNoInteractions(outboxEventService);
     }
 

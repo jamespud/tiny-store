@@ -96,6 +96,18 @@ public class TradeApplicationService {
         String key = CANCEL_KEY_PREFIX + tradeId;
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
+            public void afterCommit() {
+                // P1: mark the claim SUCCEEDED once the cancellation is actually committed, so a later
+                // request replays it as a completed cancellation (REPLAY) instead of being told
+                // CANCEL_IN_PROGRESS until the key expires.
+                try {
+                    idempotencyService.markSucceeded(CANCEL_SCOPE, key, tradeId, "{\"tradeId\":\"" + tradeId + "\"}");
+                } catch (Exception e) {
+                    log.warn("Failed to mark cancel claim succeeded (trade is cancelled): tradeId={}", tradeId, e);
+                }
+            }
+
+            @Override
             public void afterCompletion(int status) {
                 if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
                     idempotencyService.releaseLock(CANCEL_SCOPE, key);
@@ -839,8 +851,13 @@ public class TradeApplicationService {
                 command.getTradeId())) {
             case FINGERPRINT_CONFLICT -> throw new IdempotencyConflictException(
                     "Cancellation already claimed for a different trade", command.getTradeId());
-            case IN_PROGRESS, REPLAY -> {
-                log.info("Trade cancellation already claimed, skipping: tradeId={}",
+            case IN_PROGRESS -> throw new DomainConflictException("CANCEL_IN_PROGRESS",
+                    // P1: a cancellation that is still running is NOT a success. Reporting one would let a
+                    // concurrent caller see "cancelled" while the owning instance may still roll back.
+                    "Trade cancellation is already in progress for tradeId: " + command.getTradeId()
+                            + " -- retry after it completes");
+            case REPLAY -> {
+                log.info("Trade cancellation already completed, skipping: tradeId={}",
                         command.getTradeId());
                 return;
             }
