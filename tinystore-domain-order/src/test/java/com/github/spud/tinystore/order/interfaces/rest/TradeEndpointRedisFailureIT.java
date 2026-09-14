@@ -16,6 +16,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,6 +29,10 @@ import static org.mockito.Mockito.when;
  * Tests behavior when Redis/Idempotency service is unavailable
  */
 @DisplayName("Trade Endpoint Redis Failure Tests")
+// This class swaps the real IdempotencyService for a throwing mock. The ITs share Spring's context cache,
+// so without this the mock (and Redis being "down") can leak into the classes that run after it -- they
+// then fail in @BeforeEach instead of exercising anything. Close the context when this class is done.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class TradeEndpointRedisFailureIT extends AbstractSpringBootOrderIT {
 
     @Autowired

@@ -41,7 +41,11 @@ import static org.mockito.Mockito.when;
         // Without it the A2 anti-forgery rule ("buyer identity comes from the authenticated principal")
         // answers 401 to every unauthenticated create -- a test-context gap, not a product issue: the
         // application default stays true.
-        "order.authz.require-authenticated-buyer=false"
+        "order.authz.require-authenticated-buyer=false",
+        // Same story for the payment/refund callback signature check (A4): the test stack disables it
+        // (ORDER_PAYMENT_CALLBACK_VERIFY_ENABLED=false) while these ITs predate it and send no signature,
+        // so the 401 would mask the assertions the tests are actually making.
+        "order.payment.callback-verify-enabled=false"
     }
 )
 public abstract class AbstractSpringBootOrderIT extends AbstractOrderIT {
