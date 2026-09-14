@@ -85,7 +85,12 @@ public class DynamicRouteService implements InitializingBean {
 		GatewayRoutesDefinition definition = optionalDefinition.get();
 		if (CollectionUtils.isEmpty(definition.getRoutes())) {
 			log.warn("Route definition file {} contains no routes", properties.getRoutesLocation());
-			clearActiveRoutes();
+			try {
+				clearActiveRoutes();
+			}
+			catch (RuntimeException ex) {
+				log.error("Failed to clear the gateway route table", ex);
+			}
 			return;
 		}
 
@@ -106,7 +111,6 @@ public class DynamicRouteService implements InitializingBean {
 		Snapshot previous = lastGoodSnapshot;
 		try {
 			applySnapshot(snapshot);
-			lastGoodSnapshot = snapshot;
 		}
 		catch (RuntimeException ex) {
 			log.error("Gateway route refresh failed while applying the new table; rolling back to the "
@@ -114,14 +118,19 @@ public class DynamicRouteService implements InitializingBean {
 			if (previous != null) {
 				try {
 					applySnapshot(previous);
-					lastGoodSnapshot = previous;
 				}
 				catch (RuntimeException rollbackFailure) {
 					log.error("Gateway route rollback failed; the route table may be inconsistent until the "
 						+ "next successful refresh", rollbackFailure);
 				}
 			}
+			// A failed apply is NOT a successful refresh: the timestamp stays at the last forward apply so
+			// "lastSuccessfulRefresh" keeps meaning what it says.
+			return;
 		}
+		lastGoodSnapshot = snapshot;
+		lastSuccessfulRefresh = Instant.now();
+		log.info("Refreshed {} gateway routes", snapshot.routes().size());
 	}
 
 	/** The complete replacement route table, built before anything live is touched. */
@@ -165,8 +174,6 @@ public class DynamicRouteService implements InitializingBean {
 		activeRouteIds.clear();
 		activeRouteIds.addAll(snapshot.routes().keySet());
 		publisher.publishEvent(new RefreshRoutesEvent(this));
-		lastSuccessfulRefresh = Instant.now();
-		log.info("Refreshed {} gateway routes", snapshot.routes().size());
 	}
 
 	private record Snapshot(Map<String, RouteDefinition> routes,
@@ -182,18 +189,19 @@ public class DynamicRouteService implements InitializingBean {
 	}
 
 	private void saveRoute(RouteDefinition definition) {
-		routeDefinitionWriter.save(Mono.just(definition)).onErrorResume(ex -> {
-			log.error("Failed to save route {}", definition.getId(), ex);
-			return Mono.empty();
-		}).block();
+		// Round-3 P1: a writer failure must propagate. Swallowing it here left the caller no signal, so the
+		// "apply the new table, roll back to the previous one on failure" contract above could never fire --
+		// the refresh continued with a half-applied table, replaced the policies and published a refresh
+		// event as if it had succeeded.
+		routeDefinitionWriter.save(Mono.just(definition)).block();
 	}
 
 	private void deleteRoute(String routeId) {
-		routeDefinitionWriter.delete(Mono.just(routeId)).onErrorResume(NotFoundException.class, ex -> Mono.empty())
-			.onErrorResume(ex -> {
-				log.error("Failed to delete route {}", routeId, ex);
-				return Mono.empty();
-			}).block();
+		// Only "the route was not there" is benign (the first refresh deletes every route it is about to
+		// create). Any other writer error must reach the caller so the snapshot can be rolled back.
+		routeDefinitionWriter.delete(Mono.just(routeId))
+			.onErrorResume(NotFoundException.class, ex -> Mono.empty())
+			.block();
 	}
 
 	private Optional<GatewayRoutesDefinition> loadDefinition() {
