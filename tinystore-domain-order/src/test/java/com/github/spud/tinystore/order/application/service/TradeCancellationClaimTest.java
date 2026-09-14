@@ -1,6 +1,8 @@
 package com.github.spud.tinystore.order.application.service;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -54,6 +56,12 @@ class TradeCancellationClaimTest {
         ReflectionTestUtils.setField(service, "outboxEventService", outboxEventService);
         ReflectionTestUtils.setField(service, "objectMapper", new ObjectMapper());
         ReflectionTestUtils.setField(service, "idempotencyService", idempotencyService);
+
+        // P0-2 wired the repository into the service; these tests never call createTrade, so an unstubbed
+        // mock is all that is needed (stubbing it here would be an unnecessary stubbing under strict stubs).
+        ReflectionTestUtils.setField(service, "tradeIdempotencyRecordRepository",
+                mock(com.github.spud.tinystore.order.infrastructure.persistence.jpa.repository.JpaTradeIdempotencyRecordRepository.class));
+
         ReflectionTestUtils.setField(service, "optimisticRetryTemplate",
                 new PassthroughStateTransitionRetry());
     }
