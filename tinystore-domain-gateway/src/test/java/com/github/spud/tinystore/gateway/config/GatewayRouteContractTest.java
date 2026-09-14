@@ -14,6 +14,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.cloud.gateway.filter.FilterDefinition;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -107,6 +108,75 @@ class GatewayRouteContractTest {
     }
 
     @Test
+    @DisplayName("read routes retry once on another replica; mutations are never retried")
+    void readRoutesRetryOnceAndMutationsNeverDo() throws Exception {
+        List<GatewayRoutesDefinition.RouteDefinition> routes = classpathRoutes();
+
+        List<String> failures = new ArrayList<>();
+        for (String routeId : routeIds(routes)) {
+            // Health routes use a static URI (no service instances behind them), so they have
+            // nothing to fail over to and are deliberately exempt.
+            if (routeId.endsWith("-health")) {
+                continue;
+            }
+            GatewayRoutesDefinition.RouteDefinition route = routes.stream()
+                .filter(r -> routeId.equals(r.getId()))
+                .findFirst()
+                .orElseThrow();
+
+            GatewayRoutesDefinition.RouteRetry retry = route.getRetry();
+            if (retry == null) {
+                failures.add(routeId + ": no retry policy, a dead replica would fail every request "
+                    + "that happens to select it");
+                continue;
+            }
+
+            if (retry.getRetries() < 1) {
+                failures.add(routeId + ": retries=" + retry.getRetries() + " disables failover entirely");
+            }
+
+            // Assert on the COMPILED filters, i.e. what the gateway will really install: this covers
+            // the method list the framework gates on and the position relative to the path rewrite.
+            List<org.springframework.cloud.gateway.filter.FilterDefinition> compiled =
+                GatewayRouteFilters.compile(route);
+            int retryIdx = -1;
+            String methods = "";
+            for (int i = 0; i < compiled.size(); i++) {
+                if ("Retry".equals(compiled.get(i).getName())) {
+                    retryIdx = i;
+                    methods = compiled.get(i).getArgs().getOrDefault("methods", "");
+                }
+            }
+            if (retryIdx < 0) {
+                failures.add(routeId + ": the retry policy did not compile into a Retry filter");
+                continue;
+            }
+            List<String> methodList = List.of(methods.split(","));
+            if (!methodList.contains("GET") || !methodList.contains("HEAD")) {
+                failures.add(routeId + ": compiled methods=" + methods + " do not cover GET+HEAD, so a "
+                    + "dead replica still fails readable traffic");
+            }
+            for (String unsafe : List.of("POST", "PUT", "PATCH", "DELETE")) {
+                if (methodList.contains(unsafe)) {
+                    failures.add(routeId + ": compiled methods=" + methods + " include " + unsafe + "; a "
+                        + "mutation would be replayed, which is a different failure model and needs its "
+                        + "own proof (idempotent replay of the committed response) first");
+                }
+            }
+
+            int stripIdx = indexOfPrefix(route.getFilters(), "StripPrefix=");
+            if (stripIdx >= 0 && retryIdx < stripIdx) {
+                failures.add(routeId + ": the retry runs before StripPrefix. The retried chain would "
+                    + "re-run the path rewrite and strip a second time (404 downstream)");
+            }
+        }
+
+        assertThat(failures)
+            .withFailMessage("gateway read-failover contract broken (E1): %s", failures)
+            .isEmpty();
+    }
+
+    @Test
     @DisplayName("the in-cluster ConfigMap defines exactly the same routes as the classpath file")
     void k8sConfigMapMatchesClasspathRoutes() throws Exception {
         Path configMap = Paths.get("k8s/gateway-configmap.yml");
@@ -194,6 +264,15 @@ class GatewayRouteContractTest {
         return 0;
     }
 
+    private static int indexOfPrefix(List<String> filters, String prefix) {
+        for (int i = 0; i < filters.size(); i++) {
+            if (filters.get(i).startsWith(prefix)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     /** Applies StripPrefix to a public prefix and returns the downstream base path. */
     private static String resolve(String publicPrefix, int parts) {
         String[] segments = publicPrefix.replaceAll("^/+", "").split("/");
@@ -211,7 +290,10 @@ class GatewayRouteContractTest {
     private static Map<String, String> summarize(List<GatewayRoutesDefinition.RouteDefinition> routes) {
         Map<String, String> summary = new LinkedHashMap<>();
         for (GatewayRoutesDefinition.RouteDefinition route : routes) {
-            summary.put(route.getId(), route.getUri() + " " + route.getPredicates() + " " + route.getFilters());
+            // The compiled filters, not the raw list: the retry policy becomes a filter at load
+            // time, so comparing the raw YAML would let the ConfigMap drift on retry unnoticed.
+            summary.put(route.getId(), route.getUri() + " " + route.getPredicates() + " "
+                + GatewayRouteFilters.compile(route).stream().map(FilterDefinition::toString).toList());
         }
         return summary;
     }

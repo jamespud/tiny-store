@@ -29,6 +29,11 @@ export MULTI_REPLICAS
 # resilience-multi: probe for this long, kill one replica this many seconds in.
 MULTI_PROBE_SECONDS ?= 45
 MULTI_KILL_AFTER ?= 10
+# The replica-failure probe is a gate: reads must survive the kill (0 lost requests) and the retried
+# request must come back inside MULTI_MAX_FAILOVER_MS. Set MULTI_EXPECT_FAILOVER=1 to invert it into
+# the pre-fix demonstration, where the probe only passes when requests WERE lost (E1 evidence).
+MULTI_EXPECT_FAILOVER ?= 0
+MULTI_MAX_FAILOVER_MS ?= 5000
 
 # Host ports published by the single-instance stack. docker-compose-test.yml interpolates the same
 # names, so overriding them here and there stays consistent:
@@ -353,13 +358,13 @@ resilience-multi: check-multi-replicas build ## Kill one replica mid-traffic and
 	@set -e; \
 	root_dir=$$(pwd); \
 	compose() { docker compose -f $(COMPOSE_TEST) -f $(COMPOSE_MULTI) "$$@"; }; \
-	replica_port() { compose ps -q "$$1" | sed -n "$${2}p" | xargs -r -I{} docker port {} "$$3" | head -1 | sed 's/.*://'; }; \
+	replica_ports() { compose ps -q "$$1" | while read -r cid; do docker port "$$cid" "$$2" 2>/dev/null | head -1 | sed 's/.*://'; done; }; \
 	cleanup() { echo "Cleaning up multi-instance environment..."; cd "$$root_dir"; compose down -v; }; \
 	trap cleanup EXIT; \
 	compose up -d --build $(MULTI_SCALE_FLAGS); \
 	echo "Waiting for gateway + order route (max 180s)..."; \
 	for i in $$(seq 1 36); do \
-		gw_port=$$(replica_port gateway 1 8080); \
+		gw_port=$$(replica_ports gateway 8080 | head -1); \
 		code=$$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://localhost:$$gw_port/api/order/trades/probe-ready" 2>/dev/null || echo 000); \
 		if [ "$$code" = "404" ]; then echo "order route ready after $$((i*5))s"; break; fi; \
 		if [ $$i -eq 36 ]; then echo "ERROR: order route not ready"; compose logs --tail=80 gateway; exit 1; fi; \
@@ -383,14 +388,19 @@ resilience-multi: check-multi-replicas build ## Kill one replica mid-traffic and
 	wait $$probe_pid || true; \
 	echo ""; \
 	echo "=== Replica-failure probe result ==="; \
+	if [ "$(MULTI_EXPECT_FAILOVER)" = "1" ]; then echo "  mode: pre-fix demonstration (failures are expected)"; else echo "  mode: gate (0 lost requests, failover within $(MULTI_MAX_FAILOVER_MS)ms)"; fi; \
 	set +e; \
-	MULTI_KILL_AT=$$kill_at MULTI_PROBE_LOG=$$probe_log python3 docker/failover-probe.py; \
+	MULTI_KILL_AT=$$kill_at MULTI_PROBE_LOG=$$probe_log \
+	MULTI_EXPECT_FAILOVER=$(MULTI_EXPECT_FAILOVER) \
+	MULTI_MAX_FAILOVER_MS=$(MULTI_MAX_FAILOVER_MS) \
+	python3 docker/failover-probe.py; \
 	status=$$?; \
 	set -e; \
 	rm -f $$probe_log; \
 	echo ""; \
 	if [ $$status -ne 0 ]; then \
-		echo "Replica-failure probe reported failures -- see docs/architecture/multi-instance-testing-blockers.md (D4)"; \
+		echo "Replica-failure probe failed (exit $$status: 1=run unusable, 2=gate violation) -- see"; \
+		echo "docs/architecture/multi-instance-testing-blockers.md (E1) for the expected shape of the report"; \
 		exit $$status; \
 	fi; \
 	echo "Replica-failure probe passed"

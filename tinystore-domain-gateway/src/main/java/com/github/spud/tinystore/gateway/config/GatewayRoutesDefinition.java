@@ -21,6 +21,7 @@ public class GatewayRoutesDefinition {
 		private String uri;
 		private List<String> predicates = new ArrayList<>();
 		private List<String> filters = new ArrayList<>();
+		private RouteRetry retry;
 		private RoutePolicies policies = new RoutePolicies();
 
 		public String getId() {
@@ -55,12 +56,55 @@ public class GatewayRoutesDefinition {
 			this.filters = filters;
 		}
 
+		public RouteRetry getRetry() {
+			return retry;
+		}
+
+		public void setRetry(RouteRetry retry) {
+			this.retry = retry;
+		}
+
 		public RoutePolicies getPolicies() {
 			return policies;
 		}
 
 		public void setPolicies(RoutePolicies policies) {
 			this.policies = policies;
+		}
+	}
+
+	/**
+	 * Safe read failover for one route (E1), compiled by {@link GatewayRouteFilters} into the
+	 * framework's {@code Retry} route filter.
+	 *
+	 * <p>It is declared here rather than written as a {@code Retry=...} entry in {@code filters}
+	 * because that shortcut is positional — one comma-separated token per field — so it cannot
+	 * express a method list ({@code GET} and {@code HEAD}), and it makes the retry part of the route
+	 * contract that the ConfigMap drift test compares.
+	 *
+	 * <p>{@code retries} is the number of *extra* attempts. {@code methods} gates BOTH retry paths in
+	 * {@code RetryGatewayFilterFactory} (status and exception), so a mutation listed here would be
+	 * replayed; the compiler refuses that instead of trusting the author.
+	 */
+	public static class RouteRetry {
+
+		private int retries = 1;
+		private List<String> methods = new ArrayList<>();
+
+		public int getRetries() {
+			return retries;
+		}
+
+		public void setRetries(int retries) {
+			this.retries = retries;
+		}
+
+		public List<String> getMethods() {
+			return methods;
+		}
+
+		public void setMethods(List<String> methods) {
+			this.methods = methods;
 		}
 	}
 

@@ -9,11 +9,30 @@ spring:
       enabled: false
       import-check:
         enabled: false
+    loadbalancer:
+      # The instance list is cached per client for `spring.cloud.loadbalancer.cache.ttl` (framework
+      # default 35s), so a Nacos deregistration can stay invisible to the gateway for that long.
+      # 2s bounds one of E1's two windows -- "deregistered, still selected" (the audit saw Nacos drop
+      # the ip at 07:21:45 and the gateway still dial it at 07:21:48). The other window, the request
+      # already in flight at the kill instant, is what the per-route retry policy covers; this TTL
+      # cannot help there.
+      cache:
+        ttl: ${LOADBALANCER_CACHE_TTL:2s}
     gateway:
       server:
         webflux:
           metrics:
             enabled: true
+          httpclient:
+            # Bounded failover latency: a dead container leaves a veth-less ip behind, so a TCP
+            # connect to it is not refused, it black-holes until the connect timeout. Without an
+            # explicit value Netty waits ~30s, which is why the pre-fix probe recorded 20s stalls
+            # (`--max-time 20` in the probe) instead of a fast failure the retry filter can act on.
+            connect-timeout: ${GATEWAY_HTTPCLIENT_CONNECT_TIMEOUT:1000}
+            # Upper bound for a downstream response; must stay below the client-side timeouts so the
+            # gateway, not the caller, decides the outcome. `response-timeout` is unset by default in
+            # the framework (= wait forever).
+            response-timeout: ${GATEWAY_HTTPCLIENT_RESPONSE_TIMEOUT:30s}
   security:
     oauth2:
       resourceserver:

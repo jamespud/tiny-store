@@ -64,12 +64,17 @@ data:
       # Business routes. StripPrefix must turn the public path into the path the downstream
       # controller declares: order declares /order/... (strip 1); product/inventory/promotion/
       # payment/account/auth declare the /api/... path themselves (strip 0).
+      # retry: safe read failover (E1): one extra attempt, GET/HEAD only. It is compiled after the
+      # declared filters (so after StripPrefix) and mutations are refused at load time.
       - id: order-service
         uri: lb://order-service
         predicates:
           - Path=/api/order/**
         filters:
           - StripPrefix=1
+        retry:
+          retries: 1
+          methods: [GET, HEAD]
         policies:
           rateLimit:
             type: ip
@@ -89,6 +94,9 @@ data:
           - Path=/api/pay/**
         filters:
           - StripPrefix=0
+        retry:
+          retries: 1
+          methods: [GET, HEAD]
         policies:
           rateLimit:
             type: ip
@@ -102,6 +110,9 @@ data:
           - Path=/api/promotion/**
         filters:
           - StripPrefix=0
+        retry:
+          retries: 1
+          methods: [GET, HEAD]
         policies:
           rateLimit:
             type: ip
@@ -117,6 +128,9 @@ data:
           - Path=/api/products/**
         filters:
           - StripPrefix=0
+        retry:
+          retries: 1
+          methods: [GET, HEAD]
         policies:
           rateLimit:
             type: ip
@@ -130,6 +144,9 @@ data:
           - Path=/api/skus/**
         filters:
           - StripPrefix=0
+        retry:
+          retries: 1
+          methods: [GET, HEAD]
         policies:
           rateLimit:
             type: ip
@@ -143,6 +160,9 @@ data:
           - Path=/api/inventory/**
         filters:
           - StripPrefix=0
+        retry:
+          retries: 1
+          methods: [GET, HEAD]
         policies:
           rateLimit:
             type: ip
@@ -156,6 +176,9 @@ data:
           - Path=/api/account/**
         filters:
           - StripPrefix=0
+        retry:
+          retries: 1
+          methods: [GET, HEAD]
         policies:
           rateLimit:
             type: ip
@@ -169,6 +192,9 @@ data:
           - Path=/api/auth/**,/api/admin/**,/oidc/**
         filters:
           - StripPrefix=0
+        retry:
+          retries: 1
+          methods: [GET, HEAD]
         policies:
           rateLimit:
             type: ip
