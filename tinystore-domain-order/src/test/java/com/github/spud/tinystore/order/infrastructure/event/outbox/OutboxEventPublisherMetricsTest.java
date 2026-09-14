@@ -83,7 +83,7 @@ class OutboxEventPublisherMetricsTest {
         // Then: counter 递增
         assertThat(counter.count()).isEqualTo(countBefore + 1);
         // 发布器现在把异常一起传给 markAsFailed，用于区分"可重试的传输失败"与"不可恢复的载荷失败"（C12）。
-        verify(outboxEventService).markAsFailed(anyString(), anyString(), any());
+        verify(outboxEventService).markAsFailed(anyString(), any(), anyString(), any());
     }
 
     @Test
@@ -117,6 +117,6 @@ class OutboxEventPublisherMetricsTest {
 
         // Then: counter 递增（catch 分支）
         assertThat(counter.count()).isEqualTo(countBefore + 1);
-        verify(outboxEventService).markAsFailed(anyString(), anyString(), any());
+        verify(outboxEventService).markAsFailed(anyString(), any(), anyString(), any());
     }
 }

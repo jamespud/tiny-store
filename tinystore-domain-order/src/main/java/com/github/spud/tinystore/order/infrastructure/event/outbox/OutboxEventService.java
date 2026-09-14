@@ -111,13 +111,17 @@ public class OutboxEventService {
             return List.of();
         }
         LocalDateTime now = LocalDateTime.now();
+        // One token per claim call: the events were claimed atomically together, so they share a lease.
+        String claimToken = java.util.UUID.randomUUID().toString();
         for (OutboxEventEntity event : events) {
             event.setStatus("PROCESSING");
             event.setClaimedBy(instanceId);
             event.setClaimedAt(now);
+            event.setClaimToken(claimToken);
         }
         outboxEventJpaRepository.saveAllAndFlush(events);
-        log.debug("Claimed {} pending outbox events for instance={}", events.size(), instanceId);
+        log.debug("Claimed {} pending outbox events for instance={} token={}", events.size(), instanceId,
+                claimToken);
         return events;
     }
 
@@ -150,15 +154,25 @@ public class OutboxEventService {
     }
 
     /**
-     * 批量标记已发布（一次 UPDATE 替代逐条 SELECT+UPDATE，消除发布瓶颈）。
+     * 批量标记已发布（一次 UPDATE 替代逐条 SELECT+UPDATE）。
+     *
+     * <p>P1-2：这条 UPDATE 带 claim_token 围栏 —— 只影响**本次认领仍然有效**的行。若这批事件在发布期间
+     * 被判定为僵尸认领并回收（owner 卡顿超过 claimTimeout），影响行数会小于入参数量，旧 worker 不得把
+     * 它们写成 PUBLISHED。
      *
      * @param eventIds 发布成功的 eventId 列表
+     * @param claimToken 本次认领的 fencing token
      */
-    public void markAsPublishedBatch(List<String> eventIds) {
+    public void markAsPublishedBatch(List<String> eventIds, String claimToken) {
         if (eventIds == null || eventIds.isEmpty()) {
             return;
         }
-        int updated = outboxEventJpaRepository.markAsPublishedBatch(eventIds, LocalDateTime.now());
+        int updated = outboxEventJpaRepository.markAsPublishedBatch(eventIds, LocalDateTime.now(), claimToken);
+        if (updated != eventIds.size()) {
+            log.warn("Outbox publish completion was partially fenced: requested={}, updated={}, token={} -- "
+                    + "the remaining events were reclaimed by another worker and are no longer ours",
+                    eventIds.size(), updated, claimToken);
+        }
         log.info("Outbox events marked as published (batch): count={}", updated);
     }
 
@@ -169,7 +183,11 @@ public class OutboxEventService {
      * @param error 错误信息
      */
     public void markAsFailed(String eventId, String error) {
-        markAsFailed(eventId, error, null);
+        // Legacy/unfenced callers (admin endpoints, cleanup) look the token up themselves.
+        String token = outboxEventJpaRepository.findByEventId(eventId)
+                .map(OutboxEventEntity::getClaimToken)
+                .orElse(null);
+        markAsFailed(eventId, token, error, null);
     }
 
     /**
@@ -183,24 +201,27 @@ public class OutboxEventService {
      *       否则一次几分钟的 Kafka 抖动就会让关键事件（如 INVENTORY_RESERVE_DB）永久丢失。</li>
      * </ul>
      */
-    public void markAsFailed(String eventId, String error, Throwable cause) {
-        outboxEventJpaRepository.findByEventId(eventId).ifPresent(event -> {
-            event.setRetryCount((event.getRetryCount() != null ? event.getRetryCount() : 0) + 1);
-            event.setLastError(error);
-            // 无论走哪条分支都释放认领，否则该行不会被重新认领。
-            event.setClaimedBy(null);
-            event.setClaimedAt(null);
-            if (isUnrecoverable(cause)) {
-                event.setStatus("FAILED");
-                event.setNextAttemptAt(null);
-            } else {
-                event.setStatus("PENDING");
-                event.setNextAttemptAt(LocalDateTime.now().plusSeconds(backoffSeconds(event.getRetryCount())));
-            }
-            outboxEventJpaRepository.save(event);
-            log.warn("Outbox event marked as failed: eventId={}, retryCount={}, error={}",
-                eventId, event.getRetryCount(), error);
-        });
+    public void markAsFailed(String eventId, String claimToken, String error, Throwable cause) {
+        // P1-2: fenced update. Once the lease is reclaimed the previous owner must not be able to release or
+        // re-pend the row the new owner is working on (that is what let a stalled worker override a live
+        // lease). Zero affected rows means "you no longer hold this event" -- nothing to do.
+        boolean unrecoverable = isUnrecoverable(cause);
+        int retryCount = outboxEventJpaRepository.findByEventId(eventId)
+                .map(event -> event.getRetryCount() != null ? event.getRetryCount() : 0)
+                .orElse(0);
+        int nextRetryCount = retryCount + 1;
+        LocalDateTime nextAttemptAt = unrecoverable ? null
+                : LocalDateTime.now().plusSeconds(backoffSeconds(nextRetryCount));
+
+        int updated = outboxEventJpaRepository.markAsFailedIfOwned(eventId, claimToken, error,
+                unrecoverable ? "FAILED" : "PENDING", nextAttemptAt);
+        if (updated == 0) {
+            log.warn("Outbox failure update ignored (claim already reclaimed by another worker): eventId={}, "
+                    + "token={}", eventId, claimToken);
+            return;
+        }
+        log.warn("Outbox event marked as failed: eventId={}, retryCount={}, status={}, error={}",
+                eventId, nextRetryCount, unrecoverable ? "FAILED" : "PENDING", error);
     }
 
     /** 载荷/校验类失败重试无益，直接终态；其余（传输类）都允许继续退避重试。 */

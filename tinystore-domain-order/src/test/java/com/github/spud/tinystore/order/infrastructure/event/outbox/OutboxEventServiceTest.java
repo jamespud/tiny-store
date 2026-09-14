@@ -40,22 +40,24 @@ class OutboxEventServiceTest {
     @Test
     void markAsPublishedBatch_shouldDelegateBatchUpdate() {
         // Given
-        when(outboxEventJpaRepository.markAsPublishedBatch(eq(List.of("e1", "e2", "e3")), any(LocalDateTime.class)))
+        when(outboxEventJpaRepository.markAsPublishedBatch(eq(List.of("e1", "e2", "e3")), any(LocalDateTime.class),
+                eq("token-1")))
             .thenReturn(3);
 
         // When
-        service.markAsPublishedBatch(List.of("e1", "e2", "e3"));
+        service.markAsPublishedBatch(List.of("e1", "e2", "e3"), "token-1");
 
         // Then: 一次批量更新（3 条）
-        verify(outboxEventJpaRepository).markAsPublishedBatch(eq(List.of("e1", "e2", "e3")), any(LocalDateTime.class));
+        verify(outboxEventJpaRepository).markAsPublishedBatch(eq(List.of("e1", "e2", "e3")),
+                any(LocalDateTime.class), eq("token-1"));
     }
 
     @Test
     void markAsPublishedBatch_withEmptyList_shouldDoNothing() {
         // When
-        service.markAsPublishedBatch(List.of());
+        service.markAsPublishedBatch(List.of(), "token-1");
 
         // Then: 不调用 repository
-        verify(outboxEventJpaRepository, never()).markAsPublishedBatch(any(), any());
+        verify(outboxEventJpaRepository, never()).markAsPublishedBatch(any(), any(), any());
     }
 }

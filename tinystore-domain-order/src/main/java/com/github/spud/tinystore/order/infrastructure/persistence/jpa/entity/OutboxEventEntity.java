@@ -63,6 +63,16 @@ public class OutboxEventEntity {
     @Column(name = "claimed_at")
     private LocalDateTime claimedAt;
 
+    /**
+     * 本次认领的 fencing token（每次 claim 生成）。
+     *
+     * <p>claimed_by 只能说明"谁"，不能区分同一个实例的旧 lease 与新 lease；过期回收后旧 owner 仍可能
+     * 覆盖新 owner 的状态。所有完成类更新都必须带上本 token（{@code WHERE event_id=? AND claim_token=?}），
+     * 影响行数为 0 即表示 lease 已失效，旧 worker 不得再改状态。
+     */
+    @Column(name = "claim_token", length = 64)
+    private String claimToken;
+
     /** 下次可认领时间；NULL 表示立即可认领（传输失败后的退避重试，见 C12）。 */
     @Column(name = "next_attempt_at")
     private LocalDateTime nextAttemptAt;
