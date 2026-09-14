@@ -97,4 +97,16 @@ class TradeApplicationServiceConfirmReceiptTest {
         assertThatCode(() -> service.confirmTradeReceipt("trade-1", "trace-1"))
                 .doesNotThrowAnyException();
     }
+
+    @Test
+    @DisplayName("P2 (C8): trade 没有任何 shop order 时必须报错，而不是返回 200")
+    void tradeWithoutShopOrders_isAnError() {
+        when(tradeRepository.findByTradeId("trade-empty"))
+                .thenReturn(Optional.of(org.mockito.Mockito.mock(Trade.class)));
+        when(shopOrderRepository.findByTradeId("trade-empty")).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.confirmTradeReceipt("trade-empty", "trace-empty"))
+                .as("a trade with no shop orders must not be reported as a successful receipt")
+                .hasMessageContaining("no shop orders");
+    }
 }
