@@ -203,7 +203,20 @@ payment-2| DB: schema "tinystore_payment" already exists, skipping (SQL State: 4
 
 **状态**：未修（需产品决策：迁移改 Job 还是加锁）。
 
-#### A4. 编排里只有 gateway 有健康检查，其余 7 个应用服务都没有
+#### A4. ✅已修复：编排里只有 gateway 有健康检查，其余 7 个应用服务都没有
+
+> **修复（Task 13B）**：两个问题一起修掉了 —— ①非 k8s 环境 Boot 默认不建 probe 组，
+> `/actuator/health/readiness` 根本不存在；②compose 里只有 gateway 有 healthcheck，而且查的是
+> `/actuator/health`（只能证明"上下文起来了"）。
+>
+> | 改动 | 说明 |
+> |---|---|
+> | 8 个服务 `management.endpoint.health.probes.enabled: true` | readiness/liveness 组在 compose 下也注册 |
+> | 7 个应用服务的 compose healthcheck 指向 `/actuator/health/readiness` | 编排判断的是"能接流量"，不是"JVM 活着"（`start_period: 60s`，应用启动 45–70s） |
+> | `load-multi` 新增逐副本 readiness 断言 | 每个副本单独 curl，任一不是 `"status":"UP"` 直接失败 |
+>
+> 实测（2 副本）：16 个副本（8 服务 × 2）全部 `{"status":"UP"}`，`docker compose ps` 全部 healthy；
+> Nacos 拓扑门禁（healthy 实例数 ≥ 副本数）保持不变。
 
 实测 `docker-compose-test.yml`：`postgres` / `redis` / `kafka` / `nacos` / **`gateway`** 有 `healthcheck`；
 **`auth` / `account` / `inventory` / `order` / `payment` / `product` / `promotion` 一个都没有。**
@@ -990,7 +1003,24 @@ C0 与 C4 是同一类缺陷（单个 JVM 的状态被当成了全局状态）�
 
 ### D. 可观测 / 运维（未修）
 
-#### D1. 追踪导出配置为空时直接丢 span
+#### D1. ✅已修复：追踪导出配置为空时直接丢 span
+
+> **修复（Task 13B）**：默认 `ZIPKIN_ENDPOINT=""`，这个空串仍会建出 zipkin reporter —— 实测（修复前）
+> 容器里存在 `asyncZipkinSpanHandler` + `httpClientSender`，日志里是 `BaseHttpSender.send` /
+> `AsyncReporter$Flusher` 的失败栈，span 全丢且客户端无感。
+>
+> | 改动 | 说明 |
+> |---|---|
+> | 8 个服务 `management.tracing.enabled: ${ZIPKIN_ENABLED:false}` | 追踪改为 opt-in。**注意**：Boot 3.5 没有 per-backend 开关，sender/span handler 只受 `management.tracing.enabled` 约束（我先写的 `management.tracing.export.zipkin.enabled` 经 `/actuator/beans` 验证是**无效**的，已纠正） |
+> | 新增 `TracingConfigGuard`（library，走 AutoConfiguration.imports） | 打开了追踪却没给 endpoint → **启动即失败**，不再静默丢 span。它必须是 auto-configuration：写成 `@Component` 时各域根本不扫这个包（这一点也是运行时撞出来的） |
+> | `RuntimeConfigContractTest` | 8 个服务的 yml 必须默认关闭追踪，否则构建红 |
+>
+> 三条运行时证据（account，`/actuator/beans`）：
+> ```
+> 默认（未设 ZIPKIN_ENABLED）   asyncZipkinSpanHandler=false   ← 不再有 reporter
+> ZIPKIN_ENABLED=true（空 endpoint）启动失败：Tracing is enabled ... would drop every span silently
+> ZIPKIN_ENABLED=true + 真 endpoint  asyncZipkinSpanHandler=true / httpClientSender=true
+> ```
 
 多副本下每个实例都在刷：
 
@@ -1023,7 +1053,29 @@ GET  http://localhost:38090/api/products/prod-1 (同 header) -> 200
 
 **影响**：任何"经统一入口压测/验证"的方案都跑不通；多实例下更不能用直连端口（那样只打到某一个副本）。
 
-#### D3. 有状态层仍是单点，且连接数按副本数线性放大
+#### D3. 部分修复：连接预算已量化并设上限（有状态层仍是单点，超出本计划范围）
+
+> **修复（Task 13B，只做连接预算，不做 PostgreSQL HA）**
+> 预算：**3 副本**时 Σ(每副本连接池) × 3 ≤ `max_connections` 的 70% = 350。
+> 实测曲线（2 副本，300 VU / 20s，`perf/k6/order_create.js` 走网关）：
+>
+> | order 每副本池 | RPS | avg | p95 | p99 | fail | Hikari 获取超时 |
+> |---|---|---|---|---|---|---|
+> | 100（原值） | 399.0 | 741ms | 1958ms | 3077ms | 0.00% | 0 |
+> | **45（现值）** | 409.7 | 721ms | 2380ms | 3291ms | 0.00% | 0 |
+> | 35（先试的收缩值） | 154.0 | 1879ms | 5011ms | 6974ms | 0.00% | 0 |
+>
+> 结论：**35 太小**（吞吐掉 2.6x、p95 翻倍），45 与原值在噪声范围内且刚好卡住预算 ——
+> 这正是"先按实际负载收缩"必须实测的地方：拍脑袋收缩会把平台压坏，而 fail% 仍是 0，不看延迟根本发现不了。
+>
+> 现配额：order 45 / inventory 15 / promotion 15 / auth·account·payment·product 各 10 = 每副本 115，
+> **3 副本 = 345 ≤ 350（69%）**；`minimum-idle` 一律降到 2（空闲连接同样占额度，测试栈大部分时间空闲）。
+> 实测：2 副本空闲 51 条连接、300 VU burst 峰值 144 条（理论 210），Hikari 获取超时 0。
+>
+> 门禁：`make load-multi` 现在先打空闲快照，burst 期间每 250ms 采样 `pg_stat_activity`，事后比对预算并 grep
+> 服务日志里的 `Connection is not available`，超预算或出现获取超时即 exit 3；`RuntimeConfigContractTest`
+> 另有一条确定性断言：7 个 DB 服务必须显式写池大小，且 3 副本求和 ≤ 70%。
+> **仍未做**：PostgreSQL/Redis/Kafka 仍是单点（D3 中"有状态层单点"那一半，超出本计划范围）。
 
 `postgres / redis / kafka / nacos` 仍是单实例，8 个域共用一个 PG（每域一个 schema）与单 Redis。多副本后连接池按副本翻倍：
 
@@ -1233,9 +1285,9 @@ VERDICT: defects reproduced (retry_blocked=1, fingerprint_blocked=1).
 | P1 | C8 确认收货 200 但静默漏子单 | 接口报成功、订单卡在待收货；多副本下 1/26 复现 | 中 |
 | ~~P1~~ | ~~E1 副本故障不转移（LB 重试 / 缓存 TTL）~~ | **✅ 已修复并验证**（GET/HEAD 跨实例重试 + `cache.ttl=2s` + `connect-timeout=1s`；RED→GREEN 见 E1） | 已完成 |
 | P2 | A3 Flyway 并发迁移 | 生产多副本启动风险 | 中 |
-| P2 | A4 7 个应用服务没有 healthcheck/readiness | 启动 45–70s 且方差大，编排无法判断就绪 | 小（补 healthcheck） |
-| P2 | D1 trace 空 endpoint 丢 span | 多副本排障本就难 | 小 |
-| P3 | D3 有状态层单点 | 规模上限，非本次目标 | 大 |
+| ~~P2~~ | ~~A4 7 个应用服务没有 healthcheck/readiness~~ | **✅ 已修复并验证**（probes 打开 + healthcheck 查 readiness + 逐副本断言，16/16 副本 UP） | 已完成 |
+| ~~P2~~ | ~~D1 trace 空 endpoint 丢 span~~ | **✅ 已修复并验证**（追踪改 opt-in + 打开却没 endpoint 直接启动失败；三条运行时证据见 D1） | 已完成 |
+| ~~P3~~ | ~~D3 有状态层单点~~ | **部分完成**：连接预算已量化并设门禁（3 副本 345/500=69%，300 VU 实测见 D3）；PG/Redis/Kafka 单点未做（非本次目标） | 已完成（预算）/ 大（HA） |
 
 ---
 

@@ -562,6 +562,17 @@ load-multi: check-multi-replicas build ## Run the k6 load matrix against the N-r
 		sleep 5; \
 	done; \
 	echo "Seeding load SKUs..."; \
+	echo "=== Per-replica readiness (A4) ==="; \
+	readiness_fail=0; \
+	for spec in gateway:8080 auth:9000 account:8000 product:8090 promotion:1200 inventory:13000 order:28080 payment:8083; do \
+		svc=$${spec%%:*}; cport=$${spec##*:}; \
+		for hp in $$(replica_ports $$svc $$cport); do \
+			body=$$(curl -s --max-time 5 "http://localhost:$$hp/actuator/health/readiness" || true); \
+			case "$$body" in *'"status":"UP"'*) echo "  $$svc :$$hp ready";; \
+			*) echo "  $$svc :$$hp NOT ready -> $${body:-no response}"; readiness_fail=1;; esac; \
+		done; \
+	done; \
+	if [ $$readiness_fail -ne 0 ]; then echo "ERROR: a replica exposes no UP readiness (A4)"; exit 1; fi; \
 	for sku in SKU-load SKU_A; do \
 		docker exec -i tinystore-postgres-test psql -U postgres -d tinystore -v ON_ERROR_STOP=1 -c \
 			"INSERT INTO tinystore_inventory.inventory_stock (shop_id, sku_id, total_quantity, reserved_quantity, version, created_at, updated_at) VALUES ('SHOP_A','$$sku',500000,0,0,NOW(),NOW()) ON CONFLICT (shop_id, sku_id) DO NOTHING;" > /dev/null; \
@@ -572,6 +583,11 @@ load-multi: check-multi-replicas build ## Run the k6 load matrix against the N-r
 	split_after=/tmp/tinystore-load-multi-after-$$$$.txt; \
 	: > $$split_before; \
 	for u in $$(printf '%s' "$$order_urls" | tr ',' ' '); do p=$${u##*:}; echo "$$p $$(order_trades_count $$p)" >> $$split_before; done; \
+	echo ""; \
+	echo "=== PostgreSQL connection budget (D3) ==="; \
+	python3 docker/pg-connection-probe.py snapshot --replicas $(MULTI_REPLICAS); \
+	conn_log=/tmp/tinystore-pg-connections-$$$$.json; \
+	python3 docker/pg-connection-probe.py watch --replicas $(MULTI_REPLICAS) --seconds $(CONNECTION_WATCH_SECONDS) --out $$conn_log & watch_pid=$$!; \
 	echo "Running k6 matrix (VUS=$$levels, DURATION=$$duration) through gateway :$$gw_port (2 replicas behind it)..."; \
 	cd perf/k6; \
 	set +e; \
@@ -584,6 +600,22 @@ load-multi: check-multi-replicas build ## Run the k6 load matrix against the N-r
 	if grep -q "THRESHOLD-CROSSED" $$matrix_log 2>/dev/null; then threshold_fail=1; fi; \
 	rm -f $$matrix_log; \
 	cd "$$root_dir"; \
+	kill $$watch_pid 2>/dev/null || true; \
+	sleep 1; \
+	echo ""; \
+	echo "=== PostgreSQL connections under load ==="; \
+	set +e; \
+	python3 docker/pg-connection-probe.py report --replicas $(MULTI_REPLICAS) --out $$conn_log; \
+	conn_status=$$?; \
+	set -e; \
+	rm -f $$conn_log; \
+	pool_timeouts=$$(compose logs --tail=4000 order payment inventory promotion product account auth 2>/dev/null | grep -c "Connection is not available" || true); \
+	echo "  Hikari acquisition timeouts in the service logs: $$pool_timeouts"; \
+	if [ "$$conn_status" -ne 0 ] || [ "$$pool_timeouts" != "0" ]; then \
+		echo "ERROR: the connection budget was exceeded or a service could not acquire a connection"; \
+		echo "       (see docs/architecture/multi-instance-testing-blockers.md, D3)"; \
+		exit 3; \
+	fi; \
 	: > $$split_after; \
 	for u in $$(printf '%s' "$$order_urls" | tr ',' ' '); do p=$${u##*:}; echo "$$p $$(order_trades_count $$p)" >> $$split_after; done; \
 	echo ""; \
@@ -1082,3 +1114,5 @@ load-matrix-it: build ## Run consistency IT matrix (oversell/idempotency/confirm
 # so 90s is the "clearly beyond noise" line rather than the observed value itself.
 REBALANCE_LAG_SLA_SECONDS ?= 90
 REBALANCE_BURST ?= 30
+# load-multi samples pg_stat_activity while k6 runs; the watch is a safety net if k6 outlives it.
+CONNECTION_WATCH_SECONDS ?= 300
