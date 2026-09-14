@@ -1289,6 +1289,14 @@ VERDICT: defects reproduced (retry_blocked=1, fingerprint_blocked=1).
 | ~~P2~~ | ~~D1 trace 空 endpoint 丢 span~~ | **✅ 已修复并验证**（追踪改 opt-in + 打开却没 endpoint 直接启动失败；三条运行时证据见 D1） | 已完成 |
 | ~~P3~~ | ~~D3 有状态层单点~~ | **部分完成**：连接预算已量化并设门禁（3 副本 345/500=69%，300 VU 实测见 D3）；PG/Redis/Kafka 单点未做（非本次目标） | 已完成（预算）/ 大（HA） |
 
+> **最终 gate 期间发现的既有缺口（不是本轮回归）**：`make it` 里 order 的 7 个 REST IT 返回
+> **401**（`TradeEndpointIT`、`PaymentCallbackEndpointIT`、`ConfirmReceiptEndpointIT`、
+> `TradeEndpointRedisFailureIT`）。用分支前的提交（`9b78243`）在临时 worktree 里跑同一个命令，得到
+> **完全相同的 401（Tests run: 5, Failures: 2）** → 既有测试配置缺口：IT 上下文里没有可用的
+> `HttpSecurity`（`PermitAllAutoConfiguration` 会打 `... HttpSecurity is not available`），而这些 IT
+> 依赖 permit-all 链。`make unit` 与 `make e2e` 不受影响（均绿）。修法是给 IT 上下文补上可用的
+> security 链（不是改生产默认值），留作独立小任务。
+
 ---
 
 ## 5. 覆盖边界：哪些没测，以及为什么
