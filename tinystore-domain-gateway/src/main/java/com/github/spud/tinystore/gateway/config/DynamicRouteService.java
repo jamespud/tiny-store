@@ -6,6 +6,7 @@ import java.net.URI;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -47,6 +48,8 @@ public class DynamicRouteService implements InitializingBean {
 	private final ObjectMapper yamlMapper;
 	private final Set<String> activeRouteIds = new HashSet<>();
 	private Instant lastSuccessfulRefresh;
+	/** Last route table that applied cleanly; used to roll back a failed apply (P1-6). */
+	private Snapshot lastGoodSnapshot;
 
 	public DynamicRouteService(RouteDefinitionWriter routeDefinitionWriter,
 		ApplicationEventPublisher publisher,
@@ -86,25 +89,49 @@ public class DynamicRouteService implements InitializingBean {
 			return;
 		}
 
-		Set<String> newRouteIds = definition.getRoutes().stream()
-			.map(GatewayRoutesDefinition.RouteDefinition::getId)
-			.collect(Collectors.toSet());
-		Set<String> routesToRemove = new HashSet<>(activeRouteIds);
-		routesToRemove.removeAll(newRouteIds);
-
-		for (String routeId : routesToRemove) {
-			deleteRoute(routeId);
+		// P1-6: validate-then-swap. Phase 1 builds the complete replacement snapshot without touching live
+		// state, so a bad edit (a route that fails to compile, a malformed uri) leaves the gateway exactly as
+		// it was. The previous code deleted routes and cleared the policy registry before compiling, so one
+		// bad route could leave live routes without rate-limit/idempotency policies.
+		Snapshot snapshot;
+		try {
+			snapshot = buildSnapshot(definition);
+		}
+		catch (RuntimeException ex) {
+			log.error("Gateway route refresh rejected; keeping the last known good route table "
+				+ "({} routes active)", activeRouteIds.size(), ex);
+			return;
 		}
 
-		policyRegistry.clear();
+		Snapshot previous = lastGoodSnapshot;
+		try {
+			applySnapshot(snapshot);
+			lastGoodSnapshot = snapshot;
+		}
+		catch (RuntimeException ex) {
+			log.error("Gateway route refresh failed while applying the new table; rolling back to the "
+				+ "previous snapshot", ex);
+			if (previous != null) {
+				try {
+					applySnapshot(previous);
+					lastGoodSnapshot = previous;
+				}
+				catch (RuntimeException rollbackFailure) {
+					log.error("Gateway route rollback failed; the route table may be inconsistent until the "
+						+ "next successful refresh", rollbackFailure);
+				}
+			}
+		}
+	}
 
-		Map<String, GatewayRoutesDefinition.RoutePolicies> policies = new HashMap<>();
+	/** The complete replacement route table, built before anything live is touched. */
+	private Snapshot buildSnapshot(GatewayRoutesDefinition definition) {
+		Map<String, RouteDefinition> routes = new LinkedHashMap<>();
+		Map<String, GatewayRoutesDefinition.RoutePolicies> policies = new LinkedHashMap<>();
 		for (GatewayRoutesDefinition.RouteDefinition routeDefinition : definition.getRoutes()) {
 			if (routeDefinition.getId() == null || routeDefinition.getUri() == null) {
-				log.warn("Skip route without id or uri: {}", routeDefinition);
-				continue;
+				throw new IllegalStateException("Route without id or uri: " + routeDefinition);
 			}
-			deleteRoute(routeDefinition.getId());
 			RouteDefinition rd = new RouteDefinition();
 			rd.setId(routeDefinition.getId());
 			rd.setUri(URI.create(routeDefinition.getUri()));
@@ -113,22 +140,37 @@ public class DynamicRouteService implements InitializingBean {
 					.map(PredicateDefinition::new)
 					.collect(Collectors.toList()));
 			}
+			// Throws for a route whose retry policy is unsafe; that is the point of compiling here.
 			List<FilterDefinition> filters = GatewayRouteFilters.compile(routeDefinition);
 			if (!CollectionUtils.isEmpty(filters)) {
 				rd.setFilters(filters);
 			}
-
-			saveRoute(rd);
+			routes.put(rd.getId(), rd);
 			policies.put(routeDefinition.getId(), routeDefinition.getPolicies());
 		}
+		return new Snapshot(routes, policies);
+	}
 
-		policies.forEach(policyRegistry::registerPolicies);
+	private void applySnapshot(Snapshot snapshot) {
+		Set<String> routesToRemove = new HashSet<>(activeRouteIds);
+		routesToRemove.removeAll(snapshot.routes().keySet());
+		for (String routeId : routesToRemove) {
+			deleteRoute(routeId);
+		}
+		for (RouteDefinition definition : snapshot.routes().values()) {
+			deleteRoute(definition.getId());
+			saveRoute(definition);
+		}
+		policyRegistry.replaceAll(snapshot.policies());
 		activeRouteIds.clear();
-		activeRouteIds.addAll(policies.keySet());
-
+		activeRouteIds.addAll(snapshot.routes().keySet());
 		publisher.publishEvent(new RefreshRoutesEvent(this));
 		lastSuccessfulRefresh = Instant.now();
-		log.info("Refreshed {} gateway routes", policies.size());
+		log.info("Refreshed {} gateway routes", snapshot.routes().size());
+	}
+
+	private record Snapshot(Map<String, RouteDefinition> routes,
+		Map<String, GatewayRoutesDefinition.RoutePolicies> policies) {
 	}
 
 	private void clearActiveRoutes() {
