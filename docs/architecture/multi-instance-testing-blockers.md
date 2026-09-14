@@ -45,6 +45,87 @@ make consistency-multi   -> Tests run:  4, Failures: 1, Errors: 0   (并发一�
 
 ---
 
+## 0.1 收口：全部阻塞点的最终状态（2026-09-14 更新）
+
+> 上面 0/1/2/3 节是审计当天的快照，保留原样作为证据历史。本节是这份清单的**最终状态**：
+> 每条 finding 的落地 commit，以及保护它的**长期回归门禁**——不是"当时修过"，而是"以后回归会红"。
+> 分支：`codex/multi-instance-distributed-correctness`（相对 `main` ahead 57 / behind 0，含本 docs commit）。
+
+### 原始 findings
+
+| 编号 | 最终状态 | 落地 commit | 长期回归门禁 |
+|---|---|---|---|
+| A1 `container_name` 阻断扩副本 | RESOLVED | `a242524` | 同一套 target 跑 N=1/2/3，无需改 compose |
+| A2 固定宿主端口 | RESOLVED | `a242524`、`a35d6c2` | 端口范围按副本数发布；单实例端口可配置 |
+| A3 Flyway 并发迁移 | 明确降级为部署加固 | —（不在本计划范围） | 独立 migration Job；不再当 correctness blocker |
+| A4 只有 gateway 有健康检查 | RESOLVED | `d138c4c` | `load-multi` 逐副本 `/actuator/health/readiness` == UP |
+| B4 E2E 直连服务端口 | RESOLVED | `7d7d7f3`、`a35d6c2` | 业务 E2E 只走 gateway；直连仅限副本级探针 |
+| B5 无"是不是真分布式"断言 | RESOLVED | `cf3075b`、`a242524` | `DistributedMultiInstanceIT` + Nacos 拓扑门禁 |
+| C0 跨副本 ID 碰撞 | RESOLVED | `fd1e625` | `consistency-multi` ID 碰撞探针（空）+ `load-multi` |
+| C1 支付域消费不到订单事件 | RESOLVED | `62a46e0` | 支付 IT + `e2e-multi` |
+| C2 取消 vs 促销回执抢同一行 | RESOLVED | `02b1622` | 确定性 race IT × 100 次 |
+| C3 outbox 重复投递 | RESOLVED | `5e5e345`、`86a31a5`、`8dee159`、`3b2008c` | `consistency-multi` `duplicatePublishes=0` + `OutboxClaimFencingIT` |
+| C4 OTP 跨副本失效 | RESOLVED | `33e3698` | 跨副本 OTP exactly-once IT（并发验证只成功一次） |
+| C5 auth 审计 `inet` 绑定 | RESOLVED | `4744c9b` | `JdbcAuditLogAdapterIT` + `/otp/send` 202 |
+| C6 定时任务缺单实例锁 | RESOLVED | `02b1622` | 双 scheduler claim 测试（败者不调外部接口） |
+| C7 启动期 Kafka 重平衡 | 已量化（非 release blocker） | `9b78243` | `rebalance-multi`（lag 恢复 SLA 90s） |
+| C8 确认收货静默漏子单 | RESOLVED | `02b1622`、`78b33f7` | confirm-receipt race IT + 无子单直接 5xx |
+| C9 失败后幂等键被扣住 | RESOLVED | `dd6a0ed`、`ed08f2b`、`b26c212` | `retry-multi` Check 1 + durable-claim IT |
+| C10 业务拒绝一律 500 | RESOLVED | `988f419` | 409/500 语义测试（不泄漏约束名） |
+| C11 同键换 body 返回上一单 | RESOLVED | `dd6a0ed`、`86807dc` | `retry-multi` Check 2（指纹含 sellerId/buyerNick/productName） |
+| C12 Kafka 停机丢库存 | RESOLVED | `a34c251`、`a9833a8`、`2a54dd0` | Kafka-down chaos IT + orphan reclaim IT + `chain-multi` #3 |
+| C13 券在 commit 才预占 | 正确性已证明 + API 契约补齐 | `0c0ea96`、`b6286f5` | `chain-multi` #4（COMMITTED=1/closed=4）+ 创建响应带 `promotionCommitStatus` |
+| C14 补偿标志置位过晚 | RESOLVED | `b507beb` | `QuoteCompensationTest`；create 失败必释放报价 |
+| C15 promotion commit 缺 `@Param` | RESOLVED | `2c7eb06` | promotion IT + `chain-multi` #4 |
+| C16 网关限流可被 XFF 绕过 | RESOLVED | `b69cf23` | `rate-limit-multi` 三个 trust-boundary case |
+| C17 auth 客户端 seed 竞态（3 副本必挂） | RESOLVED | `94717f2` | `MULTI_REPLICAS=3` auth 全部注册 |
+| D1 tracing 空 endpoint 丢 span | RESOLVED | `d138c4c` | `RuntimeConfigContractTest` + `TracingConfigGuardTest` |
+| D2 网关路由与 controller 路径不一致 | RESOLVED | `7d7d7f3` | `GatewayRouteContractTest`（含 k8s ConfigMap 漂移检查） |
+| D3 连接预算 / 有状态层单点 | 预算已成为可执行契约；有状态层 HA 明确不在范围 | `d138c4c`、`d2eb62d`、`af28273` | `load-multi` 连接预算断言（3 副本 345 ≤ 350）+ 副本饥饿断言 |
+| E1 副本故障不转移 | RESOLVED | `010d164`、`6c98596` | `resilience-multi`：0 失败请求 + 200+body marker 才算被服务 |
+
+### 复审轮次追加的 finding（都是原始审计之后才暴露的）
+
+| 轮次 | finding | 落地 commit | 回归门禁 |
+|---|---|---|---|
+| 2 | 孤儿预扣回收 TOCTOU（改方向为超卖） | `a9833a8` | 消费端拒收过期事件 + 启动校验 `maxTTL < orphanDelay < timeout` + orphan reclaim IT |
+| 2 | create-trade 成功记录只在 Redis（模糊提交） | `ed08f2b` | V19 durable record + `TradeEndpointIT` Redis 丢失重放 |
+| 2 | 取消把 IN_PROGRESS 当成功 / 支付关单在认领之前 | `986f824` | `TradeCancellationClaimTest` + `OrderTimeoutSchedulerClaimOrderTest` |
+| 2 | outbox claim 无 fencing | `86a31a5`、`7441aae`、`8dee159` | `OutboxClaimFencingIT` |
+| 2 | 请求指纹漏业务字段 | `86807dc` | `TradeRequestFingerprintTest` |
+| 2 | validate-then-swap 缺位 / failover 探针可假绿 / 冲突翻译过宽 / 预算描述失真 | `f410bf9`、`6c98596`、`78b33f7`、`d2eb62d` | `DynamicRouteServiceRefreshTest`、`resilience-multi`、`TradeApplicationServiceConflictTranslationTest`、`RuntimeConfigContractTest` |
+| 3 | **P0** V19 只是 durable success record，缺 durable in-flight claim | `b26c212` | V21 + `claimProcessing` 同事务占位 + `TradeCreateDurableClaimIT`（删 Redis key 后第二请求必须阻塞、库存只占一次） |
+| 3 | outbox 在 B 已 PUBLISHED 后被旧 owner 打回 PENDING | `3b2008c` | 严格 `status='PROCESSING' AND claim_token=:token` + `OutboxClaimFencingIT` 第三个 case |
+| 3 | gateway 吞 writer error，rollback 不触发 | `d37b16d` | writer 错误上抛 + `lastSuccessfulRefresh` 只在前进成功时推进 |
+| 3 | policy registry 非原子（限流 fail-open 窗口） | `b805656` | `AtomicReference` + immutable map + 并发替换读测试 |
+| 3 | prod 仍 seed `tinystore-tool/changeit/svc.admin` | `d75e74e` | `SeedCredentialPolicy` 共享给 guard 与 seeding + `RegisteredClientSeedingTest` |
+| 3 | TTL 契约只校验源码默认值 | `2a54dd0`、`5dac662` | pre-deduct 边界校验 `requested <= max-reservation-ttl`（Redis 之前）+ 自身默认 TTL 预算校验 |
+| 3 | `make it` 按宽泛日志重跑整个 batch | `0bd2dc8` | `docker/it-gate.sh`：需 container-startup 根因 **且** 报告无 assertion/非容器错误；`IT_GATE_SELFTEST=1` 自测 |
+| 4 | **P1** 部分写入的新 route 不会被 rollback 清掉 | `431e113` | `activeRouteIds` 随写入推进 + 空表统一走 apply/rollback + stateful writer 测试 |
+
+### 明确不在范围内（不会被"修"成绿灯，只被记录）
+
+* **PostgreSQL / Redis / Kafka 的高可用**（D3 的有状态层）：本计划只把连接预算变成可执行契约，不引入 HA 拓扑。
+* **mutation（POST/PUT/PATCH）自动故障转移**：需要单独的"已提交但响应丢失 → 同键重放"证明；当前只对 GET/HEAD 做跨副本 retry。
+* **性能 scaling 结论**：本机没有隔离性能宿主，`load-multi` / `load-compare` 只证明"100/300 VU 下 correctness 干净 + 流量确实分散且无副本饥饿"，不证明 N 副本比 1 副本快多少。
+* **A3 独立 migration Job**：部署加固项，不阻塞 correctness。
+
+### 最终门禁（三层，全绿）
+
+```
+Layer 1  make unit  ✔   make it  ✔（0 测试级重跑；分类重试需两个独立信号）  make e2e 18/0/0/4
+Layer 2  e2e-multi 18/0/0/1 · consistency-multi 4/4 duplicatePublishes=0 · retry-multi 3 checks ·
+         chain-multi 4 invariants · resilience-multi 188/188 · load-multi 100/300 VU fail=0.00%
+Layer 3  e2e-multi / consistency-multi / chain-multi / resilience-multi(191/191) /
+         load-multi 100VU fail=0.00%（per-replica 691/692/691，预算 345≤350，0 Hikari 超时）
+```
+
+配合门禁的纪律：除"指定副本验证"类测试外，业务 E2E 只走 gateway；`make e2e-multi` 的拓扑门禁要求每个服务
+在 Nacos 的健康实例数 == `MULTI_REPLICAS`；`consistency-multi` 的 outbox 探针要求
+`duplicatePublishes == 0`；所有分布式修复都带"两个真实 JVM 副本"的回归测试，不靠 Mockito 单测代替。
+
+---
+
 ## 1. 已建成的多实例测试能力
 
 ### 新增文件
