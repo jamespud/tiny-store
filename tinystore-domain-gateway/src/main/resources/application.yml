@@ -67,6 +67,11 @@ management:
   tracing:
     sampling:
       probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
+    # D1: Boot 3.5 has no per-backend zipkin switch -- the sender and span handler are gated on
+    # management.tracing.enabled (checked via /actuator/beans), so an empty ZIPKIN_ENDPOINT used to
+    # build a reporter aimed at an empty URI that dropped every span without a word. Tracing is
+    # therefore opt-in: ZIPKIN_ENABLED=true + ZIPKIN_ENDPOINT=http://zipkin:9411/api/v2/spans.
+    enabled: ${ZIPKIN_ENABLED:false}
   zipkin:
     tracing:
       endpoint: ${ZIPKIN_ENDPOINT:}
@@ -74,6 +79,11 @@ management:
     web:
       exposure:
         include: health,info,prometheus,metrics,gateway-refresh
+  # A4: k8s 里 Boot 会自动建 probe 组，compose 下不会 —— 显式打开，healthcheck 才能测真正的 readiness。
+  endpoint:
+    health:
+      probes:
+        enabled: true
   metrics:
     distribution:
       percentiles-histogram:

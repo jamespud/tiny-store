@@ -17,7 +17,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
-import { randomString } from 'https://jslib.k6.io/k6-utils/1.4.0/index.js';
+import { randomString } from './lib/random.js';
 
 // Custom metrics
 const chainSuccess = new Counter('chain_success');
