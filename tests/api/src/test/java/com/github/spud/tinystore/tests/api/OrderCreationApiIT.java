@@ -72,6 +72,9 @@ class OrderCreationApiIT {
         assertThat(createData.get("paymentIntentId")).isInstanceOf(String.class);
         assertThat(((String) createData.get("paymentIntentId"))).isNotBlank();
         assertThat(((Number) createData.get("payableAmountCents")).longValue()).isGreaterThan(0L);
+        // C13: 下单 200 只表示"订单已创建"，优惠是异步裁定的 —— 响应必须带着这个状态，
+        // 否则客户端会把 200 读成"折扣已经最终确定"（抢券输家随后会 FAILED + 自动关单）。
+        assertThat(createData.get("promotionCommitStatus")).isEqualTo("PENDING");
 
         // Async inventory DB write: 下单后 INVENTORY_RESERVE_DB 事件经 Kafka 异步落库，
         // shopOrder 的 inventory 投影（PRE_DEDUCTED/version=2）需轮询等待。
@@ -89,6 +92,8 @@ class OrderCreationApiIT {
             Map<String, Object> tradeDetail = (Map<String, Object>) tradeDetailResponse.getBody().get("data");
             assertThat(tradeDetail).isNotNull();
             assertThat(tradeDetail.get("payStatus")).isEqualTo("UNPAID");
+            // C13: 客户端据此轮询裁决结果（PENDING -> COMMITTED，或输家 FAILED）
+            assertThat(tradeDetail.get("promotionCommitStatus")).isIn("PENDING", "COMMITTED", "FAILED");
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> shopOrders = (List<Map<String, Object>>) tradeDetail.get("shopOrders");
             assertThat(shopOrders).isNotEmpty();

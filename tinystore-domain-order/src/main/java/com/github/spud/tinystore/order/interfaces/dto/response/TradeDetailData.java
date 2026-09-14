@@ -24,6 +24,11 @@ public class TradeDetailData {
     private Long discountAmountCents;
     private Long payableAmountCents;
     private String createdAt;
+    /**
+     * 优惠的最终裁决状态（C13）：{@code PENDING}（仍在异步裁决）/ {@code COMMITTED} / {@code FAILED}。
+     * 客户端下单后应据此轮询，而不是把下单成功当成折扣已最终确定。
+     */
+    private String promotionCommitStatus;
     private List<ShopOrderDetail> shopOrders;
     
     @Data
