@@ -33,6 +33,7 @@
         <nacos.base.url>http://localhost:8849</nacos.base.url>
         <gateway.replica.urls>http://localhost:38080</gateway.replica.urls>
         <order.replica.urls>http://localhost:38280</order.replica.urls>
+        <POSTGRES_URL>jdbc:postgresql://localhost:5433/tinystore</POSTGRES_URL>
     </properties>
 
     <dependencies>
@@ -96,6 +97,7 @@
                         <nacos.base.url>${nacos.base.url}</nacos.base.url>
                         <gateway.replica.urls>${gateway.replica.urls}</gateway.replica.urls>
                         <order.replica.urls>${order.replica.urls}</order.replica.urls>
+                        <POSTGRES_URL>${POSTGRES_URL}</POSTGRES_URL>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
@@ -118,6 +120,7 @@
                         <nacos.base.url>${nacos.base.url}</nacos.base.url>
                         <gateway.replica.urls>${gateway.replica.urls}</gateway.replica.urls>
                         <order.replica.urls>${order.replica.urls}</order.replica.urls>
+                        <POSTGRES_URL>${POSTGRES_URL}</POSTGRES_URL>
                     </systemPropertyVariables>
                 </configuration>
                 <executions>
