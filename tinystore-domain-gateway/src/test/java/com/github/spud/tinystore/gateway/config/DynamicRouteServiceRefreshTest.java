@@ -9,11 +9,14 @@ import static org.mockito.Mockito.when;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.cloud.gateway.route.RouteDefinition;
 import org.springframework.cloud.gateway.route.RouteDefinitionWriter;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.ByteArrayResource;
@@ -66,6 +69,31 @@ class DynamicRouteServiceRefreshTest {
                 capacity: 1
                 refillRate: 1
         """;
+
+    /** GOOD plus two extra routes: the table that exposes a partial apply. */
+    private static final String NEW_ROUTES = GOOD + """
+          - id: product-new
+            uri: lb://product-service
+            predicates:
+              - Path=/api/products/**
+            policies:
+              rateLimit:
+                type: ip
+                capacity: 50
+                refillRate: 50
+          - id: payment-new
+            uri: lb://payment-service
+            predicates:
+              - Path=/api/payment/**
+            policies:
+              rateLimit:
+                type: ip
+                capacity: 50
+                refillRate: 50
+        """;
+
+    /** A route table with no routes at all. */
+    private static final String EMPTY = "routes: []\n";
 
     @Test
     @DisplayName("a rejected table keeps the previous routes and policies")
@@ -161,5 +189,102 @@ class DynamicRouteServiceRefreshTest {
             .contains(lastGood);
         // 1 save for the first refresh, 1 failed save during the second, 1 re-apply of the previous snapshot.
         assertThat(saves.get()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("round-4 P1: routes added by a partially applied table are removed by the rollback")
+    void partialApplyWithNewRoutesRollsBackCompletely() {
+        AtomicReference<String> routes = new AtomicReference<>(GOOD);
+        StatefulRouteDefinitionWriter writer = new StatefulRouteDefinitionWriter();
+        GatewayPolicyRegistry registry = new GatewayPolicyRegistry();
+        DynamicRouteService service = service(writer, routes, registry);
+
+        service.refreshRoutes();
+        assertThat(writer.routeIds()).containsExactly("order-service");
+        Instant lastGood = service.getLastSuccessfulRefresh().orElseThrow();
+
+        // Second refresh adds two routes and fails while writing the last one: order-service and product-new
+        // have already been written when payment-new throws.
+        routes.set(NEW_ROUTES);
+        writer.failOnSave = "payment-new";
+        service.refreshRoutes();
+
+        assertThat(writer.routeIds())
+            .withFailMessage("a route written by the failed attempt must not survive the rollback")
+            .containsExactly("order-service");
+        assertThat(registry.findPolicies("order-service")).isPresent();
+        assertThat(registry.findPolicies("product-new"))
+            .withFailMessage("the restored policy table must not describe routes that are not live")
+            .isEmpty();
+        assertThat(service.getLastSuccessfulRefresh()).contains(lastGood);
+    }
+
+    @Test
+    @DisplayName("round-4 P1: an empty table is applied through the same state machine")
+    void emptyTableIsAppliedThroughTheStateMachine() {
+        AtomicReference<String> routes = new AtomicReference<>(GOOD);
+        StatefulRouteDefinitionWriter writer = new StatefulRouteDefinitionWriter();
+        GatewayPolicyRegistry registry = new GatewayPolicyRegistry();
+        DynamicRouteService service = service(writer, routes, registry);
+
+        service.refreshRoutes();
+        assertThat(writer.routeIds()).containsExactly("order-service");
+
+        routes.set(EMPTY);
+        service.refreshRoutes();
+
+        assertThat(writer.routeIds()).isEmpty();
+        assertThat(registry.findPolicies("order-service")).isEmpty();
+        assertThat(service.getLastSuccessfulRefresh()).isPresent();
+    }
+
+    private static DynamicRouteService service(RouteDefinitionWriter writer,
+        java.util.concurrent.atomic.AtomicReference<String> routes, GatewayPolicyRegistry registry) {
+        GatewayDynamicProperties properties = new GatewayDynamicProperties();
+        properties.setRoutesLocation("memory:routes.yml");
+        ResourceLoader loader = new ResourceLoader() {
+            @Override
+            public Resource getResource(String location) {
+                return new ByteArrayResource(routes.get().getBytes(StandardCharsets.UTF_8));
+            }
+
+            @Override
+            public ClassLoader getClassLoader() {
+                return getClass().getClassLoader();
+            }
+        };
+        return new DynamicRouteService(writer, mock(ApplicationEventPublisher.class), properties, loader,
+            registry);
+    }
+
+    /**
+     * A writer that behaves like the real one: it holds a route map, so a test can assert what the gateway
+     * would actually serve after a failed refresh instead of counting calls.
+     */
+    private static final class StatefulRouteDefinitionWriter implements RouteDefinitionWriter {
+
+        private final Map<String, RouteDefinition> routes = new LinkedHashMap<>();
+
+        private String failOnSave;
+
+        @Override
+        public Mono<Void> save(Mono<RouteDefinition> route) {
+            return route.flatMap(definition -> {
+                if (definition.getId().equals(failOnSave)) {
+                    return Mono.error(new IllegalStateException("route writer is down"));
+                }
+                routes.put(definition.getId(), definition);
+                return Mono.empty();
+            });
+        }
+
+        @Override
+        public Mono<Void> delete(Mono<String> routeId) {
+            return routeId.doOnNext(routes::remove).then();
+        }
+
+        private java.util.Set<String> routeIds() {
+            return routes.keySet();
+        }
     }
 }

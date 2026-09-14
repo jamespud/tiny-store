@@ -53,8 +53,8 @@ class GatewayPolicyRegistryTest {
     }
 
     @Test
-    @DisplayName("registerPolicies(null) removes a route and clear() empties the table")
-    void registerAndClear() {
+    @DisplayName("registerPolicies(null) removes a route and an empty replaceAll empties the table")
+    void registerAndReplaceEmpty() {
         GatewayPolicyRegistry registry = new GatewayPolicyRegistry();
         registry.replaceAll(Map.of("order-service", policies(100)));
 
@@ -62,7 +62,7 @@ class GatewayPolicyRegistryTest {
         assertThat(registry.findPolicies("order-service")).isEmpty();
 
         registry.replaceAll(Map.of("order-service", policies(100)));
-        registry.clear();
+        registry.replaceAll(Map.of());
         assertThat(registry.findPolicies("order-service")).isEmpty();
     }
 

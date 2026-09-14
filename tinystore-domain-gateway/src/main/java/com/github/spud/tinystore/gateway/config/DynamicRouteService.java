@@ -83,16 +83,6 @@ public class DynamicRouteService implements InitializingBean {
 		}
 
 		GatewayRoutesDefinition definition = optionalDefinition.get();
-		if (CollectionUtils.isEmpty(definition.getRoutes())) {
-			log.warn("Route definition file {} contains no routes", properties.getRoutesLocation());
-			try {
-				clearActiveRoutes();
-			}
-			catch (RuntimeException ex) {
-				log.error("Failed to clear the gateway route table", ex);
-			}
-			return;
-		}
 
 		// P1-6: validate-then-swap. Phase 1 builds the complete replacement snapshot without touching live
 		// state, so a bad edit (a route that fails to compile, a malformed uri) leaves the gateway exactly as
@@ -106,6 +96,13 @@ public class DynamicRouteService implements InitializingBean {
 			log.error("Gateway route refresh rejected; keeping the last known good route table "
 				+ "({} routes active)", activeRouteIds.size(), ex);
 			return;
+		}
+
+		if (snapshot.routes().isEmpty()) {
+			// An empty table is a snapshot like any other (review round-4 P1): it goes through the same
+			// apply/rollback path, so a failure while deleting the live routes can still be rolled back to the
+			// previous table instead of leaving a half-cleared gateway behind.
+			log.warn("Route definition file {} contains no routes", properties.getRoutesLocation());
 		}
 
 		Snapshot previous = lastGoodSnapshot;
@@ -135,6 +132,9 @@ public class DynamicRouteService implements InitializingBean {
 
 	/** The complete replacement route table, built before anything live is touched. */
 	private Snapshot buildSnapshot(GatewayRoutesDefinition definition) {
+		if (CollectionUtils.isEmpty(definition.getRoutes())) {
+			return new Snapshot(Map.of(), Map.of());
+		}
 		Map<String, RouteDefinition> routes = new LinkedHashMap<>();
 		Map<String, GatewayRoutesDefinition.RoutePolicies> policies = new LinkedHashMap<>();
 		for (GatewayRoutesDefinition.RouteDefinition routeDefinition : definition.getRoutes()) {
@@ -165,27 +165,24 @@ public class DynamicRouteService implements InitializingBean {
 		routesToRemove.removeAll(snapshot.routes().keySet());
 		for (String routeId : routesToRemove) {
 			deleteRoute(routeId);
+			activeRouteIds.remove(routeId);
 		}
 		for (RouteDefinition definition : snapshot.routes().values()) {
 			deleteRoute(definition.getId());
 			saveRoute(definition);
+			// Track what the writer holds *as we go* (review round-4 P1). Updating this only after the whole
+			// table is written meant a failure halfway through left the routes written so far invisible to the
+			// rollback: rolling back to the previous snapshot computed `activeRouteIds - previous`, which could
+			// not name a route the failed attempt had just added, so that route survived and the following
+			// RefreshRoutesEvent published it with no policy in the restored table.
+			activeRouteIds.add(definition.getId());
 		}
 		policyRegistry.replaceAll(snapshot.policies());
-		activeRouteIds.clear();
-		activeRouteIds.addAll(snapshot.routes().keySet());
 		publisher.publishEvent(new RefreshRoutesEvent(this));
 	}
 
 	private record Snapshot(Map<String, RouteDefinition> routes,
 		Map<String, GatewayRoutesDefinition.RoutePolicies> policies) {
-	}
-
-	private void clearActiveRoutes() {
-		for (String routeId : activeRouteIds) {
-			deleteRoute(routeId);
-		}
-		activeRouteIds.clear();
-		policyRegistry.clear();
 	}
 
 	private void saveRoute(RouteDefinition definition) {

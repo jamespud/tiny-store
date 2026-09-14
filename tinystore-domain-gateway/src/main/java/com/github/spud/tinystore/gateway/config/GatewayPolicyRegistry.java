@@ -35,10 +35,6 @@ public class GatewayPolicyRegistry {
 		});
 	}
 
-	public void clear() {
-		policiesByRoute.set(Map.of());
-	}
-
 	/**
 	 * Replace the whole policy set with a single reference swap (P1-6 validate-then-swap, tightened in
 	 * round 3). Applying policies route by route would leave a window where a live route has no
