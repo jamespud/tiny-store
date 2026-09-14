@@ -620,7 +620,15 @@ load-multi: check-multi-replicas build ## Run the k6 load matrix against the N-r
 	for u in $$(printf '%s' "$$order_urls" | tr ',' ' '); do p=$${u##*:}; echo "$$p $$(order_trades_count $$p)" >> $$split_after; done; \
 	echo ""; \
 	echo "=== Per-replica traffic split (order) ==="; \
-	awk 'NR==FNR{b[$$1]=$$2;next}{d=$$2-b[$$1]; printf "  replica :%s -> %d requests%s\n", $$1, d, (d>0?"":"  <-- STARVED")}' $$split_before $$split_after; \
+	set +e; \
+	awk 'NR==FNR{b[$$1]=$$2;next}{d=$$2-b[$$1]; printf "  replica :%s -> %d requests%s\n", $$1, d, (d>0?"":"  <-- STARVED"); if (d<=0) starved=1} END{exit starved}' $$split_before $$split_after; \
+	traffic_fail=$$?; \
+	set -e; \
+	if [ $$traffic_fail -ne 0 ]; then \
+		echo "ERROR: at least one order replica served no traffic during the run -- the load balancer is"; \
+		echo "       starving a replica (accepted for the API suite, not for the load gate)"; \
+		rm -f $$split_before $$split_after; exit 4; \
+	fi; \
 	rm -f $$split_before $$split_after; \
 	echo ""; \
 	echo "=== Cross-replica ID collision probe ==="; \
