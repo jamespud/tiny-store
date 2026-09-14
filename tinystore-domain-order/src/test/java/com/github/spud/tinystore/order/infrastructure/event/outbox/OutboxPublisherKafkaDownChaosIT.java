@@ -116,8 +116,10 @@ class OutboxPublisherKafkaDownChaosIT {
         // retryCount 应 >= 3
         assertThat(finalEvent.getRetryCount()).isGreaterThanOrEqualTo(3);
 
-        // status 应为 FAILED（按当前 OutboxEventService.markAsFailed 逻辑：retryCount >= 3 置 FAILED）
-        assertThat(finalEvent.getStatus()).isEqualTo("FAILED");
+        // status 应保持 PENDING：C12 之后**传输失败**（Kafka 不可达）不再永久 FAILED，而是带着
+        // nextAttemptAt 回退到可重试队列；永久 FAILED 只留给不可恢复的载荷/校验失败或超过保留期。
+        assertThat(finalEvent.getStatus()).isEqualTo("PENDING");
+        assertThat(finalEvent.getNextAttemptAt()).isNotNull();
 
         // lastError 应非空
         assertThat(finalEvent.getLastError()).isNotNull();
