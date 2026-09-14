@@ -3,6 +3,7 @@ package com.github.spud.tinystore.auth.application.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
@@ -98,17 +100,51 @@ class RegisteredClientSeedingTest {
             .hasMessageContaining("boom");
     }
 
+    @Test
+    @DisplayName("round-3 P1: prod seeds web+internal only -- never the admin-scoped tool client")
+    void prodDoesNotSeedTheToolClient() throws Exception {
+        RegisteredClientRepository repository = mock(RegisteredClientRepository.class);
+        when(repository.findByClientId(anyString())).thenReturn(null);
+        MockEnvironment prod = new MockEnvironment();
+        prod.setActiveProfiles("prod");
+
+        runner(repository, prod).run();
+
+        verify(repository, never()).save(argThat(client -> "tinystore-tool".equals(client.getClientId())));
+        verify(repository, times(2)).save(any());
+    }
+
+    @Test
+    @DisplayName("round-3 P1: an explicit prod opt-in still seeds the tool client")
+    void toolClientIsSeededWhenExplicitlyEnabled() throws Exception {
+        RegisteredClientRepository repository = mock(RegisteredClientRepository.class);
+        when(repository.findByClientId(anyString())).thenReturn(null);
+        MockEnvironment prod = new MockEnvironment();
+        prod.setActiveProfiles("prod");
+        prod.setProperty("TINYSTORE_TOOL_CLIENT_ENABLED", "true");
+        prod.setProperty("TINYSTORE_TOOL_CLIENT_SECRET", "a-real-tool-secret");
+
+        runner(repository, prod).run();
+
+        verify(repository).save(argThat(client -> "tinystore-tool".equals(client.getClientId())));
+    }
+
     /**
      * Builds the real CommandLineRunner bean (its {@code @Value} TTL fields are normally injected by
      * Spring, so set them here) backed by the stubbed repository.
      */
     private CommandLineRunner runner(RegisteredClientRepository repository) {
+        return runner(repository, new MockEnvironment());
+    }
+
+    private CommandLineRunner runner(RegisteredClientRepository repository,
+        org.springframework.core.env.Environment environment) {
         RegisteredClientConfig config = new RegisteredClientConfig();
         ReflectionTestUtils.setField(config, "userAccessTokenTtl", Duration.ofHours(2));
         ReflectionTestUtils.setField(config, "userRefreshTokenTtl", Duration.ofDays(30));
         ReflectionTestUtils.setField(config, "userIdTokenTtl", Duration.ofHours(2));
         ReflectionTestUtils.setField(config, "m2mAccessTokenTtl", Duration.ofMinutes(5));
-        return config.initClients(repository, new BCryptPasswordEncoder());
+        return config.initClients(repository, new BCryptPasswordEncoder(), environment);
     }
 
     /** A stored client, as another replica would have left it. */
