@@ -30,6 +30,29 @@ export MULTI_REPLICAS
 MULTI_PROBE_SECONDS ?= 45
 MULTI_KILL_AFTER ?= 10
 
+# Host ports published by the single-instance stack. docker-compose-test.yml interpolates the same
+# names, so overriding them here and there stays consistent:
+#   make e2e E2E_GATEWAY_PORT=28000 E2E_AUTH_PORT=29000
+# A host port being taken (by an unrelated container on a shared dev box) is an environment detail,
+# not a behaviour under test: the tests are pointed at whatever port was chosen. Nothing should
+# treat "8080 is already allocated" as a blocker for validating the platform.
+E2E_POSTGRES_PORT ?= 5433
+E2E_REDIS_PORT ?= 6380
+E2E_KAFKA_PORT ?= 9093
+E2E_NACOS_PORT ?= 8849
+E2E_NACOS_GRPC_PORT ?= 9849
+E2E_GATEWAY_PORT ?= 8080
+E2E_AUTH_PORT ?= 9000
+E2E_ACCOUNT_PORT ?= 8000
+E2E_PRODUCT_PORT ?= 8090
+E2E_PROMOTION_PORT ?= 1200
+E2E_INVENTORY_PORT ?= 13000
+E2E_ORDER_PORT ?= 28080
+E2E_PAYMENT_PORT ?= 8083
+export E2E_POSTGRES_PORT E2E_REDIS_PORT E2E_KAFKA_PORT E2E_NACOS_PORT E2E_NACOS_GRPC_PORT \
+       E2E_GATEWAY_PORT E2E_AUTH_PORT E2E_ACCOUNT_PORT E2E_PRODUCT_PORT E2E_PROMOTION_PORT \
+       E2E_INVENTORY_PORT E2E_ORDER_PORT E2E_PAYMENT_PORT
+
 help: ## Show this help message
 	@echo 'Usage: make [target]'
 	@echo ''
@@ -58,7 +81,7 @@ debug: build ## Start debug environment (fixed ports: 5432/6379/9092/8848)
 	@echo ""
 	@echo "Debug environment started successfully"
 	@echo "Access points:"
-	@echo "  - Gateway:    http://localhost:8080"
+	@echo "  - Gateway:    http://localhost:$(E2E_GATEWAY_PORT)"
 	@echo "  - Auth:       http://localhost:9000"
 	@echo "  - Account:    http://localhost:8000"
 	@echo "  - Inventory:  http://localhost:13000"
@@ -112,7 +135,7 @@ e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
 	docker compose -f $(COMPOSE_TEST) up -d --build; \
 	echo "Waiting for gateway to be healthy (max 120s)..."; \
 	for i in $$(seq 1 24); do \
-		if curl -sf --max-time 3 http://localhost:8080/actuator/health > /dev/null 2>&1; then \
+		if curl -sf --max-time 3 http://localhost:$(E2E_GATEWAY_PORT)/actuator/health > /dev/null 2>&1; then \
 			echo "Gateway is healthy after $$((i*5))s"; \
 			break; \
 		fi; \
@@ -129,8 +152,8 @@ e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
 	for i in $$(seq 1 24); do \
 		all_ready=1; \
 		for path in "/internal/health/order" "/internal/health/promotion" "/internal/health/inventory" "/internal/health/product" "/internal/health/auth" "/internal/health/account" "/internal/health/pay"; do \
-			response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1 || true); \
-			code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1 || echo 000); \
+			response=$$(curl -sS --max-time 3 "http://localhost:$(E2E_GATEWAY_PORT)$$path" 2>&1 || true); \
+			code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:$(E2E_GATEWAY_PORT)$$path" 2>&1 || echo 000); \
 			if [ "$$code" != "200" ] || ! echo "$$response" | grep -q 'UP'; then \
 				all_ready=0; \
 				break; \
@@ -145,8 +168,8 @@ e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
 			echo "ERROR: Downstream routes failed to become ready within 120s"; \
 			echo "=== Route status ==="; \
 			for path in "/internal/health/order" "/internal/health/promotion" "/internal/health/inventory" "/internal/health/product" "/internal/health/auth" "/internal/health/account" "/internal/health/pay"; do \
-				response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1 || true); \
-				code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1 || echo 000); \
+				response=$$(curl -sS --max-time 3 "http://localhost:$(E2E_GATEWAY_PORT)$$path" 2>&1 || true); \
+				code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:$(E2E_GATEWAY_PORT)$$path" 2>&1 || echo 000); \
 				body_prefix=$$(echo "$$response" | LC_ALL=C cut -c 1-50); \
 				echo "GET $$path -> $$code | $$body_prefix"; \
 			done; \
@@ -159,7 +182,10 @@ e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
 		sleep 5; \
 	done; \
 	echo "Running API tests (only black-box tests against gateway)..."; \
-	cd tests/api && ../../$(MAVEN) verify -Pit -DskipITs=false || exit 1; \
+	cd tests/api && ../../$(MAVEN) verify -Pit -DskipITs=false \
+		-Dgateway.base.url=http://localhost:$(E2E_GATEWAY_PORT) \
+		-DPOSTGRES_URL=jdbc:postgresql://localhost:$(E2E_POSTGRES_PORT)/tinystore \
+		|| exit 1; \
 	echo "E2E/API tests passed successfully"
 
 multi-up: check-multi-replicas build ## Start the multi-instance (distributed) test stack (MULTI_REPLICAS per service)
@@ -225,7 +251,7 @@ e2e-multi: check-multi-replicas build ## Run E2E/API + distributed assertions ag
 	for i in $$(seq 1 96); do \
 		missing=""; \
 		for svc in tinystore-gateway tinystore-auth tinystore-domain-account product-service promotion-service tinystore-inventory-service order-service pay-service; do \
-			n=$$(curl -s --max-time 3 "http://localhost:8849/nacos/v1/ns/instance/list?serviceName=$$svc&healthyOnly=false" | grep -o '"healthy":true' | wc -l); \
+			n=$$(curl -s --max-time 3 "http://localhost:$(E2E_NACOS_PORT)/nacos/v1/ns/instance/list?serviceName=$$svc&healthyOnly=false" | grep -o '"healthy":true' | wc -l); \
 			if [ "$$n" -lt $(MULTI_REPLICAS) ]; then missing="$$missing $$svc($$n/$(MULTI_REPLICAS))"; fi; \
 		done; \
 		if [ -z "$$missing" ]; then echo "Discovery topology complete after $$((i*5))s"; break; fi; \
@@ -246,9 +272,10 @@ e2e-multi: check-multi-replicas build ## Run E2E/API + distributed assertions ag
 		-Dpromotion.base.url=$${promotion_urls%%,*} \
 		-Dmulti.instance.mode=true \
 		-Dmulti.instance.replicas=$$replicas \
-		-Dnacos.base.url=http://localhost:8849 \
+		-Dnacos.base.url=http://localhost:$(E2E_NACOS_PORT) \
 		-Dgateway.replica.urls=$$gw_urls \
 		-Dorder.replica.urls=$$order_urls \
+		-DPOSTGRES_URL=jdbc:postgresql://localhost:$(E2E_POSTGRES_PORT)/tinystore \
 		|| exit 1; \
 	echo "Multi-instance E2E + distributed assertions passed"
 
@@ -297,7 +324,7 @@ consistency-multi: check-multi-replicas build ## Run concurrency consistency tes
 		-Dinventory.base.url=$$inv_first \
 		-Dinventory.replica.urls=$$inventory_urls \
 		-Dinventory.prometheus.url=$$inv_first/actuator/prometheus \
-		-Dpg.url=jdbc:postgresql://localhost:5433/tinystore \
+		-Dpg.url=jdbc:postgresql://localhost:$(E2E_POSTGRES_PORT)/tinystore \
 		|| consistency_status=$$?; \
 	echo ""; \
 	echo "=== Outbox duplicate-publish probe (multi-instance) ==="; \
@@ -394,7 +421,7 @@ load-multi: check-multi-replicas build ## Run the k6 load matrix against the N-r
 	for i in $$(seq 1 96); do \
 		missing=""; \
 		for svc in tinystore-gateway tinystore-auth tinystore-domain-account product-service promotion-service tinystore-inventory-service order-service pay-service; do \
-			n=$$(curl -s --max-time 3 "http://localhost:8849/nacos/v1/ns/instance/list?serviceName=$$svc&healthyOnly=false" | grep -o '"healthy":true' | wc -l); \
+			n=$$(curl -s --max-time 3 "http://localhost:$(E2E_NACOS_PORT)/nacos/v1/ns/instance/list?serviceName=$$svc&healthyOnly=false" | grep -o '"healthy":true' | wc -l); \
 			[ "$$n" -lt $(MULTI_REPLICAS) ] && missing="$$missing $$svc"; \
 		done; \
 		[ -z "$$missing" ] && { echo "Topology complete after $$((i*5))s"; break; }; \
@@ -538,7 +565,7 @@ e2e-smoke: build ## Run E2E smoke tests (gateway + all service health routes onl
 	docker compose -f $(COMPOSE_TEST) up -d; \
 	echo "Waiting for gateway to be healthy (max 120s)..."; \
 	for i in $$(seq 1 24); do \
-		if curl -sf --max-time 3 http://localhost:8080/actuator/health > /dev/null 2>&1; then \
+		if curl -sf --max-time 3 http://localhost:$(E2E_GATEWAY_PORT)/actuator/health > /dev/null 2>&1; then \
 			echo "Gateway is healthy after $$((i*5))s"; \
 			break; \
 		fi; \
@@ -555,8 +582,8 @@ e2e-smoke: build ## Run E2E smoke tests (gateway + all service health routes onl
 	for i in $$(seq 1 24); do \
 		all_ready=1; \
 		for path in "/internal/health/order" "/internal/health/promotion" "/internal/health/inventory" "/internal/health/product" "/internal/health/auth" "/internal/health/account" "/internal/health/pay"; do \
-			response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1); \
-			code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1); \
+			response=$$(curl -sS --max-time 3 "http://localhost:$(E2E_GATEWAY_PORT)$$path" 2>&1); \
+			code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:$(E2E_GATEWAY_PORT)$$path" 2>&1); \
 			if [ "$$code" != "200" ] || ! echo "$$response" | grep -q 'UP'; then \
 				all_ready=0; \
 				break; \
@@ -571,8 +598,8 @@ e2e-smoke: build ## Run E2E smoke tests (gateway + all service health routes onl
 			echo "ERROR: Service health-check routes failed within 120s"; \
 			echo "=== Route status ==="; \
 			for path in "/internal/health/order" "/internal/health/promotion" "/internal/health/inventory" "/internal/health/product" "/internal/health/auth" "/internal/health/account" "/internal/health/pay"; do \
-				response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1); \
-				code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1); \
+				response=$$(curl -sS --max-time 3 "http://localhost:$(E2E_GATEWAY_PORT)$$path" 2>&1); \
+				code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:$(E2E_GATEWAY_PORT)$$path" 2>&1); \
 				body_prefix=$$(echo "$$response" | LC_ALL=C cut -c 1-50); \
 				echo "GET $$path -> $$code | $$body_prefix"; \
 			done; \
@@ -649,7 +676,7 @@ consistency: build ## Run concurrency consistency tests (200 concurrent requests
 	docker compose -f $(COMPOSE_TEST) up -d --build; \
 	echo "Waiting for gateway to be healthy (max 120s)..."; \
 	for i in $$(seq 1 24); do \
-		if curl -sf --max-time 3 http://localhost:8080/actuator/health > /dev/null 2>&1; then \
+		if curl -sf --max-time 3 http://localhost:$(E2E_GATEWAY_PORT)/actuator/health > /dev/null 2>&1; then \
 			echo "Gateway is healthy after $$((i*5))s"; \
 			break; \
 		fi; \
@@ -666,8 +693,8 @@ consistency: build ## Run concurrency consistency tests (200 concurrent requests
 	for i in $$(seq 1 24); do \
 		all_ready=1; \
 		for path in "/internal/health/order" "/internal/health/inventory"; do \
-			response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1 || true); \
-			code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1 || echo 000); \
+			response=$$(curl -sS --max-time 3 "http://localhost:$(E2E_GATEWAY_PORT)$$path" 2>&1 || true); \
+			code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:$(E2E_GATEWAY_PORT)$$path" 2>&1 || echo 000); \
 			if [ "$$code" != "200" ] || ! echo "$$response" | grep -q 'UP'; then \
 				all_ready=0; \
 				break; \
@@ -711,7 +738,7 @@ load: build ## Run k6 load tests (stress test with p95/p99 latency metrics)
 	docker compose -f $(COMPOSE_TEST) up -d --build; \
 	echo "Waiting for gateway to be healthy (max 120s)..."; \
 	for i in $$(seq 1 24); do \
-		if curl -sf --max-time 3 http://localhost:8080/actuator/health > /dev/null 2>&1; then \
+		if curl -sf --max-time 3 http://localhost:$(E2E_GATEWAY_PORT)/actuator/health > /dev/null 2>&1; then \
 			echo "Gateway is healthy after $$((i*5))s"; \
 			break; \
 		fi; \
@@ -728,8 +755,8 @@ load: build ## Run k6 load tests (stress test with p95/p99 latency metrics)
 	for i in $$(seq 1 24); do \
 		all_ready=1; \
 		for path in "/internal/health/order" "/internal/health/inventory"; do \
-			response=$$(curl -sS --max-time 3 "http://localhost:8080$$path" 2>&1 || true); \
-			code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:8080$$path" 2>&1 || echo 000); \
+			response=$$(curl -sS --max-time 3 "http://localhost:$(E2E_GATEWAY_PORT)$$path" 2>&1 || true); \
+			code=$$(curl -sS --max-time 3 -w '%{http_code}' -o /dev/null "http://localhost:$(E2E_GATEWAY_PORT)$$path" 2>&1 || echo 000); \
 			if [ "$$code" != "200" ] || ! echo "$$response" | grep -q 'UP'; then \
 				all_ready=0; \
 				break; \
@@ -874,7 +901,7 @@ load-matrix: build ## Run k6 load matrix (multi-VUS scan through gateway, full s
 	docker compose -f $(COMPOSE_TEST) up -d --build; \
 	echo "Waiting for gateway (max 120s)..."; \
 	for i in $$(seq 1 24); do \
-		curl -sf --max-time 3 http://localhost:8080/actuator/health > /dev/null 2>&1 && { echo "Gateway healthy after $$((i*5))s"; break; }; \
+		curl -sf --max-time 3 http://localhost:$(E2E_GATEWAY_PORT)/actuator/health > /dev/null 2>&1 && { echo "Gateway healthy after $$((i*5))s"; break; }; \
 		if [ $$i -eq 24 ]; then \
 			echo "ERROR: gateway failed to become healthy within 120s"; \
 			docker compose -f $(COMPOSE_TEST) logs --tail=50 gateway; \
@@ -894,7 +921,7 @@ load-matrix: build ## Run k6 load matrix (multi-VUS scan through gateway, full s
 	done; \
 	echo "Running k6 load matrix (VUS=$$levels, DURATION=$$duration, per-level SKU, via gateway :8080)..."; \
 	cd perf/k6; \
-	VUS_LEVELS="$$levels" DURATION="$$duration" BASE_URL="http://localhost:8080" bash run_matrix.sh; \
+	VUS_LEVELS="$$levels" DURATION="$$duration" BASE_URL="http://localhost:$(E2E_GATEWAY_PORT)" bash run_matrix.sh; \
 	echo "Load matrix complete - per-level results printed above (see LOAD MATRIX SUMMARY)"
 
 load-matrix-it: build ## Run consistency IT matrix (oversell/idempotency/confirm at multiple concurrency levels, DB assertions)
@@ -906,19 +933,19 @@ load-matrix-it: build ## Run consistency IT matrix (oversell/idempotency/confirm
 	docker compose -f $(COMPOSE_TEST) up -d --build; \
 	echo "Waiting for gateway (max 120s)..."; \
 	for i in $$(seq 1 24); do \
-		curl -sf --max-time 3 http://localhost:8080/actuator/health > /dev/null 2>&1 && { echo "Gateway healthy after $$((i*5))s"; break; }; \
+		curl -sf --max-time 3 http://localhost:$(E2E_GATEWAY_PORT)/actuator/health > /dev/null 2>&1 && { echo "Gateway healthy after $$((i*5))s"; break; }; \
 		sleep 5; \
 	done; \
 	echo "Waiting 30s for Nacos service registration (order -> inventory via Feign)..."; \
 	sleep 30; \
 	for C in 500 1000 5000 10000; do \
 		echo "===== OVERSELL C=$$C ====="; \
-		$(MAVEN) -pl tests/performance test -Pperf -Dtest=InventoryOversellBoundaryIT -Dperf.concurrency=$$C -Dinventory.base.url=http://localhost:13000 -Dpg.url=jdbc:postgresql://localhost:5433/tinystore || exit 1; \
+		$(MAVEN) -pl tests/performance test -Pperf -Dtest=InventoryOversellBoundaryIT -Dperf.concurrency=$$C -Dinventory.base.url=http://localhost:$(E2E_INVENTORY_PORT) -Dpg.url=jdbc:postgresql://localhost:$(E2E_POSTGRES_PORT)/tinystore || exit 1; \
 		echo "===== IDEMPOTENCY C=$$C ====="; \
-		$(MAVEN) -pl tests/performance test -Pperf -Dtest=OrderCreateIdempotencyConsistencyIT -Dperf.concurrency=$$C -Dgateway.base.url=http://localhost:8080 -Dpg.url=jdbc:postgresql://localhost:5433/tinystore || echo "WARN: idempotency C=$$C failed (known stack bottleneck at high concurrency)"; \
+		$(MAVEN) -pl tests/performance test -Pperf -Dtest=OrderCreateIdempotencyConsistencyIT -Dperf.concurrency=$$C -Dgateway.base.url=http://localhost:$(E2E_GATEWAY_PORT) -Dpg.url=jdbc:postgresql://localhost:$(E2E_POSTGRES_PORT)/tinystore || echo "WARN: idempotency C=$$C failed (known stack bottleneck at high concurrency)"; \
 	done; \
 	for N in 500 1000; do \
 		echo "===== CONFIRM-LOCK N=$$N ====="; \
-		$(MAVEN) -pl tests/performance test -Pperf -Dtest=InventoryConfirmLockContentionIT -Dperf.confirm.concurrency=$$N -Dinventory.base.url=http://localhost:13000 -Dpg.url=jdbc:postgresql://localhost:5433/tinystore || exit 1; \
+		$(MAVEN) -pl tests/performance test -Pperf -Dtest=InventoryConfirmLockContentionIT -Dperf.confirm.concurrency=$$N -Dinventory.base.url=http://localhost:$(E2E_INVENTORY_PORT) -Dpg.url=jdbc:postgresql://localhost:$(E2E_POSTGRES_PORT)/tinystore || exit 1; \
 	done; \
 	echo "Consistency matrix complete - collect outputs into docs/performance/load-report-2026-07-28.md"
