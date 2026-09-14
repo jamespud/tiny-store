@@ -97,9 +97,14 @@ services:
       TINYSTORE_SECURITY_RESOURCESERVER_ENABLED: false
       JWKS_URI: http://auth:9000/.well-known/jwks.json
       GATEWAY_RATE_LIMIT_ENABLED: false
-      SPRING_CLOUD_GATEWAY_HTTPCLIENT_POOL_MAX_CONNECTIONS: 2000
-      SPRING_CLOUD_GATEWAY_HTTPCLIENT_POOL_MAX_PENDING_ACQUIRE_COUNT: 20000
-      SPRING_CLOUD_GATEWAY_HTTPCLIENT_RESPONSE_TIMEOUT: 30s
+      # The three SPRING_CLOUD_GATEWAY_HTTPCLIENT_* keys that used to sit here were inert: Gateway
+      # 4.x moved the prefix to spring.cloud.gateway.server.webflux.httpclient, so the stack "set" a
+      # response timeout that never applied and ran with no connect timeout at all -- which is why a
+      # killed replica black-holed requests for 20s (E1) instead of failing fast into a retry.
+      # Those timeouts now have explicit, asserted defaults in the gateway's application.yml
+      # (GatewayResilienceConfigTest). pool.max-pending-acquire-count does not exist in Gateway 4.3.0
+      # and pool.max-connections only applies to a FIXED pool, so both pool knobs were no-ops too;
+      # the connection budget belongs to task 13B.
     depends_on:
       nacos:
         condition: service_healthy

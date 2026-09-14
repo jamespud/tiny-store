@@ -53,12 +53,36 @@ routes:
   #     themselves, so those routes must strip 0.
   # GatewayRouteContractTest pins public-path -> StripPrefix -> declared-controller-base for every
   # domain, so a drift here fails the build instead of being masked by a direct-port test.
+  #
+  # `retry:` is the safe read failover policy (E1). It is compiled by GatewayRouteFilters into the
+  # framework's Retry route filter, and it is a policy rather than a `Retry=...` string because the
+  # string form of that filter is positional (one token per field), so it cannot express two methods.
+  #   retries: number of EXTRA attempts (1 = the original request plus one retry).
+  #   methods: which HTTP methods may be replayed. The framework checks this list on both retry
+  #     paths, so a mutation listed here would be replayed; GatewayRouteFilters refuses that at load
+  #     time. Mutations keep the "the client retries with the same Idempotency-Key" contract (C9/R2);
+  #     mutation failover is a different failure model and needs its own proof before it can be on.
+  # Everything not named here is the framework default, which fits E1's failure mode exactly:
+  #   exceptions = IOException + gateway TimeoutException  (ConnectException, ConnectTimeoutException
+  #     and "connection reset before a response" are all IOExceptions);
+  #   series     = 5xx, i.e. an idempotent read that failed is worth one attempt elsewhere.
+  # "next instance" is not a knob: every iteration calls ServerWebExchangeUtils.reset(exchange), which
+  # clears the already-routed flag, so RouteToRequestUrlFilter + ReactiveLoadBalancerClientFilter
+  # select again. That selection is deterministic (round-robin) because the randomising Nacos selector
+  # is off -- it needs spring.cloud.loadbalancer.nacos.enabled=true. With a random selector a single
+  # retry would be a coin flip instead of a guaranteed move to another replica, so
+  # GatewayResilienceConfigTest asserts the cache TTL, the connect timeout and that selector together.
+  # ORDER MATTERS: the retry filter is emitted after the declared filters, so it must not be moved
+  # before StripPrefix -- a retry would re-run the path rewrite and strip a second time (404).
   - id: order-service
     uri: lb://order-service
     predicates:
       - Path=/api/order/**
     filters:
       - StripPrefix=1
+    retry:
+      retries: 1
+      methods: [GET, HEAD]
     policies:
       rateLimit:
         type: ip
@@ -81,6 +105,9 @@ routes:
     filters:
       # PayController is @RequestMapping("/api/pay") -> keep the prefix.
       - StripPrefix=0
+    retry:
+      retries: 1
+      methods: [GET, HEAD]
     policies:
       rateLimit:
         type: ip
@@ -95,6 +122,9 @@ routes:
     filters:
       # CouponAssetController/CheckoutController declare /api/promotion/... -> keep the prefix.
       - StripPrefix=0
+    retry:
+      retries: 1
+      methods: [GET, HEAD]
     policies:
       rateLimit:
         type: ip
@@ -115,6 +145,9 @@ routes:
     filters:
       # ProductController declares /api/products -> keep the prefix.
       - StripPrefix=0
+    retry:
+      retries: 1
+      methods: [GET, HEAD]
     policies:
       rateLimit:
         type: ip
@@ -131,6 +164,9 @@ routes:
       - Path=/api/skus/**
     filters:
       - StripPrefix=0
+    retry:
+      retries: 1
+      methods: [GET, HEAD]
     policies:
       rateLimit:
         type: ip
@@ -145,6 +181,9 @@ routes:
     filters:
       # InventoryReservationController/AdjustmentController declare /api/inventory/... -> keep it.
       - StripPrefix=0
+    retry:
+      retries: 1
+      methods: [GET, HEAD]
     policies:
       rateLimit:
         type: ip
@@ -159,6 +198,9 @@ routes:
     filters:
       # UserQueryController/UserCommandController declare /api/account/users -> keep the prefix.
       - StripPrefix=0
+    retry:
+      retries: 1
+      methods: [GET, HEAD]
     policies:
       rateLimit:
         type: ip
@@ -174,6 +216,9 @@ routes:
       # OtpController/PasswordController/AdminTokenController/ClientRegistrationController already
       # declare the full /api/... and /oidc/... paths.
       - StripPrefix=0
+    retry:
+      retries: 1
+      methods: [GET, HEAD]
     policies:
       rateLimit:
         type: ip

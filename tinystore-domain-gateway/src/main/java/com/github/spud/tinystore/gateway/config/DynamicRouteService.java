@@ -6,6 +6,7 @@ import java.net.URI;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -112,10 +113,9 @@ public class DynamicRouteService implements InitializingBean {
 					.map(PredicateDefinition::new)
 					.collect(Collectors.toList()));
 			}
-			if (!CollectionUtils.isEmpty(routeDefinition.getFilters())) {
-				rd.setFilters(routeDefinition.getFilters().stream()
-					.map(FilterDefinition::new)
-					.collect(Collectors.toList()));
+			List<FilterDefinition> filters = GatewayRouteFilters.compile(routeDefinition);
+			if (!CollectionUtils.isEmpty(filters)) {
+				rd.setFilters(filters);
 			}
 
 			saveRoute(rd);

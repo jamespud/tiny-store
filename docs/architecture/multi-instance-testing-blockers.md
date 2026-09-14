@@ -20,7 +20,7 @@ make consistency-multi   -> Tests run:  4, Failures: 1, Errors: 0   (并发一�
 - **6 个编排/框架层**（5 个已修，A4 未修）；
 - **17 个应用正确性**（16 个未修 + C15 已修；其中 14 个有量化指标或实机故障证据）；
 - **3 个可观测/运维**（未修）；
-- **1 个分布式韧性**（未修：副本挂掉不会转移，E1）。
+- **1 个分布式韧性**（审计时未修：副本挂掉不会转移 E1 → **Task 11 已修复并验证**，见 E 节）。
 
 其中**只在多副本下才出现**的有 4 条：跨副本 ID 碰撞（C0）、OTP 跨副本失效（C4）、
 订单取消乐观锁竞态（C2）、副本故障不转移（E1）；另有 1 条多副本必然放大的 outbox 重复投递（C3，700/2655）。
@@ -962,7 +962,35 @@ promotion Hikari max =  25 × 2 =  50
 
 ### E. 分布式韧性（未修）
 
-#### E1.【严重】副本故障不会转移：约一半请求失败，且持续 20s 以上
+#### E1.【严重·✅已修复并验证】副本故障不会转移：约一半请求失败，且持续 20s 以上
+
+> **修复（Task 11，`fix(gateway): fail over safe reads across replicas`）**
+>
+> | 改动 | 值 | 作用 |
+> |---|---|---|
+> | 业务路由 `retry:` 策略（8 条路由，编译成框架 `Retry` 路由过滤器，且排在 `StripPrefix` 之后） | `retries: 1`、`methods: [GET, HEAD]` | 命中死副本的读请求改到别的副本；`methods` 由框架同时把住状态码与异常两条重试路径，写请求永不重放 |
+> | `spring.cloud.loadbalancer.cache.ttl` | 默认 35s → **2s** | 给"Nacos 已剔除、网关仍在使用"的窗口设上界 |
+> | `spring.cloud.gateway.server.webflux.httpclient.connect-timeout` | 未设 → **1s** | 死容器留下的 IP 不会 RST、只会黑洞；不设连接超时就没有"快速失败"可供重试（旧记录里的 20s 挂死就是这个） |
+> | `docker-compose-test.yml` 里三个 `SPRING_CLOUD_GATEWAY_HTTPCLIENT_*` | 删除 | 死配置：Gateway 4.x 的前缀已改为 `spring.cloud.gateway.server.webflux.httpclient`，所以那句 "设了 response-timeout" 从未生效 |
+>
+> 实机 RED→GREEN，同一个 `make resilience-multi`（2 副本，T+10s `docker kill` 一个 order 副本）：
+>
+> ```text
+> RED  （去掉 retry 策略）probes=191 ok=190 failed=1  codes=['500']  slowest failed=1232ms   （--expect-failover 复现缺陷，exit 0）
+> GREEN（当前代码）      probes=200 ok=200 failed=0  failover p50=p99=max=1224ms（上限 5000ms）exit 0
+> ```
+>
+> 两轮里被毒化的是同一件事：kill 瞬间恰好被选中死副本的那一个请求。没有重试时它是客户端可见的 500；
+> 有重试时它 1.2s 后落到另一个副本成功返回。
+>
+> **一个纠正**：本轮测量不支持"死副本会被持续选中 35s"这个推断（RED 轮 kill 之后 152 次探测只失败 1 次），
+> 所以 `cache.ttl=2s` 应表述为**给"剔除后仍被使用"的窗口设上界**，而不是"旧故障窗口的主要来源"。
+> 旧记录里 20.6s 的失败窗口，主要来自那个请求挂到客户端 20s 超时（当时既无连接超时、也无重试）。
+>
+> 回归：`make e2e-multi` 18/0/0/1（与修复前一致）；gateway 模块单测 17/0（原 7 条 + 新增 10 条）。
+> 门禁方向已反转（R7）：默认 0 失败才通过，`MULTI_EXPECT_FAILOVER=1` 保留"必须复现缺陷"的演示模式。
+
+以下为审计时的原始记录（保留，作为缺陷本身与复现方式的证据）。
 
 多副本的价值有一半在于"挂一个不影响服务"。用 `make resilience-multi` 在流量中杀掉一个 order 副本，
 网关侧观测结果：
@@ -1028,6 +1056,8 @@ make consistency-multi
 
 # 副本故障韧性探针（流量中杀掉一个副本，测故障转移窗口）
 make resilience-multi
+# 反转期望，用来复现修复前的缺陷（必须在探针观察到丢失请求时才算复现）
+make resilience-multi MULTI_EXPECT_FAILOVER=1
 
 # 多实例 k6 压测矩阵 + 每副本流量分配 + ID 碰撞探针
 make load-multi                 # 默认 VUS_LEVELS="100 300" DURATION=30s，可用环境变量覆盖
@@ -1103,7 +1133,7 @@ VERDICT: defects reproduced (retry_blocked=1, fingerprint_blocked=1).
 | P1 | C3 outbox 认领（SKIP LOCKED / ShedLock） | **已量化：700/2655 重复投递**，C1 修好即变数据损坏 | 中 |
 | P1 | C5 auth 审计 `ip` inet 类型 | `/otp/send` 直接 500，且掩盖 C4 | 小 |
 | P1 | C8 确认收货 200 但静默漏子单 | 接口报成功、订单卡在待收货；多副本下 1/26 复现 | 中 |
-| P1 | **E1 副本故障不转移（LB 重试 / 缓存 TTL）** | **发布期约 1/N 请求 500/超时，持续 20s+** | 小（配置）～中（加断路器） |
+| ~~P1~~ | ~~E1 副本故障不转移（LB 重试 / 缓存 TTL）~~ | **✅ 已修复并验证**（GET/HEAD 跨实例重试 + `cache.ttl=2s` + `connect-timeout=1s`；RED→GREEN 见 E1） | 已完成 |
 | P2 | A3 Flyway 并发迁移 | 生产多副本启动风险 | 中 |
 | P2 | A4 7 个应用服务没有 healthcheck/readiness | 启动 45–70s 且方差大，编排无法判断就绪 | 小（补 healthcheck） |
 | P2 | D1 trace 空 endpoint 丢 span | 多副本排障本就难 | 小 |
