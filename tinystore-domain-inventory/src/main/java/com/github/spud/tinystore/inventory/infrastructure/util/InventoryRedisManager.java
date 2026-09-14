@@ -450,7 +450,11 @@ public class InventoryRedisManager {
      * V2：定向回收孤儿预扣（原子，见 {@link #RECLAIM_ORPHAN_UNCOMMIT_SCRIPT}）。
      *
      * <p>只处理调用方<b>已确认</b>为孤儿的 member（DB 中不存在对应 reservation_id）。
-     * 合法预约（DB 有行）不会被传入，因此本方法不会提前释放仍然有效的库存占用。
+     * 本方法自身只会释放调用方传入的 member；但它<b>无法</b>验证那个"已确认"是否成立 —— 这条链能不能
+     * 保证"不释放仍然合法的预扣"，取决于调用方协议：{@code OrderEventConsumer} 拒绝
+     * {@code expireAt <= now} 的迟到 INVENTORY_RESERVE_DB 事件，且
+     * {@code InventoryUncommitV2CleanupTask} 强制 {@code orphanCheckDelay > maxReservationTtl}。
+     * 少了任何一个，"先查 DB 再回收"都可能与"消费端正在插入预约行"竞争（方向是超卖）。
      *
      * @return 实际回收（zrem）的 member 数量
      */

@@ -3,6 +3,7 @@ package com.github.spud.tinystore.tests.api;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Files;
+import java.time.Duration;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -87,6 +88,32 @@ class RuntimeConfigContractTest {
     }
 
     @Test
+    @DisplayName("inventory's orphan reclaim stays behind every legitimate reservation window")
+    void orphanReclaimDelayOutlivesTheReservationTtl() throws Exception {
+        // P0: the orphan sweep (Redis uncommit member older than orphan-check-delay + no DB row) may only run
+        // once every legitimate reservation window has closed AND the consumer refuses expired
+        // INVENTORY_RESERVE_DB events -- otherwise it can release a pre-deduction whose DB row is about to
+        // appear, which is the oversell direction. Inventory validates its own two invariants at startup;
+        // this pins the cross-service one (order's TTL <= inventory's declared maximum).
+        String orderYaml = Files.readString(repoRoot.resolve("tinystore-domain-order/src/main/resources/application.yml"));
+        String inventoryYaml = Files.readString(
+            repoRoot.resolve("tinystore-domain-inventory/src/main/resources/application.yml"));
+
+        long orderTtlMinutes = Long.parseLong(Regex.firstGroup(orderYaml, "ttl-minutes:\\s*(\\d+)"));
+        Duration maxReservationTtl = duration(Regex.firstGroup(inventoryYaml, "max-reservation-ttl: [^:]*:(PT[0-9A-Z]+)"));
+        Duration orphanDelay = duration(Regex.firstGroup(inventoryYaml, "orphan-check-delay: [^:]*:(PT[0-9A-Z]+)"));
+        Duration timeout = duration(Regex.firstGroup(inventoryYaml, "timeout: [^:]*:(PT[0-9A-Z]+)"));
+
+        assertThat(maxReservationTtl)
+            .withFailMessage("order reserves for %d minutes but inventory declares max-reservation-ttl=%s -- "
+                + "the orphan sweep would start while legitimate reservations are still open", orderTtlMinutes,
+                maxReservationTtl)
+            .isGreaterThanOrEqualTo(Duration.ofMinutes(orderTtlMinutes));
+        assertThat(orphanDelay).isGreaterThan(maxReservationTtl);
+        assertThat(timeout).isGreaterThan(orphanDelay);
+    }
+
+    @Test
     @DisplayName("zipkin exporting is off unless an endpoint is configured")
     void zipkinExportIsOptIn() throws Exception {
         List<String> failures = new ArrayList<>();
@@ -140,6 +167,25 @@ class RuntimeConfigContractTest {
     // ------------------------------------------------------------------
 
     private record Service(String path, int port) {
+    }
+
+    private static Duration duration(String isoDuration) {
+        return Duration.parse(isoDuration);
+    }
+
+    /** Minimal regex helper: the yml values here are simple enough that a parser would be overkill. */
+    private static final class Regex {
+
+        private Regex() {
+        }
+
+        static String firstGroup(String text, String pattern) {
+            Matcher matcher = Pattern.compile(pattern).matcher(text);
+            assertThat(matcher.find())
+                .withFailMessage("could not find /%s/ in configuration", pattern)
+                .isTrue();
+            return matcher.group(1);
+        }
     }
 
     /**

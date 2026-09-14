@@ -84,9 +84,12 @@ inventory:
     timeout: ${INVENTORY_UNCOMMIT_TIMEOUT:PT30M}
     # 孤儿定向回收阈值（C12 safety net）：member 年龄超过该值且 DB 中不存在对应
     # reservation_id 的，才判定为孤儿并释放。
-    # 配置不变量：必须 > Kafka 短暂中断时 outbox INVENTORY_RESERVE_DB 的最坏异步建库延迟
-    # （chaos SLA 5 分钟），否则合法预约会被误判释放；且应 < timeout 才有加速意义。
-    orphan-check-delay: ${INVENTORY_UNCOMMIT_ORPHAN_CHECK_DELAY:PT10M}
+    # 配置不变量（启动时强制校验，违反即启动失败）：max-reservation-ttl < orphan-check-delay < timeout。
+    # 理由：迟到（expireAt 已过）的 INVENTORY_RESERVE_DB 事件被消费端拒绝，所以当成员年龄超过
+    # max-reservation-ttl 后，合法的 DB 预约行不可能再出现；只靠"先查 DB"本身并不能保证不误伤。
+    orphan-check-delay: ${INVENTORY_UNCOMMIT_ORPHAN_CHECK_DELAY:PT20M}
+    # 调用方可能申请的最大合法预约 TTL（订单侧 reservationTtlMinutes 的上界）。
+    max-reservation-ttl: ${INVENTORY_UNCOMMIT_MAX_RESERVATION_TTL:PT15M}
   reservation:
     expiry:
       # Enable/disable the reservation expiry scheduler

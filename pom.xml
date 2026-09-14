@@ -28,6 +28,10 @@
     <argLine>-Dfile.encoding=UTF-8</argLine>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <skipITs>true</skipITs>
+    <!-- IT reruns. 0 for the real gate: this branch exists to catch low-probability distributed races,
+         and a blanket rerun would turn "attempt 1 fails, attempt 2 passes" into a green build. The
+         flake-tolerant target (`make it-retry`) raises it for local/rootless-Docker runs only. -->
+    <it.reruns>0</it.reruns>
     <spring.boot.version>3.5.0</spring.boot.version>
     <spring.cloud.version>2025.0.0</spring.cloud.version>
     <spring-statemachine.version>4.0.1</spring-statemachine.version>
@@ -115,6 +119,7 @@
             <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
             <skipTests>false</skipTests>
             <skipITs>${skipITs}</skipITs>
+            <rerunFailingTestsCount>${it.reruns}</rerunFailingTestsCount>
             <argLine>${argLine}</argLine>
             <!-- satisfies testcontainer's docker-java-sdk version -->
             <systemPropertyVariables>
