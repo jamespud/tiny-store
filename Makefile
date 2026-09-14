@@ -128,7 +128,12 @@ it: build ## Run integration tests (Testcontainers only, no compose; excludes te
 	fi
 	@echo "Running integration tests with Testcontainers..."
 	@echo "WARNING: Ensure no other Docker containers conflict with Testcontainers infra"
-	$(MAVEN) clean verify -Pit -DskipITs=false -DskipTests -pl '!tests/api,!tests/performance' $(MAVEN_CLEAN_OPTS)
+	# rerunFailingTestsCount: this box runs rootless Docker, and the Testcontainers-backed ITs hit host
+	# port collisions / refused connections often enough that a full run blamed a different class each
+	# time (all of them passed in other batches). Retrying is the harness-level answer; Maven records the
+	# retried ones as flaky, so a genuinely broken test still fails after its retries.
+	$(MAVEN) clean verify -Pit -DskipITs=false -DskipTests -pl '!tests/api,!tests/performance' \
+		-Dsurefire.rerunFailingTestsCount=2 -Dfailsafe.rerunFailingTestsCount=2 $(MAVEN_CLEAN_OPTS)
 	@echo "Integration tests completed successfully"
 
 e2e: build ## Run E2E/API tests (compose stack only, no Testcontainers)
