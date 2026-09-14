@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Analyse a replica-failure probe log produced by `make resilience-multi`.
 
-Input: a file of "<epoch_ms> <duration_ms> <http_status>" lines, plus the epoch-ms timestamp at
-which a replica was killed. A `404` means the request reached a live order replica through the
-gateway (the probe path `/api/order/trades/rp-<n>` only ever 404s); anything else -- `000` for a
-client-side timeout, `500` for a connect failure surfacing as a gateway error -- is a request that
-was not served.
+Input: a file of "<epoch_ms> <duration_ms> <http_status> [<marker>]" lines, plus the epoch-ms timestamp
+at which a replica was killed.
+
+`MULTI_PROBE_OK_STATUS` (default 200) is the status that proves the request was served by a live order
+replica, and the optional 4th field is a marker the probe script's caller computes (the resilience target
+sets 1 when the response body carries the seeded trade id). Requiring a real order response matters: a
+generic `404` -- "the gateway has no such route" -- used to count as "the backend is alive", so deleting the
+order route would have kept this gate green while nothing reached order-service at all. `000` (client-side
+timeout) and `500` (connect failure surfacing as a gateway error) remain failures.
 
 Default gate (the post-fix contract): every probe is served, and the ones that hit the dead replica
 are retried onto a healthy one quickly enough that the caller never notices a hang. Exit codes:
@@ -35,8 +39,9 @@ def read_rows(path):
     with open(path) as handle:
         for line in handle:
             parts = line.split()
-            if len(parts) == 3:
-                rows.append((int(parts[0]), int(parts[1]), parts[2]))
+            if len(parts) >= 3:
+                marker = parts[3] if len(parts) > 3 else None
+                rows.append((int(parts[0]), int(parts[1]), parts[2], marker))
     return rows
 
 
@@ -61,23 +66,32 @@ def main() -> int:
 
     path = os.environ["MULTI_PROBE_LOG"]
     kill_at = int(os.environ["MULTI_KILL_AT"])
+    ok_status = os.environ.get("MULTI_PROBE_OK_STATUS", "200")
 
     rows = read_rows(path)
     if not rows:
         print("  no probes recorded")
         return 1
 
+    def served(row):
+        if row[2] != ok_status:
+            return False
+        # When the caller logged a marker (e.g. "the body carries the seeded trade id"), it must be 1;
+        # that is what keeps a gateway-level response from masquerading as a live order replica.
+        return row[3] is None or row[3] == "1"
+
     start = rows[0][0]
     kill_rel = kill_at - start
-    ok = [r for r in rows if r[2] == "404"]
-    bad = [r for r in rows if r[2] != "404"]
+    ok = [r for r in rows if served(r)]
+    bad = [r for r in rows if not served(r)]
     after_kill = [r for r in rows if r[0] >= kill_at]
     # Served requests that took longer than the healthy baseline: the ones that were routed to the
     # dead replica, failed fast (bounded connect timeout) and completed on another instance.
     stalls = sorted(r[1] for r in ok if r[1] > args.stall_ms)
 
-    print("  probes=%d  ok=%d  failed=%d  (%.1f%% failure)"
-          % (len(rows), len(ok), len(bad), 100.0 * len(bad) / max(len(rows), 1)))
+    print("  probes=%d  ok=%d  failed=%d  (%.1f%% failure; ok means status %s%s)"
+          % (len(rows), len(ok), len(bad), 100.0 * len(bad) / max(len(rows), 1), ok_status,
+             " + body marker" if any(r[3] is not None for r in rows) else ""))
     print("  kill happened at T+%.1fs  probes after the kill=%d" % (kill_rel / 1000.0, len(after_kill)))
     print("  served-but-retried (failover events, >%dms): %d" % (args.stall_ms, len(stalls)))
     if stalls:

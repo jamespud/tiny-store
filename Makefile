@@ -373,14 +373,24 @@ resilience-multi: check-multi-replicas build ## Kill one replica mid-traffic and
 	cleanup() { echo "Cleaning up multi-instance environment..."; cd "$$root_dir"; compose down -v; }; \
 	trap cleanup EXIT; \
 	compose up -d --build $(MULTI_SCALE_FLAGS); \
-	echo "Waiting for gateway + order route (max 180s)..."; \
-	for i in $$(seq 1 36); do \
+	echo "Waiting for gateway + order route (max 480s; order/auth take 45-70s+ to boot on a loaded host and the gateway answers 'No servers available' until they register)..."; \
+	for i in $$(seq 1 96); do \
 		gw_port=$$(replica_ports gateway 8080 | head -1); \
 		code=$$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://localhost:$$gw_port/api/order/trades/probe-ready" 2>/dev/null || echo 000); \
 		if [ "$$code" = "404" ]; then echo "order route ready after $$((i*5))s"; break; fi; \
-		if [ $$i -eq 36 ]; then echo "ERROR: order route not ready"; compose logs --tail=80 gateway; exit 1; fi; \
+		if [ $$i -eq 96 ]; then echo "ERROR: order route not ready"; compose logs --tail=80 gateway; exit 1; fi; \
 		sleep 5; \
 	done; \
+	echo "Seeding one real trade to probe against (a 404-only probe proves nothing: the gateway itself 404s for a missing route)..."; \
+	probe_sku="SKU-failover-$$$$"; \
+	docker exec -i tinystore-postgres-test psql -U postgres -d tinystore -q -c \
+		"INSERT INTO tinystore_inventory.inventory_stock (shop_id, sku_id, total_quantity, reserved_quantity, version, created_at, updated_at) VALUES ('SHOP_A','$$probe_sku',10,0,0,NOW(),NOW()) ON CONFLICT (shop_id, sku_id) DO NOTHING;"; \
+	probe_trade="trade-failover-$$$$"; \
+	create_body=$$(curl -s --max-time 20 -X POST "http://localhost:$$gw_port/api/order/trades" \
+		-H 'Content-Type: application/json' -H "Idempotency-Key: failover-$$probe_trade" \
+		-d "{\"tradeId\":\"$$probe_trade\",\"buyerId\":\"buyer-failover\",\"buyerNick\":\"failover\",\"addressId\":\"addr-001\",\"traceId\":\"$$probe_trade\",\"orderLines\":[{\"skuId\":\"$$probe_sku\",\"productId\":\"prod-1\",\"productName\":\"P\",\"shopId\":\"SHOP_A\",\"sellerId\":\"seller-A\",\"quantity\":1,\"priceCents\":1000,\"weightGrams\":0}]}" || true); \
+	case "$$create_body" in *"$$probe_trade"*) echo "  probe trade created: $$probe_trade";; \
+	*) echo "ERROR: could not create the probe trade through the gateway: $$create_body"; exit 1;; esac; \
 	victim=$$(compose ps -q order | tail -1); \
 	echo "Victim replica: $$(docker inspect -f '{{.Name}}' $$victim)"; \
 	echo "Probing through the gateway; killing that replica at T+$(MULTI_KILL_AFTER)s..."; \
@@ -388,9 +398,12 @@ resilience-multi: check-multi-replicas build ## Kill one replica mid-traffic and
 	( i=0; end=$$(( $$(date +%s) + $(MULTI_PROBE_SECONDS) )); \
 	  while [ $$(date +%s) -lt $$end ]; do \
 		i=$$((i+1)); t0=$$(date +%s%3N); \
-		code=$$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "http://localhost:$$gw_port/api/order/trades/rp-$$i" 2>/dev/null || true); \
+		resp=$$(curl -s -w '\n%{http_code}' --max-time 20 "http://localhost:$$gw_port/api/order/trades/$$probe_trade" 2>/dev/null || true); \
+		code=$$(printf '%s' "$$resp" | tail -n 1); \
+		body=$$(printf '%s' "$$resp" | sed '$$d'); \
 		[ -z "$$code" ] && code=000; \
-		t1=$$(date +%s%3N); echo "$$t0 $$((t1-t0)) $$code" >> $$probe_log; \
+		case "$$body" in *"$$probe_trade"*) marker=1;; *) marker=0;; esac; \
+		t1=$$(date +%s%3N); echo "$$t0 $$((t1-t0)) $$code $$marker" >> $$probe_log; \
 	  done ) & probe_pid=$$!; \
 	sleep $(MULTI_KILL_AFTER); \
 	kill_at=$$(date +%s%3N); \
@@ -404,6 +417,7 @@ resilience-multi: check-multi-replicas build ## Kill one replica mid-traffic and
 	MULTI_KILL_AT=$$kill_at MULTI_PROBE_LOG=$$probe_log \
 	MULTI_EXPECT_FAILOVER=$(MULTI_EXPECT_FAILOVER) \
 	MULTI_MAX_FAILOVER_MS=$(MULTI_MAX_FAILOVER_MS) \
+	MULTI_PROBE_OK_STATUS=200 \
 	python3 docker/failover-probe.py; \
 	status=$$?; \
 	set -e; \
