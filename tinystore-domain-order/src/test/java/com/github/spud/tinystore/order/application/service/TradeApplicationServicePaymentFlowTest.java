@@ -93,6 +93,11 @@ class TradeApplicationServicePaymentFlowTest {
         org.mockito.Mockito.lenient().when(recordRepository.findById(anyString())).thenReturn(java.util.Optional.empty());
         org.mockito.Mockito.lenient().when(recordRepository.save(org.mockito.ArgumentMatchers.any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+        // 第三轮 P0：durable claim 在 saga 之前取得（真实仓储会 INSERT 并返回 1）。
+        org.mockito.Mockito.lenient()
+                .when(recordRepository.claimProcessing(anyString(), anyString(), anyString(),
+                        org.mockito.ArgumentMatchers.any(java.time.LocalDateTime.class)))
+                .thenReturn(1);
         ReflectionTestUtils.setField(tradeApplicationService, "tradeIdempotencyRecordRepository", recordRepository);
         // 幂等协议：createTrade 现在通过原子 acquire 取得处理权（mock 默认返回 null）。
         lenient().when(idempotencyService.acquire(anyString(), anyString(), anyString()))

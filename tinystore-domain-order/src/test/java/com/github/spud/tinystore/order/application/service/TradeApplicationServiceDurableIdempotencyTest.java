@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -17,6 +18,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -58,6 +60,8 @@ class TradeApplicationServiceDurableIdempotencyTest {
 
     private JpaTradeIdempotencyRecordRepository recordRepository;
     private IdempotencyService idempotencyService;
+    private PromotionClient promotionClient;
+    private InventoryClient inventoryClient;
 
     @BeforeEach
     void setUp() {
@@ -128,6 +132,85 @@ class TradeApplicationServiceDurableIdempotencyTest {
             .isInstanceOf(IdempotencyConflictException.class);
     }
 
+    @Test
+    @DisplayName("round-3 P0: losing the durable claim replays the winner instead of running the saga")
+    void losingTheClaimReplaysTheWinnerAndSkipsInventory() throws Exception {
+        // The window this test pins: Redis lost the key, so acquire() says ACQUIRED -- but the durable row
+        // was already claimed by the request that got there first. The loser must never reach promotion or
+        // inventory. findById answers empty first (the winner's row is not committed yet when the loser
+        // starts) and the committed row after the claim conflict.
+        String stored = new ObjectMapper().writeValueAsString(CreateTradeData.builder()
+            .tradeId("trade-winner")
+            .payableAmountCents(1000L)
+            .paymentIntentId("pay-winner")
+            .promotionCommitStatus("PENDING")
+            .build());
+        // service() installs the default "we won the claim" stub, so the conflict stub must come after it.
+        TradeApplicationService service = service();
+        when(idempotencyService.acquire(any(), any(), any()))
+            .thenReturn(IdempotencyService.AcquireResult.ACQUIRED);
+        when(recordRepository.claimProcessing(anyString(), anyString(), anyString(), any(LocalDateTime.class)))
+            .thenReturn(0);
+        when(recordRepository.findById(KEY)).thenReturn(Optional.empty(),
+            Optional.of(TradeIdempotencyRecordEntity.builder()
+                .idempotencyKey(KEY)
+                .scope("trade:create")
+                .fingerprint(FINGERPRINT)
+                .state("COMMITTED")
+                .tradeId("trade-winner")
+                .responseJson(stored)
+                .createdAt(LocalDateTime.now())
+                .build()));
+
+        CreateTradeData result = service.createTrade(KEY, command());
+
+        assertThat(result.getTradeId()).isEqualTo("trade-winner");
+        verify(recordRepository).claimProcessing(anyString(), anyString(), anyString(),
+            any(LocalDateTime.class));
+        verify(inventoryClient, never()).preDeductRedisOnly(any(), any());
+        verify(promotionClient, never()).quote(any(), any());
+    }
+
+    @Test
+    @DisplayName("round-3 P0: losing the claim to a *different* body is a 409, not a replay")
+    void losingTheClaimWithADifferentBodyIsAConflict() {
+        TradeApplicationService service = service();
+        when(idempotencyService.acquire(any(), any(), any()))
+            .thenReturn(IdempotencyService.AcquireResult.ACQUIRED);
+        when(recordRepository.claimProcessing(anyString(), anyString(), anyString(), any(LocalDateTime.class)))
+            .thenReturn(0);
+        when(recordRepository.findById(KEY)).thenReturn(Optional.empty(),
+            Optional.of(TradeIdempotencyRecordEntity.builder()
+                .idempotencyKey(KEY)
+                .scope("trade:create")
+                .fingerprint("some-other-fingerprint")
+                .state("COMMITTED")
+                .tradeId("trade-winner")
+                .responseJson("{}")
+                .createdAt(LocalDateTime.now())
+                .build()));
+
+        assertThatThrownBy(() -> service.createTrade(KEY, command()))
+            .isInstanceOf(IdempotencyConflictException.class);
+        verify(inventoryClient, never()).preDeductRedisOnly(any(), any());
+    }
+
+    @Test
+    @DisplayName("round-3 P0: the durable claim is taken before any external effect")
+    void claimIsTakenBeforePromotionAndInventory() throws Exception {
+        when(idempotencyService.acquire(any(), any(), any()))
+            .thenReturn(IdempotencyService.AcquireResult.ACQUIRED);
+
+        TradeApplicationService service = service();
+        service.createTrade(KEY, command());
+
+        InOrder order = inOrder(recordRepository, promotionClient, inventoryClient);
+        order.verify(recordRepository).claimProcessing(anyString(), anyString(), anyString(),
+            any(LocalDateTime.class));
+        order.verify(promotionClient).quote(any(), any());
+        order.verify(inventoryClient).preDeductRedisOnly(any(), any());
+    }
+
     // ------------------------------------------------------------------
     // helpers
     // ------------------------------------------------------------------
@@ -138,8 +221,14 @@ class TradeApplicationServiceDurableIdempotencyTest {
         ReflectionTestUtils.setField(service, "promotionCommitAsyncEnabled", true);
         ReflectionTestUtils.setField(service, "idempotencyService", idempotencyService);
         ReflectionTestUtils.setField(service, "tradeIdempotencyRecordRepository", recordRepository);
+        // Round-3 P0: the durable claim is taken before the saga runs; the real repository inserts the row
+        // (returns 1). Here the mock plays the "we won the claim" role unless a test says otherwise.
+        org.mockito.Mockito.lenient()
+            .when(recordRepository.claimProcessing(anyString(), anyString(), anyString(),
+                any(LocalDateTime.class)))
+            .thenReturn(1);
 
-        PromotionClient promotionClient = mock(PromotionClient.class);
+        promotionClient = mock(PromotionClient.class);
         when(promotionClient.quote(any(), any())).thenReturn(PromotionQuoteResponse.builder()
             .status(PromotionQuoteResponse.CheckoutResultStatus.OK)
             .quoteId("quote-1")
@@ -158,7 +247,7 @@ class TradeApplicationServiceDurableIdempotencyTest {
             .build());
         ReflectionTestUtils.setField(service, "promotionClient", promotionClient);
 
-        InventoryClient inventoryClient = mock(InventoryClient.class);
+        inventoryClient = mock(InventoryClient.class);
         when(inventoryClient.preDeductRedisOnly(any(), any())).thenReturn(InventoryDeductResponse.builder()
             .success(true)
             .message("ok")

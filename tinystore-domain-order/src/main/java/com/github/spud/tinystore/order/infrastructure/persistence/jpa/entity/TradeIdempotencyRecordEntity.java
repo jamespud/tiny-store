@@ -12,12 +12,16 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Durable create-trade idempotency record (review P0-2).
+ * Durable create-trade idempotency record (review P0-2, extended by review round 3 P0).
  *
  * <p>Written in the <b>same transaction</b> as the trade, so "trade committed" and "this key produced this
- * response" can never disagree. Redis keeps the PROCESSING/IN_PROGRESS lock, but is no longer the only place
- * a successful outcome lives: if Redis fails after the commit, or loses the key, a retry with the same key
- * and body replays this row instead of creating a second trade.
+ * response" can never disagree.
+ *
+ * <p>The row is also the durable <b>claim</b>: createTrade inserts it with {@code state=PROCESSING} before
+ * calling promotion or inventory, so two concurrent replicas with one Idempotency-Key cannot both run the
+ * saga even if Redis loses the key. {@code tradeId}/{@code responseJson} are filled in when the saga
+ * completes and the row moves to {@code state=COMMITTED} -- still inside the same transaction -- hence they
+ * are nullable (a PROCESSING claim has neither yet).
  */
 @Data
 @Builder
@@ -40,10 +44,12 @@ public class TradeIdempotencyRecordEntity {
     @Column(name = "state", length = 20, nullable = false)
     private String state;
 
-    @Column(name = "trade_id", length = 64, nullable = false)
+    /** Null until the saga completes and the row becomes COMMITTED. */
+    @Column(name = "trade_id", length = 64)
     private String tradeId;
 
-    @Column(name = "response_json", nullable = false, columnDefinition = "text")
+    /** Null until the saga completes and the row becomes COMMITTED. */
+    @Column(name = "response_json", columnDefinition = "text")
     private String responseJson;
 
     @Column(name = "created_at", nullable = false)
