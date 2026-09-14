@@ -46,6 +46,11 @@ import static org.mockito.Mockito.when;
         // (ORDER_PAYMENT_CALLBACK_VERIFY_ENABLED=false) while these ITs predate it and send no signature,
         // so the 401 would mask the assertions the tests are actually making.
         "order.payment.callback-verify-enabled=false"
+        // ...and the authoritative-price check (A1) calls product-service through discovery
+        // (lb://product-service/internal/restful/sku/batch). These ITs disable Nacos, so the call dies with
+        // UnknownHostException and createTrade answers 500; the test stack turns the check off for the same
+        // reason (ORDER_PRICING_AUTHORITATIVE_ENABLED=false). The application default stays true.
+        , "order.pricing.authoritative-enabled=false"
     }
 )
 public abstract class AbstractSpringBootOrderIT extends AbstractOrderIT {
