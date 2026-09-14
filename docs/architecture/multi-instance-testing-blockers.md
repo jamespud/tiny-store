@@ -491,7 +491,29 @@ outbox 发布器没有 `@Version` 这种兜底，两个副本各自把同一批�
 
 **建议**：`OrderTimeoutScheduler` 改成条件更新抢占（或把幂等键固定成 `timeout-<tradeId>` 并让取消路径真正消费它）。
 
-#### C7. 启动期 Kafka 同组多成员重平衡
+#### C7.【运维·✅已量化，不再是"未知"】启动期 Kafka 同组多成员重平衡
+
+> **本轮结论（Task 15）**：C7 不是正确性缺陷，**不设 release blocker**，但也不再是"只见过日志"——
+> 用 `make rebalance-multi` 把三个量测出来了（新 target + `docker/kafka-rebalance-probe.py`：
+> 先真下单 30 笔制造 backlog，再 `docker kill` 一个副本，每 0.5s 采一次 group 状态与总 lag）。
+>
+> 实机（2 副本，order 组 4 个 member —— 每个副本对 2 个 topic 各跑一个 listener）：
+>
+> ```text
+> group=order-service state=Stable members=4 lag=0
+> placed 30/30 orders (all accepted)
+> killed <order replica> at T+0.0s
+>   rebalance: 回到 Stable 用了 48.6s（状态采样出现过 CompletingRebalance）
+>   consumer unavailable（group 非 Stable 的窗口）: 3.2s
+>   lag: 首次 >0 在 T+3.5s，回到 0 在 T+45.4s  ->  恢复 41.9s（峰值 lag 23）
+>   VERDICT: 在 90s SLA 之内（SLA 用 REBALANCE_LAG_SLA_SECONDS 覆盖）
+> ```
+>
+> **怎么读这三个数**：死副本自己持有的分区要等到重新分配后才被消费，所以"lag 恢复 41.9s"才是
+> 运维上真正要看的量（group 显式离开 Stable 的时间只有 3.2s —— Kafka 4.x 的增量重平衡大部分时间是
+> 稳态）。也就是：**滚动发布/驱逐一个副本会让它原来那几个分区上的事件晚约 40s 被消费**，
+> 这正好是 C1/C2 这类竞态的放大器，但不影响正确性（消费端幂等 + 最终一致）。
+> 若某次运行超过 90s SLA，target 以 exit 2 失败并把它作为运维发现记录，而不是静默通过。
 
 两个副本几乎同时加入同一 consumer group，日志出现：
 
@@ -707,7 +729,23 @@ succeeded=4 rejected=3        ← 1 件库存永久丢失
 ② 给"已预扣但无 DB 预约"加一条对账（`InventoryReconcileJob` 现在只扫 DB 表）；
 ③ 把 `INVENTORY_RESERVE_DB` 的确认纳入下单同步路径，或让 Redis 预扣带上 TTL/来源标识以便自愈。
 
-#### C13.【下单链路·已验证】券在 commit 阶段才预占 → 并发用同一张券会"先全部下单成功"，最终只胜出一单
+#### C13.【下单链路·✅正确性已验证 + ✅API 契约已补齐】券在 commit 阶段才预占 → 并发用同一张券会"先全部下单成功"，最终只胜出一单
+
+> **修复（Task 15）**：正确性部分（C15 之后）不需要再改事务模型 —— 五单抢一券的门禁已经证明
+> `1 COMMITTED + 4 CLOSED`。本轮补的是**客户端可见的语义**：下单 200 只表示"订单已创建"，
+> 优惠是异步裁定的，所以响应必须把这个状态说出来，否则调用方会把 200 读成"折扣已经最终确定"。
+>
+> | 改动 | 说明 |
+> |---|---|
+> | `CreateTradeData.promotionCommitStatus` | 下单响应新增字段，取值 `PENDING` / `COMMITTED` / `FAILED`（取自 `trade.promotionCommitStatus`，与 DB 同源） |
+> | `TradeDetailData.promotionCommitStatus` | 详情响应新增字段，客户端据此轮询裁决结果（抢券输家会变成 `FAILED` 并自动关单） |
+>
+> 证据：
+> * 单测 `TradeApplicationServicePromotionCommitTest`（异步路径断言 `PENDING`，而不是把"已提交"说成"已确定"）
+>   与 `TradeQueryServicePromotionStatusTest`（详情投影 PENDING/COMMITTED/FAILED）；
+> * 黑盒 `OrderCreationApiIT`（真 2 副本）断言下单响应 `promotionCommitStatus=PENDING`、详情响应字段存在；
+> * 实机样本：`POST /api/order/trades -> {"data":{"tradeId":"trade-c18-…","promotionCommitStatus":"PENDING"}}`，
+>   5 秒后详情变成 `COMMITTED`（无券订单也会被 promotion 回执落定，不会卡在 PENDING 被 30s 超时自动取消）。
 
 先给结论：**促销 quote 阶段不加锁**（这条假设被证伪，见 §1 第六件事后面的说明），
 券的预占发生在 **commit** 阶段，而且是原子的（`findFirstByUserIdAndCouponIdAndUseStatusForUpdate` 行锁 +
@@ -759,7 +797,22 @@ coupon used_stock: 0
 **建议**：把券的预占提前到 quote/下单阶段（本来就有 `lockId` 字段和 `LOCKED` 状态，机制是现成的），
 或者在下单响应里明确告知"优惠待到账确认"。
 
-#### C14.【下单链路·小】补偿标志置位之前的失败会留下一张 `QUOTED` 报价单
+#### C14.【下单链路·小·✅已修复并验证】补偿标志置位之前的失败会留下一张 `QUOTED` 报价单
+
+> **修复（Task 15）**：`compensationRequired = true` 从"库存扣减之前"提前到"quote 成功之后立刻"。
+> 现在只要 promotion quote 已经存在，后续任何失败（quote 载荷校验失败、`REQUOTE_REQUIRED` 被拒、
+> 库存扣减失败、写库失败）都会走同一段补偿：释放库存（没有预占时是空操作）+ 调用
+> `/api/checkout/release` 释放报价。于是"下单失败"恒等于"报价被释放"，不再依赖 `QuoteExpiryTask` 的 PT5M 兜底。
+>
+> 证据：新增 `TradeApplicationServiceQuoteCompensationTest`（4 条，Mockito + `CALLS_REAL_METHODS` 直接驱动
+> `createTrade`）：
+> * `REQUOTE_REQUIRED` → 断言 `promotionClient.release(quoteId)` 被调用，且 `inventoryClient` 完全没被碰；
+> * quote 载荷非法（有 quoteId、缺 snapshot）→ 同样释放；
+> * 预占成功后的失败 → 库存与报价两边都补偿（原有行为不回归）；
+> * 成功路径 → `release` 从不被调用。
+>
+> RED 验证：把标志位改回旧位置后，前两条失败（release 未被调用），后两条仍通过 —— 说明测试正对着这个缺陷。
+> 回归：order 模块 160/0，`make e2e-multi` 18/0/0/1。
 
 `compensationRequired = true` 在**库存扣减之前**才置位，所以更早的失败不会走补偿。
 实测触发了一次更早的失败（promotion quote 返回 `requires re-quote`）：
@@ -1101,6 +1154,9 @@ make rate-limit-multi
 # 复制修复前的身份解析（取 XFF 最左值）时，用它确认探针真的能抓到"轮换头绕过"
 #   RATE_LIMIT_GATEWAY_PORTS=<ports> python3 docker/rate-limit-probe.py --mode expect-bypass
 
+# Kafka 重平衡量化（C7）：先下单 30 笔制造 backlog，再杀一个副本，记录重平衡/不可用/lag 恢复
+make rebalance-multi            # SLA 可用 REBALANCE_LAG_SLA_SECONDS=90 覆盖
+
 # 多实例 k6 压测矩阵 + 每副本流量分配 + ID 碰撞探针
 make load-multi                 # 默认 VUS_LEVELS="100 300" DURATION=30s，可用环境变量覆盖
 
@@ -1167,9 +1223,9 @@ VERDICT: defects reproduced (retry_blocked=1, fingerprint_blocked=1).
 | P0 | **C10 业务拒绝一律 500** | 库存不足被当服务故障、诱导客户端重试→撞 C9 | 小（放行业务异常给全局处理器） |
 | P0 | **C11 同键换 body 返回上一单** | **假成功**：客户端以为新单下成，实际没创建 | 小～中（比对 fingerprint 后 409） |
 | P0 | **C12 Kafka 抖动 → 成功下单却被取消 + 库存永久丢失** | 事件终态 FAILED 无重投，且无对账兜底 | 中（重投 + 对账 + 预扣可自愈） |
-| P1 | C13 券在 commit 才预占 | 并发用同券会"全部下单成功"，输家几十秒后被取消 | 中（预占提前到下单阶段） |
+| ~~P1~~ | ~~C13 券在 commit 才预占~~ | **✅ 正确性已验证**（C15 之后：1 COMMITTED + 4 CLOSED）+ **✅ API 契约已补**（响应暴露 `promotionCommitStatus`，200 不再被读成"折扣已确定"） | 已完成 |
 | ~~P1~~ | ~~C16 限流可被 `X-Forwarded-For` 绕过~~ | **✅ 已修复并验证**（`ClientIpResolver` 只信可信代理的 XFF，默认空；`make rate-limit-multi` RED→GREEN 见 C16） | 已完成 |
-| P2 | C14 quote 失败留下 QUOTED 报价单 | 靠 5 分钟定时任务兜底 | 小（补偿标志提前置位） |
+| ~~P2~~ | ~~C14 quote 失败留下 QUOTED 报价单~~ | **✅ 已修复并验证**（quote 一存在就武装补偿，失败即 release；RED 验证见 C14） | 已完成 |
 | P1 | C2 乐观锁重试 / 冲突映射 409 | 多实例特有 500，用户可见 | 中 |
 | P1 | C6 定时任务单实例锁 | 多副本必踩 | 中 |
 | P1 | C3 outbox 认领（SKIP LOCKED / ShedLock） | **已量化：700/2655 重复投递**，C1 修好即变数据损坏 | 中 |
