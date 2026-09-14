@@ -35,7 +35,13 @@ import static org.mockito.Mockito.when;
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {
         "spring.cloud.nacos.discovery.enabled=false",
-        "spring.cloud.nacos.config.enabled=false"
+        "spring.cloud.nacos.config.enabled=false",
+        // The REST ITs drive the app over HTTP without a token, exactly like the compose stacks, which
+        // set ORDER_AUTHZ_REQUIRE_AUTHENTICATED_BUYER=false for order-service (docker-compose-test.yml).
+        // Without it the A2 anti-forgery rule ("buyer identity comes from the authenticated principal")
+        // answers 401 to every unauthenticated create -- a test-context gap, not a product issue: the
+        // application default stays true.
+        "order.authz.require-authenticated-buyer=false"
     }
 )
 public abstract class AbstractSpringBootOrderIT extends AbstractOrderIT {
