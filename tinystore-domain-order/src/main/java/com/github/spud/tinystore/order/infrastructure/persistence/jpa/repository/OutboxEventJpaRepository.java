@@ -51,7 +51,10 @@ public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventEntit
     @Modifying(clearAutomatically = true)
     @Transactional
     @Query("UPDATE OutboxEventEntity e SET e.status = 'PUBLISHED', e.publishedAt = :publishedAt "
-            + "WHERE e.eventId IN :eventIds AND e.status = 'PROCESSING' AND e.claimToken = :claimToken")
+            // Fenced by the caller's lease when it has one; rows that are not under a live lease (published
+            // through the admin path or a direct call) still complete, but a row another worker currently
+            // holds can never be touched by a stale owner.
+            + "WHERE e.eventId IN :eventIds AND (e.status <> 'PROCESSING' OR e.claimToken = :claimToken)")
     int markAsPublishedBatch(@Param("eventIds") List<String> eventIds,
                              @Param("publishedAt") LocalDateTime publishedAt,
                              @Param("claimToken") String claimToken);
@@ -66,7 +69,7 @@ public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventEntit
     @Query("UPDATE OutboxEventEntity e SET e.retryCount = coalesce(e.retryCount, 0) + 1, "
             + "e.lastError = :error, e.status = :status, e.nextAttemptAt = :nextAttemptAt, "
             + "e.claimedBy = NULL, e.claimedAt = NULL, e.claimToken = NULL "
-            + "WHERE e.eventId = :eventId AND e.status = 'PROCESSING' AND e.claimToken = :claimToken")
+            + "WHERE e.eventId = :eventId AND (e.status <> 'PROCESSING' OR e.claimToken = :claimToken)")
     int markAsFailedIfOwned(@Param("eventId") String eventId,
                             @Param("claimToken") String claimToken,
                             @Param("error") String error,
