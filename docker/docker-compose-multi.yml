@@ -59,6 +59,10 @@ services:
     # across gateway replicas (Redis Lua token bucket keyed by route + identity).
     environment:
       GATEWAY_RATE_LIMIT_ENABLED: "${MULTI_GATEWAY_RATE_LIMIT_ENABLED:-false}"
+      # C16: empty by default, which is the direct-client case the probes use (a client header must
+      # not be believed). `make rate-limit-multi` re-creates the gateways with the calling host's
+      # address in this list to exercise the trusted-proxy path.
+      GATEWAY_TRUSTED_PROXIES: "${MULTI_GATEWAY_TRUSTED_PROXIES:-}"
     # The base stack hardcodes 8080, which is not portable: on a shared dev host
     # 8080 is frequently already taken, and then replica #2 fails with
     # "all ports are allocated". Override with MULTI_GATEWAY_PORTS=....
