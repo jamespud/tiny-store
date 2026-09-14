@@ -54,8 +54,11 @@ class TradeEndpointRedisFailureIT extends AbstractSpringBootOrderIT {
     @org.junit.jupiter.api.Tag("ep:order:POST:/api/order/trades:redis-failure")
     @DisplayName("POST /api/order/trades - Redis unavailable returns 503")
     void createTrade_whenRedisUnavailable_returns503() {
-        // Given: IdempotencyService throws IdempotencyServiceUnavailableException (simulating Redis failure)
-        when(idempotencyServiceMock.tryAcquire(anyString(), anyString(), anyString()))
+        // Given: IdempotencyService throws IdempotencyServiceUnavailableException (simulating Redis failure).
+        // This has to stub `acquire(scope, key, fingerprint)`: after the atomic-acquire rewrite that is the
+        // method createTrade calls, and an unstubbed mock returns null -- which the service then NPEs on,
+        // surfacing as 500 instead of the 503 this test asserts.
+        when(idempotencyServiceMock.acquire(anyString(), anyString(), anyString()))
             .thenThrow(new IdempotencyServiceUnavailableException(
                 "tryAcquire",
                 "idem-redis-down-001",
