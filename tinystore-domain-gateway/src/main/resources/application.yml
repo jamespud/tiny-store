@@ -49,6 +49,11 @@ gateway:
     routes-location: ${GATEWAY_ROUTES_LOCATION:classpath:gateway-routes.yml}
   rate-limit:
     enabled: ${GATEWAY_RATE_LIMIT_ENABLED:true}
+  # C16: who may speak for someone else. Empty (the default) means clients reach the gateway
+  # directly, so X-Forwarded-For is ignored entirely and the socket peer is the caller identity --
+  # otherwise any client could pick its own rate-limit bucket, or spend someone else's. Comma
+  # separated CIDRs, e.g. "172.16.0.0/12,10.0.0.0/8". See security/ClientIpResolver.
+  trusted-proxies: ${GATEWAY_TRUSTED_PROXIES:}
 
 idempotency:
   ttl: ${IDEMPOTENCY_TTL:PT5M}

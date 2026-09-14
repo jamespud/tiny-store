@@ -838,7 +838,44 @@ user_coupon: LOCKED lock=plk:8765c635e158ffb13d9f400f5c1a   ← 修好前是 UNU
 结果：**全仓只有这一处不匹配**（其余方法要么有 `@Param`，要么裸参数名恰好一致）。
 也就是说这个 bug 是孤例，不用怀疑还有一串同类地雷；但它偏偏落在"用券下单"这条唯一的路径上。
 
-#### C16.【下单链路入口】网关 IP 限流可被 `X-Forwarded-For` 绕过（身份取自客户端可控头）
+#### C16.【下单链路入口·✅已修复并验证】网关 IP 限流可被 `X-Forwarded-For` 绕过（身份取自客户端可控头）
+
+> **修复（Task 12，`fix(gateway): trust forwarded IPs only from known proxies`）**
+>
+> | 改动 | 作用 |
+> |---|---|
+> | 新增 `ClientIpResolver`（配置 `gateway.trusted-proxies`，CIDR 列表，**默认空**） | socket 对端不可信 → **完全忽略 XFF**，身份 = 对端地址；对端可信 → 从右往左取第一个非可信 hop（客户端伪造的前缀被丢掉）；整条链都可信时回退对端 |
+> | `IpRateLimiterFilter` 改用它 | 限流 key（`routeId + identity`）里不再有客户端可选的字符串 |
+> | 自带 `InetLiteral` 解析 IP 字面量 | 不用 `InetAddress.getByName`：对无法解析的值它会落到 DNS，而这里的输入是攻击者可控的头；解析失败的头项直接丢弃，不能"造"出新身份 |
+> | 空值 / 非法值 | 空条目忽略（环境变量为空不会让应用起不来）；非法 CIDR 启动即失败，而不是静默地不信任任何人 |
+> | `make rate-limit-multi`（新 target + `docker/rate-limit-probe.py`） | 真机多副本门禁：4 个 burst 场景，并直接回读 Redis 身份 key |
+>
+> 实机 RED→GREEN（2 副本，`GET /api/order/trades/rl-probe`，每场景 200 请求 / 并发 50）：
+>
+> ```text
+> RED  （临时还原旧的"取 XFF 最左值"实现）
+>   A 不带头（对照）          404×100  429×100     ← 限流本身生效
+>   B 轮换 XFF               404×200  429×0       ← 完全绕过（与审计记录一致）
+>   Redis 身份 key：198.51.100.* 共 200 个         ← 客户端"造"出了 200 个身份
+>
+> GREEN（当前代码）
+>   A 不带头（对照）          404×100  429×100
+>   B 轮换 XFF               404×72   429×72      ← 与对照同量级：轮换头不再改变身份
+>   C 一次 burst 分到 2 副本  404×100  429×100     ← 两个副本共用一个桶
+>   Redis 身份 key：1 个（172.29.0.1），伪造身份 0 个
+>   D1 可信代理 + 固定头      404×100  429×100     ← 转发地址确实成为身份
+>   D2 可信代理 + 轮换头      404×200  429×0       ← 可信代理场景下 XFF 被正确采信
+>   Redis：198.51.100.* 身份 200 个
+> ```
+>
+> **顺带实测到一个性质**：把 `trusted-proxies` 配成 `0.0.0.0/0`（等于"信任所有人"）**不会**退化成
+> "信任意 XFF"——此时整条链的 hop 都算可信，解析器回退到 socket 对端，200 个轮换头仍然是同一个桶
+> （实测 404×191 + 429×9）。也就是说可信网段配错是 **fail-closed**，不是 fail-open。
+>
+> 回归：gateway 模块单测 29/0（原 17 条 + 新增 12 条），`make e2e-multi` 18/0/0/1（未变）。
+> 按计划未做：已认证主体的第二级（user-based）限流留作后续 enhancement。
+
+以下为审计时的原始记录（保留，作为缺陷本身与复现方式的证据）。
 
 下单链路的第一道闸是网关的 IP 限流。它的身份来源是：
 
@@ -1059,6 +1096,11 @@ make resilience-multi
 # 反转期望，用来复现修复前的缺陷（必须在探针观察到丢失请求时才算复现）
 make resilience-multi MULTI_EXPECT_FAILOVER=1
 
+# 限流信任边界门禁（C16）：两副本共享配额 / 伪造 XFF 不能绕过 / 可信代理场景正确采信
+make rate-limit-multi
+# 复制修复前的身份解析（取 XFF 最左值）时，用它确认探针真的能抓到"轮换头绕过"
+#   RATE_LIMIT_GATEWAY_PORTS=<ports> python3 docker/rate-limit-probe.py --mode expect-bypass
+
 # 多实例 k6 压测矩阵 + 每副本流量分配 + ID 碰撞探针
 make load-multi                 # 默认 VUS_LEVELS="100 300" DURATION=30s，可用环境变量覆盖
 
@@ -1126,7 +1168,7 @@ VERDICT: defects reproduced (retry_blocked=1, fingerprint_blocked=1).
 | P0 | **C11 同键换 body 返回上一单** | **假成功**：客户端以为新单下成，实际没创建 | 小～中（比对 fingerprint 后 409） |
 | P0 | **C12 Kafka 抖动 → 成功下单却被取消 + 库存永久丢失** | 事件终态 FAILED 无重投，且无对账兜底 | 中（重投 + 对账 + 预扣可自愈） |
 | P1 | C13 券在 commit 才预占 | 并发用同券会"全部下单成功"，输家几十秒后被取消 | 中（预占提前到下单阶段） |
-| P1 | C16 限流可被 `X-Forwarded-For` 绕过 | 下单链路第一道闸形同虚设，还可定向打满他人配额 | 小～中（只信可信代理的 XFF） |
+| ~~P1~~ | ~~C16 限流可被 `X-Forwarded-For` 绕过~~ | **✅ 已修复并验证**（`ClientIpResolver` 只信可信代理的 XFF，默认空；`make rate-limit-multi` RED→GREEN 见 C16） | 已完成 |
 | P2 | C14 quote 失败留下 QUOTED 报价单 | 靠 5 分钟定时任务兜底 | 小（补偿标志提前置位） |
 | P1 | C2 乐观锁重试 / 冲突映射 409 | 多实例特有 500，用户可见 | 中 |
 | P1 | C6 定时任务单实例锁 | 多副本必踩 | 中 |

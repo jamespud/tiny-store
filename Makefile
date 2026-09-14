@@ -34,6 +34,10 @@ MULTI_KILL_AFTER ?= 10
 # the pre-fix demonstration, where the probe only passes when requests WERE lost (E1 evidence).
 MULTI_EXPECT_FAILOVER ?= 0
 MULTI_MAX_FAILOVER_MS ?= 5000
+# rate-limit-multi: burst size / concurrency per case, and whether to re-create the gateways with the
+# calling host as a trusted proxy for the second phase (the C16 trusted-proxy path).
+MULTI_RATE_LIMIT_BURST ?= 200
+MULTI_RATE_LIMIT_CONCURRENCY ?= 50
 
 # Host ports published by the single-instance stack. docker-compose-test.yml interpolates the same
 # names, so overriding them here and there stays consistent:
@@ -404,6 +408,66 @@ resilience-multi: check-multi-replicas build ## Kill one replica mid-traffic and
 		exit $$status; \
 	fi; \
 	echo "Replica-failure probe passed"
+
+rate-limit-multi: check-multi-replicas build ## Burst the gateway's limiter across replicas: spoofed XFF, shared quota, trusted proxy (C16)
+	@echo "Starting multi-instance environment for the rate-limit trust-boundary probe ($(MULTI_REPLICAS) replicas/service)..."
+	@set -e; \
+	root_dir=$$(pwd); \
+	compose() { docker compose -f $(COMPOSE_TEST) -f $(COMPOSE_MULTI) "$$@"; }; \
+	replica_ports() { compose ps -q "$$1" | while read -r cid; do docker port "$$cid" "$$2" 2>/dev/null | head -1 | sed 's/.*://'; done; }; \
+	cleanup() { echo "Cleaning up multi-instance environment..."; cd "$$root_dir"; compose down -v; }; \
+	trap cleanup EXIT; \
+	wait_route() { \
+		for i in $$(seq 1 36); do \
+			gw=$$(replica_ports gateway 8080 | head -1); \
+			code=$$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://localhost:$$gw/api/order/trades/rl-ready" 2>/dev/null || echo 000); \
+			if [ "$$code" = "404" ]; then echo "order route ready after $$((i*5))s"; return 0; fi; \
+			sleep 5; \
+		done; \
+		echo "ERROR: order route not ready"; compose logs --tail=60 gateway; return 1; \
+	}; \
+	MULTI_GATEWAY_RATE_LIMIT_ENABLED=true compose up -d --build $(MULTI_SCALE_FLAGS); \
+	wait_route; \
+	gw_ports=$$(replica_ports gateway 8080 | paste -sd, -); \
+	echo ""; \
+	echo "=== Phase 1: direct client (X-Forwarded-For must be ignored) ==="; \
+	RATE_LIMIT_GATEWAY_PORTS=$$gw_ports \
+	RATE_LIMIT_BURST=$(MULTI_RATE_LIMIT_BURST) \
+	RATE_LIMIT_CONCURRENCY=$(MULTI_RATE_LIMIT_CONCURRENCY) \
+	python3 docker/rate-limit-probe.py --mode untrusted; \
+	untrusted_keys=$$(docker exec tinystore-redis-test redis-cli --scan \
+		--pattern 'tinystore:gateway:ratelimit:order-service:*:tokens' | wc -l | tr -d ' '); \
+	forged_keys=$$(docker exec tinystore-redis-test redis-cli --scan \
+		--pattern 'tinystore:gateway:ratelimit:order-service:198.51.100.*:tokens' | wc -l | tr -d ' '); \
+	echo "  limiter identities in Redis after phase 1: $$untrusted_keys (expected 1 bucket for the cluster)"; \
+	echo "  of which forged (198.51.100.*) : $$forged_keys (expected 0 -- the header was ignored)"; \
+	if [ "$$untrusted_keys" != "1" ] || [ "$$forged_keys" != "0" ]; then \
+		echo "ERROR: a client-controlled X-Forwarded-For minted limiter identities ($$forged_keys forged,"; \
+		echo "       $$untrusted_keys total); untrusted callers must not be able to choose their bucket"; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "=== Phase 2: trusted proxy (the forwarded address becomes the identity) ==="; \
+	net=$$(docker network ls --filter name=tinystore-test --format '{{.Name}}' | head -1); \
+	proxy_ip=$$(docker network inspect "$$net" --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'); \
+	if [ -z "$$proxy_ip" ]; then echo "ERROR: could not determine the docker network gateway address"; exit 1; fi; \
+	echo "Re-creating gateway replicas with GATEWAY_TRUSTED_PROXIES=$$proxy_ip/32 ..."; \
+	MULTI_GATEWAY_RATE_LIMIT_ENABLED=true MULTI_GATEWAY_TRUSTED_PROXIES="$$proxy_ip/32" compose up -d gateway; \
+	wait_route; \
+	gw_ports=$$(replica_ports gateway 8080 | paste -sd, -); \
+	RATE_LIMIT_GATEWAY_PORTS=$$gw_ports \
+	RATE_LIMIT_BURST=$(MULTI_RATE_LIMIT_BURST) \
+	RATE_LIMIT_CONCURRENCY=$(MULTI_RATE_LIMIT_CONCURRENCY) \
+	python3 docker/rate-limit-probe.py --mode trusted; \
+	forwarded_keys=$$(docker exec tinystore-redis-test redis-cli --scan \
+		--pattern 'tinystore:gateway:ratelimit:order-service:198.51.100.*:tokens' | wc -l | tr -d ' '); \
+	echo "  forwarded-address identities in Redis after phase 2: $$forwarded_keys (expected >0 for a trusted proxy)"; \
+	if [ "$$forwarded_keys" -le 0 ]; then \
+		echo "ERROR: a trusted proxy's X-Forwarded-For did not become the limiter identity"; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "Rate-limit trust-boundary probe passed"
 
 load-multi: check-multi-replicas build ## Run the k6 load matrix against the N-replica stack (+ per-replica traffic split)
 	@echo "Starting multi-instance environment for the distributed load matrix ($(MULTI_REPLICAS) replicas/service)..."
