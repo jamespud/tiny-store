@@ -128,6 +128,9 @@ public class RegisteredClientConfig {
         .build());
 
       // internal m2m client
+      // 轮换语义（评审 P2）：seedIfAbsent 只在客户端不存在时插入，因此**改环境变量不会轮换**已经写进
+      // DB 的 secret；轮换需要显式更新路径（改 clientSecret 或写迁移）。prod 下缺失/默认 secret 会由
+      // DefaultCredentialGuard 直接拒绝启动。
       seedIfAbsent(repo, "tinystore-internal", () -> {
         String secret = System.getenv()
           .getOrDefault("TINYSTORE_INTERNAL_CLIENT_SECRET", "changeit");
