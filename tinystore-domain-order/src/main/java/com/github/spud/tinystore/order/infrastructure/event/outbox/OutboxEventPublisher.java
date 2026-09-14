@@ -55,11 +55,13 @@ public class OutboxEventPublisher {
         }
         List<CompletableFuture<Void>> futures = new ArrayList<>();
         List<String> publishedIds = new CopyOnWriteArrayList<>();
+        // P1-2: completion updates carry the claim's fencing token; the batch shares one lease.
+        String claimToken = events.get(0).getClaimToken();
         for (OutboxEventEntity event : events) {
             futures.add(sendEventAsync(event, publishedIds));
         }
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-            .thenRun(() -> outboxEventService.markAsPublishedBatch(publishedIds))
+            .thenRun(() -> outboxEventService.markAsPublishedBatch(publishedIds, claimToken))
             .exceptionally(ex -> {
                 log.error("Failed to batch-mark published outbox events, will retry next poll. count={}",
                         publishedIds.size(), ex);
@@ -93,7 +95,7 @@ public class OutboxEventPublisher {
                 })
                 .exceptionally(ex -> {
                     outboxPublishFailureCounter.increment();
-                    outboxEventService.markAsFailed(event.getEventId(), ex.getMessage(), ex);
+                    outboxEventService.markAsFailed(event.getEventId(), event.getClaimToken(), ex.getMessage(), ex);
                     log.error("Failed to publish Outbox event to Kafka: eventId={}, error={}",
                         event.getEventId(), ex.getMessage());
                     return null;
@@ -102,7 +104,7 @@ public class OutboxEventPublisher {
             log.error("Error preparing Outbox event for Kafka: eventId={}, error={}",
                 event.getEventId(), e.getMessage(), e);
             outboxPublishFailureCounter.increment();
-            outboxEventService.markAsFailed(event.getEventId(), e.getMessage(), e);
+            outboxEventService.markAsFailed(event.getEventId(), event.getClaimToken(), e.getMessage(), e);
             return CompletableFuture.completedFuture(null);
         }
     }

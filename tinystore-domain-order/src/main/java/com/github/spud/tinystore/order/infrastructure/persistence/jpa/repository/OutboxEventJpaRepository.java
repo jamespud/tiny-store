@@ -39,7 +39,8 @@ public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventEntit
      */
     @Modifying(clearAutomatically = true)
     @Transactional
-    @Query("UPDATE OutboxEventEntity e SET e.status = 'PENDING', e.claimedBy = NULL, e.claimedAt = NULL "
+    @Query("UPDATE OutboxEventEntity e SET e.status = 'PENDING', e.claimedBy = NULL, e.claimedAt = NULL, "
+            + "e.claimToken = NULL "
             + "WHERE e.status = 'PROCESSING' AND e.claimedAt < :claimedBefore")
     int reclaimStaleClaims(@Param("claimedBefore") LocalDateTime claimedBefore);
 
@@ -50,9 +51,27 @@ public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventEntit
     @Modifying(clearAutomatically = true)
     @Transactional
     @Query("UPDATE OutboxEventEntity e SET e.status = 'PUBLISHED', e.publishedAt = :publishedAt "
-            + "WHERE e.eventId IN :eventIds")
+            + "WHERE e.eventId IN :eventIds AND e.status = 'PROCESSING' AND e.claimToken = :claimToken")
     int markAsPublishedBatch(@Param("eventIds") List<String> eventIds,
-                             @Param("publishedAt") LocalDateTime publishedAt);
+                             @Param("publishedAt") LocalDateTime publishedAt,
+                             @Param("claimToken") String claimToken);
+
+    /**
+     * Fenced failure update (review P1-2): only the owner of the current lease may move the row.
+     *
+     * @return 1 when this worker still held the lease, 0 when the claim was reclaimed meanwhile
+     */
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query("UPDATE OutboxEventEntity e SET e.retryCount = coalesce(e.retryCount, 0) + 1, "
+            + "e.lastError = :error, e.status = :status, e.nextAttemptAt = :nextAttemptAt, "
+            + "e.claimedBy = NULL, e.claimedAt = NULL, e.claimToken = NULL "
+            + "WHERE e.eventId = :eventId AND e.status = 'PROCESSING' AND e.claimToken = :claimToken")
+    int markAsFailedIfOwned(@Param("eventId") String eventId,
+                            @Param("claimToken") String claimToken,
+                            @Param("error") String error,
+                            @Param("status") String status,
+                            @Param("nextAttemptAt") LocalDateTime nextAttemptAt);
 
     List<OutboxEventEntity> findByAggregateIdOrderByCreatedAtAsc(String aggregateId);
 
